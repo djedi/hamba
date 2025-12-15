@@ -5,6 +5,7 @@ import { emailRoutes } from "./routes/emails";
 import { draftRoutes } from "./routes/drafts";
 // Database is initialized on import
 import "./db";
+import { emailQueries } from "./db";
 import { addClient, removeClient, subscribeToAccount } from "./services/realtime";
 import { startAllIdle, getIdleStatus } from "./services/imap-idle";
 
@@ -52,5 +53,22 @@ console.log(`🚀 Hamba API running at http://localhost:${app.server?.port}`);
 
 // Start IMAP IDLE connections for all IMAP accounts
 startAllIdle().catch(console.error);
+
+// Cleanup old trashed emails (30+ days old)
+function cleanupOldTrashedEmails() {
+  try {
+    const result = emailQueries.deleteOldTrashed.run();
+    const deleted = result.changes;
+    if (deleted > 0) {
+      console.log(`🗑️ Cleaned up ${deleted} emails from trash (30+ days old)`);
+    }
+  } catch (error) {
+    console.error("Error cleaning up old trashed emails:", error);
+  }
+}
+
+// Run cleanup immediately on startup and then every hour
+cleanupOldTrashedEmails();
+setInterval(cleanupOldTrashedEmails, 60 * 60 * 1000);
 
 export type App = typeof app;

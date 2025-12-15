@@ -42,6 +42,9 @@ addColumnIfNotExists("accounts", "smtp_port", "INTEGER DEFAULT 587");
 addColumnIfNotExists("accounts", "smtp_use_tls", "INTEGER DEFAULT 1");
 addColumnIfNotExists("accounts", "password", "TEXT");
 
+// Add trashed_at column for auto-delete after 30 days
+addColumnIfNotExists("emails", "trashed_at", "INTEGER");
+
 // Remove body_html_dark column - dark mode now applied via CSS filter at render time
 try {
   db.run("ALTER TABLE emails DROP COLUMN body_html_dark");
@@ -205,9 +208,23 @@ export const emailQueries = {
   unstar: db.prepare("UPDATE emails SET is_starred = 0 WHERE id = ?"),
   archive: db.prepare("UPDATE emails SET is_archived = 1 WHERE id = ?"),
   unarchive: db.prepare("UPDATE emails SET is_archived = 0 WHERE id = ?"),
-  trash: db.prepare("UPDATE emails SET is_trashed = 1 WHERE id = ?"),
+  trash: db.prepare("UPDATE emails SET is_trashed = 1, trashed_at = unixepoch() WHERE id = ?"),
+  untrash: db.prepare("UPDATE emails SET is_trashed = 0, trashed_at = NULL WHERE id = ?"),
 
   delete: db.prepare("DELETE FROM emails WHERE id = ?"),
+
+  getTrashed: db.prepare(`
+    SELECT * FROM emails
+    WHERE account_id = ? AND is_trashed = 1
+    ORDER BY trashed_at DESC
+    LIMIT ? OFFSET ?
+  `),
+
+  // Delete emails that have been in trash for more than 30 days
+  deleteOldTrashed: db.prepare(`
+    DELETE FROM emails
+    WHERE is_trashed = 1 AND trashed_at < unixepoch() - (30 * 24 * 60 * 60)
+  `),
 
   // For reconciliation - get IDs of non-archived emails for an account
   getActiveIdsByAccount: db.prepare(`

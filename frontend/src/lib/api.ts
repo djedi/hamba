@@ -51,6 +51,9 @@ export const api = {
   getSentEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails/sent?accountId=${accountId}&limit=${limit}&offset=${offset}`),
 
+  getTrashedEmails: (accountId: string, limit = 50, offset = 0) =>
+    request<Email[]>(`/emails/trashed?accountId=${accountId}&limit=${limit}&offset=${offset}`),
+
   getEmail: (id: string) => request<Email>(`/emails/${id}`),
 
   getThread: (threadId: string) => request<Email[]>(`/emails/thread/${threadId}`),
@@ -70,6 +73,8 @@ export const api = {
   unstar: (id: string) => request(`/emails/${id}/unstar`, { method: "POST" }),
   archive: (id: string) => request(`/emails/${id}/archive`, { method: "POST" }),
   trash: (id: string) => request(`/emails/${id}/trash`, { method: "POST" }),
+  untrash: (id: string) => request(`/emails/${id}/untrash`, { method: "POST" }),
+  permanentDelete: (id: string) => request(`/emails/${id}/permanent`, { method: "DELETE" }),
 
   // Send
   sendEmail: (params: {

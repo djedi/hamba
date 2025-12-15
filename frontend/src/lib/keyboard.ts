@@ -72,12 +72,20 @@ function goToDrafts() {
   updateUrlWithEmail(null);
 }
 
-// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts)
+// Go to trash view
+function goToTrash() {
+  currentFolder.set("trash");
+  view.set("inbox");
+  updateUrlWithEmail(null);
+}
+
+// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts, "gx" = go to trash)
 const sequenceHandlers: Record<string, KeyHandler> = {
   "gi": goToInbox,
   "gs": goToStarred,
   "gt": goToSent,
   "gd": goToDrafts,
+  "gx": goToTrash,
 };
 
 const handlers: Record<string, KeyHandler> = {

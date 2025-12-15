@@ -165,6 +165,38 @@ describe('api', () => {
 		});
 	});
 
+	describe('api.getTrashedEmails', () => {
+		it('fetches trashed emails with default pagination', async () => {
+			const mockEmails = [{ id: '1', subject: 'Trashed Email', is_trashed: 1 }];
+			mockFetch.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve(mockEmails)
+			});
+
+			const emails = await api.getTrashedEmails('account-1');
+
+			expect(emails).toEqual(mockEmails);
+			expect(mockFetch).toHaveBeenCalledWith(
+				'http://localhost:3001/emails/trashed?accountId=account-1&limit=50&offset=0',
+				expect.any(Object)
+			);
+		});
+
+		it('fetches trashed emails with custom pagination', async () => {
+			mockFetch.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([])
+			});
+
+			await api.getTrashedEmails('account-1', 25, 10);
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				'http://localhost:3001/emails/trashed?accountId=account-1&limit=25&offset=10',
+				expect.any(Object)
+			);
+		});
+	});
+
 	describe('api.searchEmails', () => {
 		it('encodes query parameter', async () => {
 			mockFetch.mockResolvedValueOnce({
@@ -311,6 +343,34 @@ describe('api', () => {
 			expect(mockFetch).toHaveBeenCalledWith(
 				'http://localhost:3001/emails/email-1/trash',
 				expect.objectContaining({ method: 'POST' })
+			);
+		});
+
+		it('untrash calls correct endpoint', async () => {
+			mockFetch.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve({})
+			});
+
+			await api.untrash('email-1');
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				'http://localhost:3001/emails/email-1/untrash',
+				expect.objectContaining({ method: 'POST' })
+			);
+		});
+
+		it('permanentDelete calls correct endpoint', async () => {
+			mockFetch.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve({})
+			});
+
+			await api.permanentDelete('email-1');
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				'http://localhost:3001/emails/email-1/permanent',
+				expect.objectContaining({ method: 'DELETE' })
 			);
 		});
 	});

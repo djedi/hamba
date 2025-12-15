@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { selectedEmail, view, emails, composeMode, replyToEmail, emailActions, selectedIndex, selectedEmailId } from "$lib/stores";
+  import { selectedEmail, view, emails, composeMode, replyToEmail, emailActions, selectedIndex, selectedEmailId, currentFolder } from "$lib/stores";
   import { get } from "svelte/store";
 
   let iframeRef: HTMLIFrameElement;
@@ -178,6 +178,20 @@
     }
   }
 
+  function handleRestore() {
+    if ($selectedEmail) {
+      emailActions.untrash($selectedEmail.id);
+      selectNextAndGoBack();
+    }
+  }
+
+  function handlePermanentDelete() {
+    if ($selectedEmail) {
+      emailActions.permanentDelete($selectedEmail.id);
+      selectNextAndGoBack();
+    }
+  }
+
   function handleStar() {
     if ($selectedEmail) {
       emailActions.toggleStar($selectedEmail.id);
@@ -230,14 +244,19 @@
         ← Back
       </button>
       <div class="actions">
-        <button onclick={handleArchive} title="Archive (e)">📥 Archive</button>
-        <button onclick={handleStar} title="Star (s)">
-          {$selectedEmail.is_starred ? "★ Starred" : "☆ Star"}
-        </button>
-        <button onclick={handleTrash} title="Trash (#)">🗑️ Trash</button>
-        <button onclick={handleReply} title="Reply (r)">↩️ Reply</button>
-        <button onclick={handleReplyAll} title="Reply All (a)">↩️ Reply All</button>
-        <button onclick={handleForward} title="Forward (f)">↪️ Forward</button>
+        {#if $currentFolder === "trash"}
+          <button onclick={handleRestore} title="Restore to Inbox">📥 Restore</button>
+          <button onclick={handlePermanentDelete} title="Permanently Delete" class="danger">🗑️ Delete Forever</button>
+        {:else}
+          <button onclick={handleArchive} title="Archive (e)">📥 Archive</button>
+          <button onclick={handleStar} title="Star (s)">
+            {$selectedEmail.is_starred ? "★ Starred" : "☆ Star"}
+          </button>
+          <button onclick={handleTrash} title="Trash (#)">🗑️ Trash</button>
+          <button onclick={handleReply} title="Reply (r)">↩️ Reply</button>
+          <button onclick={handleReplyAll} title="Reply All (a)">↩️ Reply All</button>
+          <button onclick={handleForward} title="Forward (f)">↪️ Forward</button>
+        {/if}
       </div>
     </header>
 
@@ -321,6 +340,17 @@
   .actions button {
     padding: 6px 12px;
     font-size: 13px;
+  }
+
+  .actions button.danger {
+    background: var(--danger, #ef4444);
+    border-color: var(--danger, #ef4444);
+    color: white;
+  }
+
+  .actions button.danger:hover {
+    background: #dc2626;
+    border-color: #dc2626;
   }
 
   .content {

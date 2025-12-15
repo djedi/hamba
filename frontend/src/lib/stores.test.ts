@@ -30,6 +30,8 @@ vi.mock('./api', () => ({
 		markUnread: vi.fn().mockResolvedValue({}),
 		archive: vi.fn().mockResolvedValue({}),
 		trash: vi.fn().mockResolvedValue({}),
+		untrash: vi.fn().mockResolvedValue({}),
+		permanentDelete: vi.fn().mockResolvedValue({}),
 		getEmail: vi.fn().mockResolvedValue(null)
 	}
 }));
@@ -217,12 +219,20 @@ describe('stores', () => {
 			expect(get(currentFolder)).toBe('sent');
 		});
 
-		it('can switch between inbox, starred, and sent', () => {
+		it('can be set to trash', () => {
+			currentFolder.set('trash');
+			expect(get(currentFolder)).toBe('trash');
+		});
+
+		it('can switch between inbox, starred, sent, and trash', () => {
 			currentFolder.set('starred');
 			expect(get(currentFolder)).toBe('starred');
 
 			currentFolder.set('sent');
 			expect(get(currentFolder)).toBe('sent');
+
+			currentFolder.set('trash');
+			expect(get(currentFolder)).toBe('trash');
 
 			currentFolder.set('inbox');
 			expect(get(currentFolder)).toBe('inbox');

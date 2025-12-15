@@ -533,6 +533,46 @@ export class GmailProvider implements EmailProvider {
     }
   }
 
+  async untrash(emailId: string): Promise<void> {
+    const accessToken = await this.getToken();
+    if (!accessToken) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}/untrash`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      const err = await response.json() as { error?: { message?: string } };
+      throw new Error(err.error?.message || `Gmail API error: ${response.status}`);
+    }
+  }
+
+  async permanentDelete(emailId: string): Promise<void> {
+    const accessToken = await this.getToken();
+    if (!accessToken) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${emailId}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      const err = await response.json() as { error?: { message?: string } };
+      throw new Error(err.error?.message || `Gmail API error: ${response.status}`);
+    }
+  }
+
   async send(params: SendParams): Promise<SendResult> {
     const account = accountQueries.getById.get(this.accountId) as any;
     if (!account) {

@@ -47,6 +47,15 @@
     url.searchParams.delete("email");
     window.history.pushState({}, "", url);
   }
+
+  function goToTrash() {
+    currentFolder.set("trash");
+    view.set("inbox");
+    // Clear URL param
+    const url = new URL(window.location.href);
+    url.searchParams.delete("email");
+    window.history.pushState({}, "", url);
+  }
 </script>
 
 <aside class="sidebar">
@@ -78,7 +87,7 @@
         <span class="badge">{$drafts.length}</span>
       {/if}
     </button>
-    <button class="nav-item">
+    <button class="nav-item" class:active={$currentFolder === "trash" && ($view === "inbox" || $view === "email")} onclick={goToTrash}>
       <span class="nav-icon">🗑️</span>
       <span class="nav-label">Trash</span>
     </button>
@@ -122,6 +131,7 @@
     <div class="shortcut"><kbd>gs</kbd> starred</div>
     <div class="shortcut"><kbd>gt</kbd> sent</div>
     <div class="shortcut"><kbd>gd</kbd> drafts</div>
+    <div class="shortcut"><kbd>gx</kbd> trash</div>
     <div class="shortcut"><kbd>␣</kbd> scroll</div>
     <div class="shortcut"><kbd>e</kbd><kbd>y</kbd> archive</div>
     <div class="shortcut"><kbd>s</kbd> star</div>

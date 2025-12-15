@@ -9,6 +9,8 @@ export interface EmailProvider {
   unstar(emailId: string): Promise<void>;
   archive(emailId: string): Promise<void>;
   trash(emailId: string): Promise<void>;
+  untrash(emailId: string): Promise<void>;
+  permanentDelete(emailId: string): Promise<void>;
   send(params: SendParams): Promise<SendResult>;
   deleteDraft(draftId: string): Promise<void>;
   validateCredentials(): Promise<boolean>;

@@ -66,6 +66,20 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
     );
   })
 
+  .get("/trashed", ({ query }) => {
+    const { accountId, limit = "50", offset = "0" } = query;
+
+    if (!accountId) {
+      return { error: "accountId required" };
+    }
+
+    return emailQueries.getTrashed.all(
+      accountId,
+      parseInt(limit as string),
+      parseInt(offset as string)
+    );
+  })
+
   .post("/sync/:accountId", async ({ params }) => {
     try {
       const provider = getProvider(params.accountId);
@@ -197,6 +211,42 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
       return { success: true };
     } catch (e: any) {
       console.error("Error trashing email:", e);
+      return { success: false, error: e.message || String(e) };
+    }
+  })
+
+  .post("/:id/untrash", async ({ params }) => {
+    const email = emailQueries.getById.get(params.id) as any;
+    if (!email) {
+      return { success: false, error: "Email not found" };
+    }
+
+    try {
+      const provider = getProvider(email.account_id);
+      await provider.untrash(params.id);
+      // Only update local DB after server succeeds
+      emailQueries.untrash.run(params.id);
+      return { success: true };
+    } catch (e: any) {
+      console.error("Error untrashing email:", e);
+      return { success: false, error: e.message || String(e) };
+    }
+  })
+
+  .delete("/:id/permanent", async ({ params }) => {
+    const email = emailQueries.getById.get(params.id) as any;
+    if (!email) {
+      return { success: false, error: "Email not found" };
+    }
+
+    try {
+      const provider = getProvider(email.account_id);
+      await provider.permanentDelete(params.id);
+      // Only delete from local DB after server succeeds
+      emailQueries.delete.run(params.id);
+      return { success: true };
+    } catch (e: any) {
+      console.error("Error permanently deleting email:", e);
       return { success: false, error: e.message || String(e) };
     }
   })

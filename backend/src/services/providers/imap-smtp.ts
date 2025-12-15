@@ -617,6 +617,82 @@ export class ImapSmtpProvider implements EmailProvider {
     }
   }
 
+  async untrash(emailId: string): Promise<void> {
+    const uid = this.extractUid(emailId);
+    const client = this.createImapClient();
+
+    try {
+      await client.connect();
+
+      // List mailboxes to find the trash folder
+      const mailboxes = await client.list();
+      const trashNames = ["Trash", "Deleted", "Deleted Items", "[Gmail]/Trash", "INBOX.Trash"];
+      let trashFolder: string | null = null;
+
+      // Find existing trash folder
+      for (const name of trashNames) {
+        if (mailboxes.some(m => m.path === name || m.name === name)) {
+          trashFolder = name;
+          break;
+        }
+      }
+
+      if (!trashFolder) {
+        throw new Error("Trash folder not found");
+      }
+
+      const lock = await client.getMailboxLock(trashFolder);
+      try {
+        // Move message back to INBOX
+        await client.messageMove({ uid }, "INBOX", { uid: true });
+        console.log(`[IMAP] Restored message ${uid} from trash to INBOX`);
+      } finally {
+        lock.release();
+      }
+      await client.logout();
+    } catch (error) {
+      console.error("IMAP untrash error:", error);
+      throw error;
+    }
+  }
+
+  async permanentDelete(emailId: string): Promise<void> {
+    const uid = this.extractUid(emailId);
+    const client = this.createImapClient();
+
+    try {
+      await client.connect();
+
+      // List mailboxes to find the trash folder
+      const mailboxes = await client.list();
+      const trashNames = ["Trash", "Deleted", "Deleted Items", "[Gmail]/Trash", "INBOX.Trash"];
+      let trashFolder: string | null = null;
+
+      // Find existing trash folder
+      for (const name of trashNames) {
+        if (mailboxes.some(m => m.path === name || m.name === name)) {
+          trashFolder = name;
+          break;
+        }
+      }
+
+      // Try to delete from trash folder first, then INBOX as fallback
+      const folderToTry = trashFolder || "INBOX";
+      const lock = await client.getMailboxLock(folderToTry);
+      try {
+        await client.messageFlagsAdd({ uid }, ["\\Deleted"], { uid: true });
+        await client.messageDelete({ uid }, { uid: true });
+        console.log(`[IMAP] Permanently deleted message ${uid} from ${folderToTry}`);
+      } finally {
+        lock.release();
+      }
+      await client.logout();
+    } catch (error) {
+      console.error("IMAP permanentDelete error:", error);
+      throw error;
+    }
+  }
+
   async send(params: SendParams): Promise<SendResult> {
     const transporter = this.createSmtpTransport();
 

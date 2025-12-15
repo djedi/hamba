@@ -143,6 +143,8 @@
           fetchPromise = api.getStarredEmails(currentAccountId);
         } else if (folder === "sent") {
           fetchPromise = api.getSentEmails(currentAccountId);
+        } else if (folder === "trash") {
+          fetchPromise = api.getTrashedEmails(currentAccountId);
         } else {
           fetchPromise = api.getEmails(currentAccountId);
         }
@@ -183,7 +185,7 @@
     }
   }
 
-  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts") {
+  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash") {
     isLoading.set(true);
     try {
       const targetFolder = folder ?? $currentFolder;
@@ -201,6 +203,8 @@
         // Sync sent emails first, then load them
         await api.syncSentEmails(accountId);
         msgs = await api.getSentEmails(accountId);
+      } else if (targetFolder === "trash") {
+        msgs = await api.getTrashedEmails(accountId);
       } else {
         msgs = await api.getEmails(accountId);
       }
