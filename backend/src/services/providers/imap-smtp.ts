@@ -785,6 +785,15 @@ export class ImapSmtpProvider implements EmailProvider {
     const transporter = this.createSmtpTransport();
 
     try {
+      // Convert our attachment format to nodemailer format
+      const nodemailerAttachments = params.attachments?.map((att) => ({
+        filename: att.filename,
+        content: Buffer.isBuffer(att.content)
+          ? att.content
+          : Buffer.from(att.content, "base64"),
+        contentType: att.mimeType,
+      }));
+
       const info = await transporter.sendMail({
         from: params.from,
         to: params.to,
@@ -794,6 +803,7 @@ export class ImapSmtpProvider implements EmailProvider {
         html: params.body,
         inReplyTo: params.inReplyTo,
         references: params.references,
+        attachments: nodemailerAttachments,
       });
 
       return {

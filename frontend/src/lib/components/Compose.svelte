@@ -10,6 +10,14 @@
     draft?: Draft | null;
   }
 
+  interface AttachmentFile {
+    id: string;
+    filename: string;
+    mimeType: string;
+    size: number;
+    content: string; // base64 encoded
+  }
+
   let { replyTo = null, mode = "new", draft = null }: Props = $props();
 
   let to = $state("");
@@ -24,8 +32,11 @@
   let lastSaved = $state<string | null>(null);
   let reminderDays = $state<number | null>(null);
   let showReminderPicker = $state(false);
+  let attachments = $state<AttachmentFile[]>([]);
+  let isDragging = $state(false);
 
   let toInput: HTMLInputElement;
+  let fileInput: HTMLInputElement;
   let draftId = draft?.id || crypto.randomUUID();
   let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   let lastSavedContent = "";
@@ -146,6 +157,61 @@ To: ${email.to_addresses}<br><br>
 ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async function addFiles(files: FileList | null) {
+    if (!files) return;
+
+    for (const file of Array.from(files)) {
+      // Read file as base64
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(",")[1]; // Remove data:mime;base64, prefix
+        attachments = [
+          ...attachments,
+          {
+            id: crypto.randomUUID(),
+            filename: file.name,
+            mimeType: file.type || "application/octet-stream",
+            size: file.size,
+            content: base64,
+          },
+        ];
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function removeAttachment(id: string) {
+    attachments = attachments.filter((a) => a.id !== id);
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    isDragging = true;
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    e.preventDefault();
+    isDragging = false;
+  }
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    isDragging = false;
+    addFiles(e.dataTransfer?.files || null);
+  }
+
+  function handleFileSelect(e: Event) {
+    const input = e.target as HTMLInputElement;
+    addFiles(input.files);
+    input.value = ""; // Reset so same file can be selected again
+  }
+
   async function handleClose() {
     // Delete the draft if it's empty (discarding)
     if (!to && !cc && !bcc && !subject && !body) {
@@ -188,6 +254,13 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
         subject: subject.trim(),
         body: body || "<p></p>",
         replyToId: replyTo?.id,
+        attachments: attachments.length > 0
+          ? attachments.map((a) => ({
+              filename: a.filename,
+              mimeType: a.mimeType,
+              content: a.content,
+            }))
+          : undefined,
       });
 
       if (result.error) {
@@ -305,17 +378,55 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     </div>
   </div>
 
-  <div class="body-wrapper">
+  <div
+    class="body-wrapper"
+    class:dragging={isDragging}
+    ondragover={handleDragOver}
+    ondragleave={handleDragLeave}
+    ondrop={handleDrop}
+  >
     <textarea
       class="compose-body"
       bind:value={body}
       placeholder="Write your message..."
     ></textarea>
+    {#if isDragging}
+      <div class="drop-overlay">
+        Drop files to attach
+      </div>
+    {/if}
   </div>
+
+  {#if attachments.length > 0}
+    <div class="attachments">
+      {#each attachments as attachment (attachment.id)}
+        <div class="attachment">
+          <span class="attachment-icon">📎</span>
+          <span class="attachment-name">{attachment.filename}</span>
+          <span class="attachment-size">{formatFileSize(attachment.size)}</span>
+          <button
+            class="attachment-remove"
+            onclick={() => removeAttachment(attachment.id)}
+            title="Remove attachment"
+          >
+            ✕
+          </button>
+        </div>
+      {/each}
+    </div>
+  {/if}
 
   {#if error}
     <div class="error">{error}</div>
   {/if}
+
+  <input
+    type="file"
+    multiple
+    bind:this={fileInput}
+    onchange={handleFileSelect}
+    style="display: none;"
+  />
 
   <footer class="footer">
     <button class="send-btn primary" onclick={handleSend} disabled={sending}>
@@ -345,6 +456,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
         </div>
       {/if}
     </div>
+    <button class="attach-btn" onclick={() => fileInput?.click()}>
+      📎 Attach
+    </button>
     <button class="discard-btn" onclick={handleClose}>Discard</button>
     {#if lastSaved}
       <span class="saved-indicator">Saved at {lastSaved}</span>
@@ -447,6 +561,7 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     padding: 16px 24px;
     overflow: hidden;
     display: flex;
+    position: relative;
   }
 
   .compose-body {
@@ -567,5 +682,91 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
 
   .reminder-dropdown button:hover {
     background: var(--bg-hover);
+  }
+
+  .body-wrapper.dragging {
+    background: var(--bg-hover);
+  }
+
+  .drop-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(99, 102, 241, 0.1);
+    border: 2px dashed var(--accent);
+    border-radius: 8px;
+    color: var(--accent);
+    font-size: 16px;
+    font-weight: 500;
+    pointer-events: none;
+  }
+
+  .attachments {
+    padding: 8px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .attachment {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+
+  .attachment-icon {
+    font-size: 14px;
+  }
+
+  .attachment-name {
+    color: var(--text-primary);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .attachment-size {
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  .attachment-remove {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 12px;
+    line-height: 1;
+    border-radius: 4px;
+  }
+
+  .attachment-remove:hover {
+    background: var(--danger);
+    color: white;
+  }
+
+  .attach-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .attach-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 </style>

@@ -341,7 +341,7 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
   })
 
   .post("/send", async ({ body }) => {
-    const { accountId, to, cc, bcc, subject, body: emailBody, replyToId } = body as {
+    const { accountId, to, cc, bcc, subject, body: emailBody, replyToId, attachments } = body as {
       accountId: string;
       to: string;
       cc?: string;
@@ -349,6 +349,11 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
       subject: string;
       body: string;
       replyToId?: string;
+      attachments?: Array<{
+        filename: string;
+        mimeType: string;
+        content: string; // base64 encoded
+      }>;
     };
 
     if (!accountId || !to || !subject) {
@@ -387,6 +392,11 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
         inReplyTo,
         references,
         threadId,
+        attachments: attachments?.map((att) => ({
+          filename: att.filename,
+          mimeType: att.mimeType,
+          content: att.content, // base64 string, will be converted to Buffer in providers
+        })),
       });
 
       return result;

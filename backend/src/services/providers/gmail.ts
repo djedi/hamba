@@ -1,4 +1,4 @@
-import type { EmailProvider, SendParams, SendResult, SyncOptions, SyncResult } from "./types";
+import type { EmailProvider, SendParams, SendResult, SyncOptions, SyncResult, Attachment } from "./types";
 import { getValidAccessToken } from "../token";
 import { emailQueries, accountQueries, attachmentQueries, draftQueries, labelQueries, emailLabelQueries } from "../../db";
 
@@ -20,7 +20,10 @@ function buildRawEmail(options: {
   body: string;
   inReplyTo?: string;
   references?: string;
+  attachments?: Attachment[];
 }): string {
+  const hasAttachments = options.attachments && options.attachments.length > 0;
+  const boundary = `boundary_${crypto.randomUUID().replace(/-/g, "")}`;
   const lines: string[] = [];
 
   lines.push(`From: ${options.from}`);
@@ -31,9 +34,34 @@ function buildRawEmail(options: {
   if (options.inReplyTo) lines.push(`In-Reply-To: ${options.inReplyTo}`);
   if (options.references) lines.push(`References: ${options.references}`);
   lines.push(`MIME-Version: 1.0`);
-  lines.push(`Content-Type: text/html; charset="UTF-8"`);
-  lines.push(``);
-  lines.push(options.body);
+
+  if (hasAttachments) {
+    lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+    lines.push(``);
+    lines.push(`--${boundary}`);
+    lines.push(`Content-Type: text/html; charset="UTF-8"`);
+    lines.push(`Content-Transfer-Encoding: base64`);
+    lines.push(``);
+    lines.push(Buffer.from(options.body).toString("base64"));
+
+    for (const att of options.attachments!) {
+      lines.push(`--${boundary}`);
+      lines.push(`Content-Type: ${att.mimeType}; name="${att.filename}"`);
+      lines.push(`Content-Disposition: attachment; filename="${att.filename}"`);
+      lines.push(`Content-Transfer-Encoding: base64`);
+      lines.push(``);
+      // Handle both Buffer and base64 string
+      const contentBase64 = Buffer.isBuffer(att.content)
+        ? att.content.toString("base64")
+        : att.content;
+      lines.push(contentBase64);
+    }
+    lines.push(`--${boundary}--`);
+  } else {
+    lines.push(`Content-Type: text/html; charset="UTF-8"`);
+    lines.push(``);
+    lines.push(options.body);
+  }
 
   const raw = lines.join("\r\n");
   // Gmail API requires base64url encoding
@@ -687,6 +715,7 @@ export class GmailProvider implements EmailProvider {
       body: params.body,
       inReplyTo: params.inReplyTo,
       references: params.references,
+      attachments: params.attachments,
     });
 
     const sendUrl = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";

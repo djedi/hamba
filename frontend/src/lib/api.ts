@@ -121,6 +121,11 @@ export const api = {
     subject: string;
     body: string;
     replyToId?: string;
+    attachments?: Array<{
+      filename: string;
+      mimeType: string;
+      content: string; // base64 encoded
+    }>;
   }) =>
     request<{ success: boolean; messageId?: string; error?: string }>("/emails/send", {
       method: "POST",

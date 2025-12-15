@@ -28,6 +28,12 @@ export interface SyncResult {
   error?: string;
 }
 
+export interface Attachment {
+  filename: string;
+  mimeType: string;
+  content: Buffer | string; // Buffer for binary, base64 string from frontend
+}
+
 export interface SendParams {
   from: string;
   to: string;
@@ -38,6 +44,7 @@ export interface SendParams {
   inReplyTo?: string;
   references?: string;
   threadId?: string;
+  attachments?: Attachment[];
 }
 
 export interface SendResult {
