@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { accounts, selectedAccountId, unreadCount, isLoading, view } from "$lib/stores";
+  import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder } from "$lib/stores";
 
   interface Props {
     onSync: () => void;
@@ -13,6 +13,16 @@
   }
 
   function goToInbox() {
+    currentFolder.set("inbox");
+    view.set("inbox");
+    // Clear URL param
+    const url = new URL(window.location.href);
+    url.searchParams.delete("email");
+    window.history.pushState({}, "", url);
+  }
+
+  function goToStarred() {
+    currentFolder.set("starred");
     view.set("inbox");
     // Clear URL param
     const url = new URL(window.location.href);
@@ -28,14 +38,14 @@
   </div>
 
   <nav class="nav">
-    <button class="nav-item" class:active={$view === "inbox" || $view === "email"} onclick={goToInbox}>
+    <button class="nav-item" class:active={$currentFolder === "inbox" && ($view === "inbox" || $view === "email")} onclick={goToInbox}>
       <span class="nav-icon">📥</span>
       <span class="nav-label">Inbox</span>
       {#if $unreadCount > 0}
         <span class="badge">{$unreadCount}</span>
       {/if}
     </button>
-    <button class="nav-item">
+    <button class="nav-item" class:active={$currentFolder === "starred" && ($view === "inbox" || $view === "email")} onclick={goToStarred}>
       <span class="nav-icon">⭐</span>
       <span class="nav-label">Starred</span>
     </button>
@@ -88,6 +98,7 @@
     <div class="shortcut"><kbd>j</kbd><kbd>k</kbd> navigate</div>
     <div class="shortcut"><kbd>o</kbd> open</div>
     <div class="shortcut"><kbd>gi</kbd> inbox</div>
+    <div class="shortcut"><kbd>gs</kbd> starred</div>
     <div class="shortcut"><kbd>␣</kbd> scroll</div>
     <div class="shortcut"><kbd>e</kbd><kbd>y</kbd> archive</div>
     <div class="shortcut"><kbd>s</kbd> star</div>

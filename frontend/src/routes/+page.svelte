@@ -15,6 +15,7 @@
     composeMode,
     replyToEmail,
     toasts,
+    currentFolder,
   } from "$lib/stores";
   import EmailList from "$lib/components/EmailList.svelte";
   import EmailView from "$lib/components/EmailView.svelte";
@@ -35,6 +36,8 @@
   // Auto-sync every 60 seconds (fallback for Gmail accounts without push)
   const AUTO_SYNC_INTERVAL = 60 * 1000;
 
+  let lastLoadedFolder: string | null = null;
+
   // Load emails when selected account changes (but not on initial mount)
   $effect(() => {
     const accountId = $selectedAccountId;
@@ -46,6 +49,17 @@
       url.searchParams.delete("email");
       window.history.pushState({}, "", url);
       loadEmails(accountId);
+    }
+  });
+
+  // Load emails when folder changes
+  $effect(() => {
+    const folder = $currentFolder;
+    const accountId = $selectedAccountId;
+    if (accountId && lastLoadedFolder !== null && folder !== lastLoadedFolder) {
+      lastLoadedFolder = folder;
+      view.set("inbox");
+      loadEmails(accountId, null, folder);
     }
   });
 
@@ -78,6 +92,7 @@
         const firstAccountId = accts[0].id;
         selectedAccountId.set(firstAccountId);
         lastLoadedAccountId = firstAccountId;
+        lastLoadedFolder = $currentFolder;
 
         // Subscribe to real-time updates for all accounts
         accts.forEach(acct => subscribe(acct.id));
@@ -108,9 +123,14 @@
   function handleRealtimeMessage(data: any) {
     if (data.type === "new_mail" || data.type === "sync_complete") {
       const currentAccountId = $selectedAccountId;
-      if (data.accountId === currentAccountId) {
+      if (currentAccountId && data.accountId === currentAccountId) {
         // Silently refresh emails without showing loading state
-        api.getEmails(currentAccountId).then(msgs => {
+        const folder = $currentFolder;
+        const fetchPromise = folder === "starred"
+          ? api.getStarredEmails(currentAccountId)
+          : api.getEmails(currentAccountId);
+
+        fetchPromise.then(msgs => {
           const currentSelectedId = $selectedEmailId;
           emails.set(msgs);
 
@@ -146,10 +166,13 @@
     }
   }
 
-  async function loadEmails(accountId: string, emailIdFromUrl?: string | null) {
+  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred") {
     isLoading.set(true);
     try {
-      const msgs = await api.getEmails(accountId);
+      const targetFolder = folder ?? $currentFolder;
+      const msgs = targetFolder === "starred"
+        ? await api.getStarredEmails(accountId)
+        : await api.getEmails(accountId);
       emails.set(msgs);
 
       if (msgs.length > 0) {
@@ -165,6 +188,9 @@
         }
         // Default to first email selected but stay in inbox
         selectedEmailId.set(msgs[0].id);
+        selectedIndex.set(0);
+      } else {
+        selectedEmailId.set(null);
         selectedIndex.set(0);
       }
     } catch (err) {

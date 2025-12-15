@@ -38,6 +38,20 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
     return emailQueries.search.all(q, parseInt(limit as string));
   })
 
+  .get("/starred", ({ query }) => {
+    const { accountId, limit = "50", offset = "0" } = query;
+
+    if (!accountId) {
+      return { error: "accountId required" };
+    }
+
+    return emailQueries.getStarred.all(
+      accountId,
+      parseInt(limit as string),
+      parseInt(offset as string)
+    );
+  })
+
   .post("/sync/:accountId", async ({ params }) => {
     try {
       const provider = getProvider(params.accountId);

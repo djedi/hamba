@@ -17,7 +17,8 @@ import {
 	searchQuery,
 	composeMode,
 	replyToEmail,
-	isCommandPaletteOpen
+	isCommandPaletteOpen,
+	currentFolder
 } from './stores';
 
 // Mock the api module
@@ -72,6 +73,7 @@ describe('stores', () => {
 		composeMode.set('new');
 		replyToEmail.set(null);
 		isCommandPaletteOpen.set(false);
+		currentFolder.set('inbox');
 	});
 
 	describe('selectedEmail derived store', () => {
@@ -197,6 +199,25 @@ describe('stores', () => {
 			emails.set([mockEmail('1'), mockEmail('2'), mockEmail('3')]);
 
 			expect(() => prefetchAdjacentEmails(2)).not.toThrow();
+		});
+	});
+
+	describe('currentFolder store', () => {
+		it('defaults to inbox', () => {
+			expect(get(currentFolder)).toBe('inbox');
+		});
+
+		it('can be set to starred', () => {
+			currentFolder.set('starred');
+			expect(get(currentFolder)).toBe('starred');
+		});
+
+		it('can switch between inbox and starred', () => {
+			currentFolder.set('starred');
+			expect(get(currentFolder)).toBe('starred');
+
+			currentFolder.set('inbox');
+			expect(get(currentFolder)).toBe('inbox');
 		});
 	});
 });

@@ -187,6 +187,13 @@ export const emailQueries = {
     SELECT id FROM emails
     WHERE account_id = ? AND is_archived = 0 AND is_trashed = 0
   `),
+
+  getStarred: db.prepare(`
+    SELECT * FROM emails
+    WHERE account_id = ? AND is_starred = 1 AND is_trashed = 0
+    ORDER BY received_at DESC
+    LIMIT ? OFFSET ?
+  `),
 };
 
 // Attachment operations

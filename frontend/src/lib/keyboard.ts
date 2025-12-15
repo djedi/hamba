@@ -9,6 +9,7 @@ import {
   replyToEmail,
   emailActions,
   prefetchAdjacentEmails,
+  currentFolder,
 } from "./stores";
 
 type KeyHandler = () => void | Promise<void>;
@@ -45,13 +46,22 @@ function updateUrlWithEmail(emailId: string | null) {
 
 // Go to inbox view
 function goToInbox() {
+  currentFolder.set("inbox");
   view.set("inbox");
   updateUrlWithEmail(null);
 }
 
-// Two-key sequence handlers (e.g., "gi" = go to inbox)
+// Go to starred view
+function goToStarred() {
+  currentFolder.set("starred");
+  view.set("inbox");
+  updateUrlWithEmail(null);
+}
+
+// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred)
 const sequenceHandlers: Record<string, KeyHandler> = {
   "gi": goToInbox,
+  "gs": goToStarred,
 };
 
 const handlers: Record<string, KeyHandler> = {

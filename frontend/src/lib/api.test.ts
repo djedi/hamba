@@ -101,6 +101,38 @@ describe('api', () => {
 		});
 	});
 
+	describe('api.getStarredEmails', () => {
+		it('fetches starred emails with default pagination', async () => {
+			const mockEmails = [{ id: '1', subject: 'Starred Email', is_starred: 1 }];
+			mockFetch.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve(mockEmails)
+			});
+
+			const emails = await api.getStarredEmails('account-1');
+
+			expect(emails).toEqual(mockEmails);
+			expect(mockFetch).toHaveBeenCalledWith(
+				'http://localhost:3001/emails/starred?accountId=account-1&limit=50&offset=0',
+				expect.any(Object)
+			);
+		});
+
+		it('fetches starred emails with custom pagination', async () => {
+			mockFetch.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([])
+			});
+
+			await api.getStarredEmails('account-1', 25, 10);
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				'http://localhost:3001/emails/starred?accountId=account-1&limit=25&offset=10',
+				expect.any(Object)
+			);
+		});
+	});
+
 	describe('api.searchEmails', () => {
 		it('encodes query parameter', async () => {
 			mockFetch.mockResolvedValueOnce({

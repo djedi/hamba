@@ -45,6 +45,9 @@ export const api = {
   getEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails?accountId=${accountId}&limit=${limit}&offset=${offset}`),
 
+  getStarredEmails: (accountId: string, limit = 50, offset = 0) =>
+    request<Email[]>(`/emails/starred?accountId=${accountId}&limit=${limit}&offset=${offset}`),
+
   getEmail: (id: string) => request<Email>(`/emails/${id}`),
 
   getThread: (threadId: string) => request<Email[]>(`/emails/thread/${threadId}`),

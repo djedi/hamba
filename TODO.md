@@ -6,7 +6,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ### Views & Navigation
 
-- [ ] **Implement Starred view** - Add a "Starred" folder view in the sidebar that shows only emails where `is_starred = 1`. Create a new query `emailQueries.getStarred` in `backend/src/db/index.ts` and add a route. Update `frontend/src/lib/stores.ts` to support different views and update `Sidebar.svelte` to switch between them.
+- [x] **Implement Starred view** - Add a "Starred" folder view in the sidebar that shows only emails where `is_starred = 1`. Create a new query `emailQueries.getStarred` in `backend/src/db/index.ts` and add a route. Update `frontend/src/lib/stores.ts` to support different views and update `Sidebar.svelte` to switch between them.
 
 - [ ] **Implement Sent view** - Add a "Sent" folder view. For Gmail, fetch messages with SENT label. For IMAP, fetch from "Sent" or "Sent Items" folder. Store sent emails in the database with a `folder` column or label system.
 
