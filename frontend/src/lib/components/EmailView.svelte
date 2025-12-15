@@ -185,6 +185,13 @@
     }
   }
 
+  function handleUnarchive() {
+    if ($selectedEmail) {
+      emailActions.unarchive($selectedEmail.id);
+      selectNextAndGoBack();
+    }
+  }
+
   function handlePermanentDelete() {
     if ($selectedEmail) {
       emailActions.permanentDelete($selectedEmail.id);
@@ -247,6 +254,15 @@
         {#if $currentFolder === "trash"}
           <button onclick={handleRestore} title="Restore to Inbox">📥 Restore</button>
           <button onclick={handlePermanentDelete} title="Permanently Delete" class="danger">🗑️ Delete Forever</button>
+        {:else if $currentFolder === "archive"}
+          <button onclick={handleUnarchive} title="Move to Inbox">📥 Move to Inbox</button>
+          <button onclick={handleStar} title="Star (s)">
+            {$selectedEmail.is_starred ? "★ Starred" : "☆ Star"}
+          </button>
+          <button onclick={handleTrash} title="Trash (#)">🗑️ Trash</button>
+          <button onclick={handleReply} title="Reply (r)">↩️ Reply</button>
+          <button onclick={handleReplyAll} title="Reply All (a)">↩️ Reply All</button>
+          <button onclick={handleForward} title="Forward (f)">↪️ Forward</button>
         {:else}
           <button onclick={handleArchive} title="Archive (e)">📥 Archive</button>
           <button onclick={handleStar} title="Star (s)">

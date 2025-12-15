@@ -79,13 +79,21 @@ function goToTrash() {
   updateUrlWithEmail(null);
 }
 
-// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts, "gx" = go to trash)
+// Go to archive view
+function goToArchive() {
+  currentFolder.set("archive");
+  view.set("inbox");
+  updateUrlWithEmail(null);
+}
+
+// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts, "gx" = go to trash, "ga" = go to archive)
 const sequenceHandlers: Record<string, KeyHandler> = {
   "gi": goToInbox,
   "gs": goToStarred,
   "gt": goToSent,
   "gd": goToDrafts,
   "gx": goToTrash,
+  "ga": goToArchive,
 };
 
 const handlers: Record<string, KeyHandler> = {

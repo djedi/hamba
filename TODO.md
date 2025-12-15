@@ -14,7 +14,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Implement Trash view** - Add a "Trash" folder view showing emails where `is_trashed = 1`. Add ability to permanently delete or restore from trash. Auto-delete emails after 30 days.
 
-- [ ] **Implement Archive view** - Add an "All Mail" or "Archive" view showing archived emails (`is_archived = 1`). Allow un-archiving back to inbox.
+- [x] **Implement Archive view** - Add an "All Mail" or "Archive" view showing archived emails (`is_archived = 1`). Allow un-archiving back to inbox.
 
 - [ ] **Implement Labels/Folders support** - Parse Gmail labels and IMAP folders. Store in a `labels` table. Show labels on emails in list view. Allow filtering by label. Add UI to create/edit/delete labels.
 

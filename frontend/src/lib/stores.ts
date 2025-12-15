@@ -11,8 +11,8 @@ export const isLoading = writable(false);
 export const searchQuery = writable("");
 export const view = writable<"inbox" | "email" | "compose">("inbox");
 
-// Current folder (inbox, starred, sent, drafts, trash, etc.)
-export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash";
+// Current folder (inbox, starred, sent, drafts, trash, archive, etc.)
+export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive";
 export const currentFolder = writable<Folder>("inbox");
 
 // Drafts store
@@ -130,6 +130,25 @@ export const emailActions = {
         });
       }
       showToast("Failed to archive email");
+    });
+  },
+
+  unarchive: (emailId: string) => {
+    const $emails = get(emails);
+    const email = $emails.find((e) => e.id === emailId);
+
+    // Optimistic remove from archive view
+    emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
+
+    api.unarchive(emailId).catch(() => {
+      // Rollback: add back to list
+      if (email) {
+        emails.update(($emails) => {
+          const newList = [...$emails, email];
+          return newList.sort((a, b) => b.received_at - a.received_at);
+        });
+      }
+      showToast("Failed to unarchive email");
     });
   },
 

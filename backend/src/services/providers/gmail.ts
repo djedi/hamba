@@ -513,6 +513,10 @@ export class GmailProvider implements EmailProvider {
     await this.modifyMessage(emailId, { removeLabelIds: ["INBOX"] });
   }
 
+  async unarchive(emailId: string): Promise<void> {
+    await this.modifyMessage(emailId, { addLabelIds: ["INBOX"] });
+  }
+
   async trash(emailId: string): Promise<void> {
     const accessToken = await this.getToken();
     if (!accessToken) {

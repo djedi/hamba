@@ -8,6 +8,7 @@ export interface EmailProvider {
   star(emailId: string): Promise<void>;
   unstar(emailId: string): Promise<void>;
   archive(emailId: string): Promise<void>;
+  unarchive(emailId: string): Promise<void>;
   trash(emailId: string): Promise<void>;
   untrash(emailId: string): Promise<void>;
   permanentDelete(emailId: string): Promise<void>;

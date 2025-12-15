@@ -576,6 +576,45 @@ export class ImapSmtpProvider implements EmailProvider {
     }
   }
 
+  async unarchive(emailId: string): Promise<void> {
+    const uid = this.extractUid(emailId);
+    const client = this.createImapClient();
+
+    try {
+      await client.connect();
+
+      // List mailboxes to find the archive folder
+      const mailboxes = await client.list();
+      const archiveNames = ["Archive", "Archives", "[Gmail]/All Mail", "All Mail", "INBOX.Archive"];
+      let archiveFolder: string | null = null;
+
+      // Find existing archive folder
+      for (const name of archiveNames) {
+        if (mailboxes.some(m => m.path === name || m.name === name)) {
+          archiveFolder = name;
+          break;
+        }
+      }
+
+      if (!archiveFolder) {
+        throw new Error("Archive folder not found");
+      }
+
+      const lock = await client.getMailboxLock(archiveFolder);
+      try {
+        // Move message back to INBOX
+        await client.messageMove({ uid }, "INBOX", { uid: true });
+        console.log(`[IMAP] Unarchived message ${uid} from ${archiveFolder} to INBOX`);
+      } finally {
+        lock.release();
+      }
+      await client.logout();
+    } catch (error) {
+      console.error("IMAP unarchive error:", error);
+      throw error;
+    }
+  }
+
   async trash(emailId: string): Promise<void> {
     const uid = this.extractUid(emailId);
     const client = this.createImapClient();

@@ -245,6 +245,13 @@ export const emailQueries = {
     ORDER BY received_at DESC
     LIMIT ? OFFSET ?
   `),
+
+  getArchived: db.prepare(`
+    SELECT * FROM emails
+    WHERE account_id = ? AND is_archived = 1 AND is_trashed = 0
+    ORDER BY received_at DESC
+    LIMIT ? OFFSET ?
+  `),
 };
 
 // Attachment operations

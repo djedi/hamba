@@ -56,6 +56,15 @@
     url.searchParams.delete("email");
     window.history.pushState({}, "", url);
   }
+
+  function goToArchive() {
+    currentFolder.set("archive");
+    view.set("inbox");
+    // Clear URL param
+    const url = new URL(window.location.href);
+    url.searchParams.delete("email");
+    window.history.pushState({}, "", url);
+  }
 </script>
 
 <aside class="sidebar">
@@ -90,6 +99,10 @@
     <button class="nav-item" class:active={$currentFolder === "trash" && ($view === "inbox" || $view === "email")} onclick={goToTrash}>
       <span class="nav-icon">🗑️</span>
       <span class="nav-label">Trash</span>
+    </button>
+    <button class="nav-item" class:active={$currentFolder === "archive" && ($view === "inbox" || $view === "email")} onclick={goToArchive}>
+      <span class="nav-icon">📦</span>
+      <span class="nav-label">Archive</span>
     </button>
   </nav>
 
@@ -132,6 +145,7 @@
     <div class="shortcut"><kbd>gt</kbd> sent</div>
     <div class="shortcut"><kbd>gd</kbd> drafts</div>
     <div class="shortcut"><kbd>gx</kbd> trash</div>
+    <div class="shortcut"><kbd>ga</kbd> archive</div>
     <div class="shortcut"><kbd>␣</kbd> scroll</div>
     <div class="shortcut"><kbd>e</kbd><kbd>y</kbd> archive</div>
     <div class="shortcut"><kbd>s</kbd> star</div>

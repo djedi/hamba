@@ -80,6 +80,20 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
     );
   })
 
+  .get("/archived", ({ query }) => {
+    const { accountId, limit = "50", offset = "0" } = query;
+
+    if (!accountId) {
+      return { error: "accountId required" };
+    }
+
+    return emailQueries.getArchived.all(
+      accountId,
+      parseInt(limit as string),
+      parseInt(offset as string)
+    );
+  })
+
   .post("/sync/:accountId", async ({ params }) => {
     try {
       const provider = getProvider(params.accountId);
@@ -193,6 +207,24 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
       return { success: true };
     } catch (e: any) {
       console.error("Error archiving email:", e);
+      return { success: false, error: e.message || String(e) };
+    }
+  })
+
+  .post("/:id/unarchive", async ({ params }) => {
+    const email = emailQueries.getById.get(params.id) as any;
+    if (!email) {
+      return { success: false, error: "Email not found" };
+    }
+
+    try {
+      const provider = getProvider(email.account_id);
+      await provider.unarchive(params.id);
+      // Only update local DB after server succeeds
+      emailQueries.unarchive.run(params.id);
+      return { success: true };
+    } catch (e: any) {
+      console.error("Error unarchiving email:", e);
       return { success: false, error: e.message || String(e) };
     }
   })

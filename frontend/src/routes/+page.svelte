@@ -145,6 +145,8 @@
           fetchPromise = api.getSentEmails(currentAccountId);
         } else if (folder === "trash") {
           fetchPromise = api.getTrashedEmails(currentAccountId);
+        } else if (folder === "archive") {
+          fetchPromise = api.getArchivedEmails(currentAccountId);
         } else {
           fetchPromise = api.getEmails(currentAccountId);
         }
@@ -185,7 +187,7 @@
     }
   }
 
-  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash") {
+  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive") {
     isLoading.set(true);
     try {
       const targetFolder = folder ?? $currentFolder;
@@ -205,6 +207,8 @@
         msgs = await api.getSentEmails(accountId);
       } else if (targetFolder === "trash") {
         msgs = await api.getTrashedEmails(accountId);
+      } else if (targetFolder === "archive") {
+        msgs = await api.getArchivedEmails(accountId);
       } else {
         msgs = await api.getEmails(accountId);
       }
