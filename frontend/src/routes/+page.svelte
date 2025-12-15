@@ -23,6 +23,8 @@
     labels,
     selectedLabelId,
     labelActions,
+    scheduledEmails,
+    scheduledEmailActions,
   } from "$lib/stores";
   import type { Draft } from "$lib/api";
   import EmailList from "$lib/components/EmailList.svelte";
@@ -38,6 +40,7 @@
   import InboxTabs from "$lib/components/InboxTabs.svelte";
   import SnoozeModal from "$lib/components/SnoozeModal.svelte";
   import ReminderModal from "$lib/components/ReminderModal.svelte";
+  import ScheduledList from "$lib/components/ScheduledList.svelte";
 
   let needsReauth = $state(false);
   let errorMessage = $state("");
@@ -228,7 +231,7 @@
     }
   }
 
-  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "reminders" | "label") {
+  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "reminders" | "scheduled" | "label") {
     isLoading.set(true);
     try {
       const targetFolder = folder ?? $currentFolder;
@@ -236,6 +239,12 @@
       // Handle drafts folder specially
       if (targetFolder === "drafts") {
         await loadDrafts(accountId);
+        return;
+      }
+
+      // Handle scheduled folder specially
+      if (targetFolder === "scheduled") {
+        await loadScheduledEmails(accountId);
         return;
       }
 
@@ -316,6 +325,20 @@
     }
   }
 
+  async function loadScheduledEmails(accountId: string) {
+    try {
+      await scheduledEmailActions.loadScheduledEmails(accountId);
+      // Clear email selection since we're viewing scheduled
+      emails.set([]);
+      selectedEmailId.set(null);
+      selectedIndex.set(0);
+    } catch (err) {
+      handleError(err);
+    } finally {
+      isLoading.set(false);
+    }
+  }
+
   function openDraft(draft: Draft) {
     selectedDraft = draft;
     composeMode.set((draft.reply_mode as "new" | "reply" | "replyAll" | "forward") || "new");
@@ -378,6 +401,8 @@
     {:else if $view === "inbox"}
       {#if $currentFolder === "drafts"}
         <DraftList loading={$isLoading} onOpenDraft={openDraft} />
+      {:else if $currentFolder === "scheduled"}
+        <ScheduledList loading={$isLoading} />
       {:else}
         {#if $currentFolder === "inbox"}
           <InboxTabs />

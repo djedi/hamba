@@ -1,9 +1,16 @@
 import { Elysia } from "elysia";
-import { emailQueries, accountQueries, attachmentQueries } from "../db";
+import { emailQueries, accountQueries, attachmentQueries, scheduledEmailQueries } from "../db";
 import { getProvider } from "../services/providers";
 import { notifySyncComplete } from "../services/realtime";
 import { classifyAndUpdateEmail, classifyAllEmails } from "../services/importance";
 import { queueSend, cancelSend, UNDO_WINDOW_SECONDS } from "../services/pending-send";
+import {
+  scheduleEmail,
+  cancelScheduledEmail,
+  updateScheduledEmail,
+  getScheduledEmails,
+  getScheduledEmail,
+} from "../services/scheduled-send";
 
 export const emailRoutes = new Elysia({ prefix: "/emails" })
   .get("/", async ({ query }) => {
@@ -560,5 +567,99 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
   // Cancel a pending send (undo)
   .delete("/pending/:pendingId", async ({ params }) => {
     const result = cancelSend(params.pendingId);
+    return result;
+  })
+
+  // Scheduled emails (send later)
+  .get("/scheduled", ({ query }) => {
+    const { accountId } = query;
+
+    if (!accountId) {
+      return { error: "accountId required" };
+    }
+
+    return getScheduledEmails(accountId as string);
+  })
+
+  .get("/scheduled/:id", ({ params }) => {
+    const scheduled = getScheduledEmail(params.id);
+    if (!scheduled) {
+      return { error: "Scheduled email not found" };
+    }
+    return scheduled;
+  })
+
+  .post("/schedule", async ({ body }) => {
+    const { accountId, to, cc, bcc, subject, body: emailBody, replyToId, attachments, sendAt } = body as {
+      accountId: string;
+      to: string;
+      cc?: string;
+      bcc?: string;
+      subject: string;
+      body: string;
+      replyToId?: string;
+      attachments?: Array<{
+        filename: string;
+        mimeType: string;
+        content: string;
+      }>;
+      sendAt: number;
+    };
+
+    if (!accountId || !to || !subject) {
+      return { error: "accountId, to, and subject are required", success: false };
+    }
+
+    if (!sendAt || typeof sendAt !== "number") {
+      return { error: "sendAt timestamp required", success: false };
+    }
+
+    const result = scheduleEmail({
+      accountId,
+      to,
+      cc,
+      bcc,
+      subject,
+      body: emailBody,
+      replyToId,
+      attachments,
+      sendAt,
+    });
+
+    return result;
+  })
+
+  .put("/scheduled/:id", async ({ params, body }) => {
+    const { to, cc, bcc, subject, body: emailBody, replyToId, attachments, sendAt } = body as {
+      to?: string;
+      cc?: string;
+      bcc?: string;
+      subject?: string;
+      body?: string;
+      replyToId?: string;
+      attachments?: Array<{
+        filename: string;
+        mimeType: string;
+        content: string;
+      }>;
+      sendAt?: number;
+    };
+
+    const result = updateScheduledEmail(params.id, {
+      to,
+      cc,
+      bcc,
+      subject,
+      body: emailBody,
+      replyToId,
+      attachments,
+      sendAt,
+    });
+
+    return result;
+  })
+
+  .delete("/scheduled/:id", async ({ params }) => {
+    const result = cancelScheduledEmail(params.id);
     return result;
   });

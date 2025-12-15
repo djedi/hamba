@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions } from "$lib/stores";
+  import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions, scheduledEmails } from "$lib/stores";
 
   interface Props {
     onSync: () => void;
@@ -85,6 +85,15 @@
     window.history.pushState({}, "", url);
   }
 
+  function goToScheduled() {
+    currentFolder.set("scheduled");
+    view.set("inbox");
+    // Clear URL param
+    const url = new URL(window.location.href);
+    url.searchParams.delete("email");
+    window.history.pushState({}, "", url);
+  }
+
   function goToLabel(labelId: string) {
     currentFolder.set("label");
     selectedLabelId.set(labelId);
@@ -132,6 +141,13 @@
     <button class="nav-item" class:active={$currentFolder === "reminders" && ($view === "inbox" || $view === "email")} onclick={goToReminders}>
       <span class="nav-icon">🔔</span>
       <span class="nav-label">Reminders</span>
+    </button>
+    <button class="nav-item" class:active={$currentFolder === "scheduled" && ($view === "inbox" || $view === "email")} onclick={goToScheduled}>
+      <span class="nav-icon">📅</span>
+      <span class="nav-label">Scheduled</span>
+      {#if $scheduledEmails.length > 0}
+        <span class="badge">{$scheduledEmails.length}</span>
+      {/if}
     </button>
     <button class="nav-item" class:active={$currentFolder === "trash" && ($view === "inbox" || $view === "email")} onclick={goToTrash}>
       <span class="nav-icon">🗑️</span>
@@ -208,6 +224,7 @@
     <div class="shortcut"><kbd>ga</kbd> archive</div>
     <div class="shortcut"><kbd>gh</kbd> snoozed</div>
     <div class="shortcut"><kbd>gr</kbd> reminders</div>
+    <div class="shortcut"><kbd>gl</kbd> scheduled</div>
     <div class="shortcut"><kbd>␣</kbd> scroll</div>
     <div class="shortcut"><kbd>e</kbd><kbd>y</kbd> archive</div>
     <div class="shortcut"><kbd>s</kbd> star</div>

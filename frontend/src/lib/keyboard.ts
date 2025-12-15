@@ -103,7 +103,14 @@ function goToReminders() {
   updateUrlWithEmail(null);
 }
 
-// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts, "gx" = go to trash, "ga" = go to archive, "gh" = go to snoozed, "gr" = go to reminders)
+// Go to scheduled view
+function goToScheduled() {
+  currentFolder.set("scheduled");
+  view.set("inbox");
+  updateUrlWithEmail(null);
+}
+
+// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts, "gx" = go to trash, "ga" = go to archive, "gh" = go to snoozed, "gr" = go to reminders, "gl" = go to scheduled)
 const sequenceHandlers: Record<string, KeyHandler> = {
   "gi": goToInbox,
   "gs": goToStarred,
@@ -113,6 +120,7 @@ const sequenceHandlers: Record<string, KeyHandler> = {
   "ga": goToArchive,
   "gh": goToSnoozed,
   "gr": goToReminders,
+  "gl": goToScheduled,
 };
 
 const handlers: Record<string, KeyHandler> = {

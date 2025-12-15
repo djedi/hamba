@@ -10,6 +10,7 @@ import { emailQueries } from "./db";
 import { addClient, removeClient, subscribeToAccount, notifySyncComplete } from "./services/realtime";
 import { startAllIdle, getIdleStatus } from "./services/imap-idle";
 import { startPendingSendProcessor } from "./services/pending-send";
+import { startScheduledSendProcessor } from "./services/scheduled-send";
 
 interface WebSocketData {
   accountIds: Set<string>;
@@ -59,6 +60,9 @@ startAllIdle().catch(console.error);
 
 // Start pending send processor for undo send feature
 startPendingSendProcessor();
+
+// Start scheduled send processor for send later feature
+startScheduledSendProcessor();
 
 // Cleanup old trashed emails (30+ days old)
 function cleanupOldTrashedEmails() {

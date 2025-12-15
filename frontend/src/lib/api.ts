@@ -233,6 +233,56 @@ export const api = {
     request<{ success: boolean; error?: string }>(`/labels/${labelId}/emails/${emailId}`, {
       method: "DELETE",
     }),
+
+  // Scheduled emails (send later)
+  getScheduledEmails: (accountId: string) =>
+    request<ScheduledEmail[]>(`/emails/scheduled?accountId=${accountId}`),
+
+  getScheduledEmail: (id: string) => request<ScheduledEmail>(`/emails/scheduled/${id}`),
+
+  scheduleEmail: (params: {
+    accountId: string;
+    to: string;
+    cc?: string;
+    bcc?: string;
+    subject: string;
+    body: string;
+    replyToId?: string;
+    attachments?: Array<{
+      filename: string;
+      mimeType: string;
+      content: string;
+    }>;
+    sendAt: number;
+  }) =>
+    request<{ success: boolean; scheduledId?: string; sendAt?: number; error?: string }>("/emails/schedule", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  updateScheduledEmail: (id: string, params: {
+    to?: string;
+    cc?: string;
+    bcc?: string;
+    subject?: string;
+    body?: string;
+    replyToId?: string;
+    attachments?: Array<{
+      filename: string;
+      mimeType: string;
+      content: string;
+    }>;
+    sendAt?: number;
+  }) =>
+    request<{ success: boolean; error?: string }>(`/emails/scheduled/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(params),
+    }),
+
+  cancelScheduledEmail: (id: string) =>
+    request<{ success: boolean; error?: string }>(`/emails/scheduled/${id}`, {
+      method: "DELETE",
+    }),
 };
 
 export interface Account {
@@ -310,5 +360,19 @@ export interface Label {
   color: string;
   type: string;
   remote_id: string | null;
+  created_at: number;
+}
+
+export interface ScheduledEmail {
+  id: string;
+  account_id: string;
+  to_addresses: string;
+  cc_addresses: string | null;
+  bcc_addresses: string | null;
+  subject: string;
+  body: string;
+  reply_to_id: string | null;
+  attachments: string | null;
+  send_at: number;
   created_at: number;
 }

@@ -1,5 +1,5 @@
 import { writable, derived, get } from "svelte/store";
-import type { Account, Email, Draft, Label } from "./api";
+import type { Account, Email, Draft, Label, ScheduledEmail } from "./api";
 import { api } from "./api";
 
 // Current state
@@ -11,8 +11,8 @@ export const isLoading = writable(false);
 export const searchQuery = writable("");
 export const view = writable<"inbox" | "email" | "compose">("inbox");
 
-// Current folder (inbox, starred, sent, drafts, trash, archive, snoozed, reminders, label, etc.)
-export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "reminders" | "label";
+// Current folder (inbox, starred, sent, drafts, trash, archive, snoozed, reminders, scheduled, label, etc.)
+export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "reminders" | "scheduled" | "label";
 export const currentFolder = writable<Folder>("inbox");
 
 // Split inbox tab (important, other, all) - only applies when currentFolder is "inbox"
@@ -28,6 +28,9 @@ export const emailLabelsCache = writable<Map<string, Label[]>>(new Map());
 
 // Drafts store
 export const drafts = writable<Draft[]>([]);
+
+// Scheduled emails store
+export const scheduledEmails = writable<ScheduledEmail[]>([]);
 
 // Current draft being edited (for auto-save)
 export const currentDraftId = writable<string | null>(null);
@@ -662,3 +665,44 @@ export const selectedLabel = derived(
   ([$labels, $selectedLabelId]) =>
     $labels.find((l) => l.id === $selectedLabelId) || null
 );
+
+// Scheduled email actions
+export const scheduledEmailActions = {
+  loadScheduledEmails: async (accountId: string) => {
+    try {
+      const fetched = await api.getScheduledEmails(accountId);
+      scheduledEmails.set(fetched);
+    } catch (e) {
+      console.error("Failed to load scheduled emails:", e);
+    }
+  },
+
+  cancelScheduledEmail: async (scheduledId: string) => {
+    const $scheduledEmails = get(scheduledEmails);
+    const scheduled = $scheduledEmails.find((s) => s.id === scheduledId);
+
+    // Optimistic remove
+    scheduledEmails.update(($s) => $s.filter((s) => s.id !== scheduledId));
+
+    try {
+      const result = await api.cancelScheduledEmail(scheduledId);
+      if (!result.success) {
+        // Rollback
+        if (scheduled) {
+          scheduledEmails.update(($s) => [...$s, scheduled].sort((a, b) => a.send_at - b.send_at));
+        }
+        showToast(result.error || "Failed to cancel scheduled email");
+      } else {
+        showToast("Scheduled email cancelled", "success");
+      }
+      return result;
+    } catch (e) {
+      // Rollback
+      if (scheduled) {
+        scheduledEmails.update(($s) => [...$s, scheduled].sort((a, b) => a.send_at - b.send_at));
+      }
+      showToast("Failed to cancel scheduled email");
+      return { success: false, error: String(e) };
+    }
+  },
+};

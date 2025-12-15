@@ -480,6 +480,59 @@ export const pendingSendQueries = {
   deleteByAccount: db.prepare("DELETE FROM pending_sends WHERE account_id = ?"),
 };
 
+// Scheduled emails table for send later functionality
+db.run(`
+  CREATE TABLE IF NOT EXISTS scheduled_emails (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    to_addresses TEXT NOT NULL,
+    cc_addresses TEXT,
+    bcc_addresses TEXT,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    reply_to_id TEXT,
+    attachments TEXT,
+    send_at INTEGER NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_scheduled_emails_send_at ON scheduled_emails(send_at)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_scheduled_emails_account_id ON scheduled_emails(account_id)`);
+
+// Scheduled email operations
+export const scheduledEmailQueries = {
+  getById: db.prepare("SELECT * FROM scheduled_emails WHERE id = ?"),
+
+  getByAccount: db.prepare(`
+    SELECT * FROM scheduled_emails
+    WHERE account_id = ?
+    ORDER BY send_at ASC
+  `),
+
+  getReady: db.prepare(`
+    SELECT * FROM scheduled_emails
+    WHERE send_at <= unixepoch()
+    ORDER BY send_at ASC
+  `),
+
+  insert: db.prepare(`
+    INSERT INTO scheduled_emails (id, account_id, to_addresses, cc_addresses, bcc_addresses, subject, body, reply_to_id, attachments, send_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+
+  update: db.prepare(`
+    UPDATE scheduled_emails
+    SET to_addresses = ?, cc_addresses = ?, bcc_addresses = ?, subject = ?, body = ?, reply_to_id = ?, attachments = ?, send_at = ?
+    WHERE id = ?
+  `),
+
+  delete: db.prepare("DELETE FROM scheduled_emails WHERE id = ?"),
+
+  deleteByAccount: db.prepare("DELETE FROM scheduled_emails WHERE account_id = ?"),
+};
+
 // Email-Label junction operations
 export const emailLabelQueries = {
   getLabelsForEmail: db.prepare(`

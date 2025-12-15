@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { api, type Email, type Draft } from "$lib/api";
-  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast } from "$lib/stores";
+  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails } from "$lib/stores";
   import { get } from "svelte/store";
 
   interface Props {
@@ -34,6 +34,9 @@
   let showReminderPicker = $state(false);
   let attachments = $state<AttachmentFile[]>([]);
   let isDragging = $state(false);
+  let showSchedulePicker = $state(false);
+  let customScheduleDate = $state("");
+  let customScheduleTime = $state("");
 
   let toInput: HTMLInputElement;
   let fileInput: HTMLInputElement;
@@ -360,6 +363,134 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       }
     }
   }
+
+  // Schedule presets (returns Unix timestamp)
+  function getSchedulePreset(preset: string): number {
+    const now = new Date();
+    const date = new Date();
+
+    switch (preset) {
+      case "tomorrow-morning":
+        date.setDate(now.getDate() + 1);
+        date.setHours(9, 0, 0, 0);
+        break;
+      case "tomorrow-afternoon":
+        date.setDate(now.getDate() + 1);
+        date.setHours(14, 0, 0, 0);
+        break;
+      case "monday-morning": {
+        const dayOfWeek = now.getDay();
+        const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek);
+        date.setDate(now.getDate() + daysUntilMonday);
+        date.setHours(9, 0, 0, 0);
+        break;
+      }
+      default:
+        return 0;
+    }
+
+    return Math.floor(date.getTime() / 1000);
+  }
+
+  function formatPresetLabel(preset: string): string {
+    const timestamp = getSchedulePreset(preset);
+    if (!timestamp) return "";
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) +
+           " at " + date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  async function handleSchedule(sendAt: number) {
+    const accountId = get(selectedAccountId);
+    if (!accountId) {
+      error = "No account selected";
+      return;
+    }
+
+    if (!to.trim()) {
+      error = "Please enter a recipient";
+      return;
+    }
+
+    if (!subject.trim()) {
+      error = "Please enter a subject";
+      return;
+    }
+
+    sending = true;
+    error = "";
+    showSchedulePicker = false;
+
+    try {
+      const result = await api.scheduleEmail({
+        accountId,
+        to: to.trim(),
+        cc: cc.trim() || undefined,
+        bcc: bcc.trim() || undefined,
+        subject: subject.trim(),
+        body: body || "<p></p>",
+        replyToId: replyTo?.id,
+        attachments: attachments.length > 0
+          ? attachments.map((a) => ({
+              filename: a.filename,
+              mimeType: a.mimeType,
+              content: a.content,
+            }))
+          : undefined,
+        sendAt,
+      });
+
+      if (result.error) {
+        error = result.error;
+        sending = false;
+        return;
+      }
+
+      // Success - delete the draft
+      try {
+        await api.deleteDraft(draftId);
+        drafts.update(d => d.filter(draft => draft.id !== draftId));
+      } catch (e) {
+        // Ignore errors when deleting draft
+      }
+
+      // Update scheduled emails list
+      const scheduled = await api.getScheduledEmails(accountId);
+      scheduledEmails.set(scheduled);
+
+      // Navigate back to inbox
+      view.set("inbox");
+      sending = false;
+
+      // Show success toast
+      const sendDate = new Date(sendAt * 1000);
+      const formattedDate = sendDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) +
+                           " at " + sendDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      showToast(`Email scheduled for ${formattedDate}`, "success");
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to schedule";
+      sending = false;
+    }
+  }
+
+  function handleCustomSchedule() {
+    if (!customScheduleDate || !customScheduleTime) {
+      error = "Please select date and time";
+      return;
+    }
+
+    const dateTime = new Date(`${customScheduleDate}T${customScheduleTime}`);
+    const sendAt = Math.floor(dateTime.getTime() / 1000);
+
+    // Ensure it's in the future
+    const now = Math.floor(Date.now() / 1000);
+    if (sendAt <= now) {
+      error = "Scheduled time must be in the future";
+      return;
+    }
+
+    handleSchedule(sendAt);
+  }
 </script>
 
 <div class="compose" onkeydown={handleKeydown}>
@@ -479,6 +610,44 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       {/if}
       <kbd>⌘↵</kbd>
     </button>
+    <div class="schedule-picker">
+      <button
+        class="schedule-btn"
+        onclick={() => showSchedulePicker = !showSchedulePicker}
+        disabled={sending}
+      >
+        📅 Schedule
+      </button>
+      {#if showSchedulePicker}
+        <div class="schedule-dropdown">
+          <div class="schedule-section">
+            <button onclick={() => handleSchedule(getSchedulePreset('tomorrow-morning'))}>
+              <span class="schedule-label">Tomorrow morning</span>
+              <span class="schedule-time">{formatPresetLabel('tomorrow-morning')}</span>
+            </button>
+            <button onclick={() => handleSchedule(getSchedulePreset('tomorrow-afternoon'))}>
+              <span class="schedule-label">Tomorrow afternoon</span>
+              <span class="schedule-time">{formatPresetLabel('tomorrow-afternoon')}</span>
+            </button>
+            <button onclick={() => handleSchedule(getSchedulePreset('monday-morning'))}>
+              <span class="schedule-label">Monday morning</span>
+              <span class="schedule-time">{formatPresetLabel('monday-morning')}</span>
+            </button>
+          </div>
+          <div class="schedule-divider"></div>
+          <div class="schedule-custom">
+            <span class="schedule-custom-label">Custom time</span>
+            <div class="schedule-custom-inputs">
+              <input type="date" bind:value={customScheduleDate} min={new Date().toISOString().split('T')[0]} />
+              <input type="time" bind:value={customScheduleTime} />
+            </div>
+            <button class="schedule-custom-btn" onclick={handleCustomSchedule}>
+              Schedule
+            </button>
+          </div>
+        </div>
+      {/if}
+    </div>
     <div class="reminder-picker">
       <button
         class="reminder-btn"
@@ -810,5 +979,123 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   .attach-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+  }
+
+  .schedule-picker {
+    position: relative;
+  }
+
+  .schedule-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .schedule-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .schedule-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .schedule-dropdown {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    z-index: 10;
+    min-width: 250px;
+  }
+
+  .schedule-section button {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 10px 14px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    gap: 2px;
+  }
+
+  .schedule-section button:hover {
+    background: var(--bg-hover);
+  }
+
+  .schedule-label {
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .schedule-time {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  .schedule-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  .schedule-custom {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .schedule-custom-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .schedule-custom-inputs {
+    display: flex;
+    gap: 8px;
+  }
+
+  .schedule-custom-inputs input {
+    flex: 1;
+    padding: 6px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 12px;
+  }
+
+  .schedule-custom-inputs input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .schedule-custom-btn {
+    padding: 8px 12px;
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .schedule-custom-btn:hover {
+    filter: brightness(1.1);
   }
 </style>
