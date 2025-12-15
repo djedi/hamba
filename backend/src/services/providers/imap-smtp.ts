@@ -1,7 +1,7 @@
 import { ImapFlow } from "imapflow";
 import nodemailer from "nodemailer";
 import type { EmailProvider, SendParams, SendResult, SyncOptions, SyncResult } from "./types";
-import { accountQueries, emailQueries, attachmentQueries } from "../../db";
+import { accountQueries, emailQueries, attachmentQueries, draftQueries } from "../../db";
 import { simpleParser, type Attachment } from "mailparser";
 
 export class ImapSmtpProvider implements EmailProvider {
@@ -272,6 +272,130 @@ export class ImapSmtpProvider implements EmailProvider {
     } catch (error) {
       console.error("IMAP syncSent error:", error);
       return { synced: 0, total: 0, error: String(error) };
+    }
+  }
+
+  async syncDrafts(options?: SyncOptions): Promise<SyncResult> {
+    const client = this.createImapClient();
+    let synced = 0;
+
+    try {
+      await client.connect();
+
+      // List mailboxes to find the drafts folder
+      const mailboxes = await client.list();
+      const draftNames = ["Drafts", "Draft", "[Gmail]/Drafts", "INBOX.Drafts"];
+      let draftsFolder: string | null = null;
+
+      // Find existing drafts folder
+      for (const name of draftNames) {
+        if (mailboxes.some(m => m.path === name || m.name === name)) {
+          draftsFolder = name;
+          break;
+        }
+      }
+
+      if (!draftsFolder) {
+        await client.logout();
+        return { synced: 0, total: 0, error: "Drafts folder not found" };
+      }
+
+      const lock = await client.getMailboxLock(draftsFolder);
+
+      try {
+        const maxMessages = options?.maxMessages || 50;
+
+        // Get total message count
+        const mailbox = client.mailbox;
+        const total = mailbox && typeof mailbox === "object" ? mailbox.exists : 0;
+
+        if (total === 0) {
+          return { synced: 0, total: 0 };
+        }
+
+        // Fetch last N messages (most recent)
+        const start = Math.max(1, total - maxMessages + 1);
+        const range = `${start}:*`;
+
+        for await (const msg of client.fetch(range, {
+          envelope: true,
+          source: true,
+          flags: true,
+          uid: true,
+        })) {
+          try {
+            const parsed = await this.parseImapMessage(msg);
+
+            // Generate composite ID for drafts
+            const localId = `imap-draft:${this.accountId}:${msg.uid}`;
+
+            draftQueries.upsert.run(
+              localId,
+              this.accountId,
+              `${msg.uid}`, // remote_id - just the UID for IMAP
+              parsed.toAddresses,
+              parsed.ccAddresses,
+              "", // bcc not typically stored in drafts
+              parsed.subject,
+              parsed.bodyHtml || parsed.bodyText,
+              null, // reply_to_id
+              null // reply_mode
+            );
+
+            synced++;
+          } catch (e) {
+            console.error("Error parsing draft:", e);
+          }
+        }
+      } finally {
+        lock.release();
+      }
+
+      await client.logout();
+      return { synced, total: synced };
+    } catch (error) {
+      console.error("IMAP syncDrafts error:", error);
+      return { synced: 0, total: 0, error: String(error) };
+    }
+  }
+
+  async deleteDraft(draftUid: string): Promise<void> {
+    const client = this.createImapClient();
+
+    try {
+      await client.connect();
+
+      // List mailboxes to find the drafts folder
+      const mailboxes = await client.list();
+      const draftNames = ["Drafts", "Draft", "[Gmail]/Drafts", "INBOX.Drafts"];
+      let draftsFolder: string | null = null;
+
+      for (const name of draftNames) {
+        if (mailboxes.some(m => m.path === name || m.name === name)) {
+          draftsFolder = name;
+          break;
+        }
+      }
+
+      if (!draftsFolder) {
+        await client.logout();
+        throw new Error("Drafts folder not found");
+      }
+
+      const uid = parseInt(draftUid, 10);
+      const lock = await client.getMailboxLock(draftsFolder);
+
+      try {
+        await client.messageFlagsAdd({ uid }, ["\\Deleted"], { uid: true });
+        await client.messageDelete({ uid }, { uid: true });
+      } finally {
+        lock.release();
+      }
+
+      await client.logout();
+    } catch (error) {
+      console.error("IMAP deleteDraft error:", error);
+      throw error;
     }
   }
 

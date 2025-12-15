@@ -105,6 +105,27 @@ db.run(`
 db.run(`CREATE INDEX IF NOT EXISTS idx_attachments_email_id ON attachments(email_id)`);
 db.run(`CREATE INDEX IF NOT EXISTS idx_attachments_content_id ON attachments(content_id)`);
 
+// Drafts table for auto-saving compose content
+db.run(`
+  CREATE TABLE IF NOT EXISTS drafts (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    remote_id TEXT,
+    to_addresses TEXT,
+    cc_addresses TEXT,
+    bcc_addresses TEXT,
+    subject TEXT,
+    body TEXT,
+    reply_to_id TEXT,
+    reply_mode TEXT,
+    updated_at INTEGER DEFAULT (unixepoch()),
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_drafts_account_id ON drafts(account_id)`);
+
 // Full-text search for emails
 db.run(`
   CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
@@ -224,4 +245,33 @@ export const attachmentQueries = {
   `),
 
   delete: db.prepare("DELETE FROM attachments WHERE email_id = ?"),
+};
+
+// Draft operations
+export const draftQueries = {
+  getByAccount: db.prepare(`
+    SELECT * FROM drafts
+    WHERE account_id = ?
+    ORDER BY updated_at DESC
+  `),
+
+  getById: db.prepare("SELECT * FROM drafts WHERE id = ?"),
+
+  upsert: db.prepare(`
+    INSERT INTO drafts (id, account_id, remote_id, to_addresses, cc_addresses, bcc_addresses, subject, body, reply_to_id, reply_mode, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+    ON CONFLICT(id) DO UPDATE SET
+      to_addresses = excluded.to_addresses,
+      cc_addresses = excluded.cc_addresses,
+      bcc_addresses = excluded.bcc_addresses,
+      subject = excluded.subject,
+      body = excluded.body,
+      reply_to_id = excluded.reply_to_id,
+      reply_mode = excluded.reply_mode,
+      updated_at = unixepoch()
+  `),
+
+  delete: db.prepare("DELETE FROM drafts WHERE id = ?"),
+
+  deleteByAccount: db.prepare("DELETE FROM drafts WHERE account_id = ?"),
 };

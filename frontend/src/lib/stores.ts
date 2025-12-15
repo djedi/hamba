@@ -1,5 +1,5 @@
 import { writable, derived, get } from "svelte/store";
-import type { Account, Email } from "./api";
+import type { Account, Email, Draft } from "./api";
 import { api } from "./api";
 
 // Current state
@@ -11,9 +11,15 @@ export const isLoading = writable(false);
 export const searchQuery = writable("");
 export const view = writable<"inbox" | "email" | "compose">("inbox");
 
-// Current folder (inbox, starred, sent, etc.)
-export type Folder = "inbox" | "starred" | "sent";
+// Current folder (inbox, starred, sent, drafts, etc.)
+export type Folder = "inbox" | "starred" | "sent" | "drafts";
 export const currentFolder = writable<Folder>("inbox");
+
+// Drafts store
+export const drafts = writable<Draft[]>([]);
+
+// Current draft being edited (for auto-save)
+export const currentDraftId = writable<string | null>(null);
 
 // Compose state
 export const composeMode = writable<"new" | "reply" | "replyAll" | "forward">("new");

@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { authRoutes } from "./routes/auth";
 import { emailRoutes } from "./routes/emails";
+import { draftRoutes } from "./routes/drafts";
 // Database is initialized on import
 import "./db";
 import { addClient, removeClient, subscribeToAccount } from "./services/realtime";
@@ -19,6 +20,7 @@ const app = new Elysia()
   .get("/health", () => ({ status: "ok" }))
   .use(authRoutes)
   .use(emailRoutes)
+  .use(draftRoutes)
   // WebSocket for real-time updates
   .ws("/ws", {
     open(ws) {

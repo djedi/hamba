@@ -1,6 +1,6 @@
 import type { EmailProvider, SendParams, SendResult, SyncOptions, SyncResult } from "./types";
 import { getValidAccessToken } from "../token";
-import { emailQueries, accountQueries, attachmentQueries } from "../../db";
+import { emailQueries, accountQueries, attachmentQueries, draftQueries } from "../../db";
 
 interface AttachmentInfo {
   attachmentId: string;
@@ -374,6 +374,99 @@ export class GmailProvider implements EmailProvider {
     }
 
     return { synced, total: messages.length };
+  }
+
+  async syncDrafts(options?: SyncOptions): Promise<SyncResult> {
+    const tokenResult = await this.getTokenWithError();
+
+    if (!tokenResult.accessToken) {
+      return {
+        synced: 0,
+        total: 0,
+        error: tokenResult.error || "Not authenticated",
+      };
+    }
+
+    const accessToken = tokenResult.accessToken;
+    const maxMessages = options?.maxMessages || 50;
+
+    // Fetch drafts list from Gmail
+    const listResponse = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/drafts?maxResults=${maxMessages}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    if (!listResponse.ok) {
+      const err = await listResponse.json() as { error?: { message?: string } };
+      return { synced: 0, total: 0, error: err.error?.message || "Failed to fetch drafts" };
+    }
+
+    const listData = await listResponse.json() as { drafts?: Array<{ id: string; message: { id: string } }> };
+    const drafts = listData.drafts || [];
+
+    let synced = 0;
+    const batchSize = 20;
+
+    for (let i = 0; i < drafts.length; i += batchSize) {
+      const batch = drafts.slice(i, i + batchSize);
+
+      const draftPromises = batch.map((d: any) =>
+        fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/drafts/${d.id}?format=full`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        ).then((res) => res.json() as Promise<any>)
+      );
+
+      const fullDrafts = await Promise.all(draftPromises);
+
+      for (const draft of fullDrafts) {
+        if (draft.error) continue;
+
+        const msg = draft.message;
+        const parsed = parseGmailMessage(msg, this.accountId);
+        const { text, html } = extractBodyAndAttachments(msg.payload);
+
+        // Use Gmail draft ID as local ID prefix
+        const localId = `gmail-draft:${draft.id}`;
+
+        draftQueries.upsert.run(
+          localId,
+          this.accountId,
+          draft.id, // remote_id
+          parsed.toAddresses,
+          parsed.ccAddresses,
+          parsed.bccAddresses,
+          parsed.subject,
+          html || text,
+          null, // reply_to_id - not available from Gmail draft
+          null // reply_mode
+        );
+
+        synced++;
+      }
+    }
+
+    return { synced, total: drafts.length };
+  }
+
+  async deleteDraft(draftId: string): Promise<void> {
+    const accessToken = await this.getToken();
+    if (!accessToken) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/drafts/${draftId}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      const err = await response.json() as { error?: { message?: string } };
+      throw new Error(err.error?.message || `Gmail API error: ${response.status}`);
+    }
   }
 
   private async modifyMessage(emailId: string, modifications: { addLabelIds?: string[]; removeLabelIds?: string[] }): Promise<void> {

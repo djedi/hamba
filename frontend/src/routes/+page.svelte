@@ -16,7 +16,9 @@
     replyToEmail,
     toasts,
     currentFolder,
+    drafts,
   } from "$lib/stores";
+  import type { Draft } from "$lib/api";
   import EmailList from "$lib/components/EmailList.svelte";
   import EmailView from "$lib/components/EmailView.svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
@@ -25,6 +27,7 @@
   import Compose from "$lib/components/Compose.svelte";
   import AddAccountModal from "$lib/components/AddAccountModal.svelte";
   import Toasts from "$lib/components/Toasts.svelte";
+  import DraftList from "$lib/components/DraftList.svelte";
 
   let needsReauth = $state(false);
   let errorMessage = $state("");
@@ -32,6 +35,7 @@
   let autoSyncInterval: ReturnType<typeof setInterval> | null = null;
   let lastLoadedAccountId: string | null = null;
   let unsubscribeRealtime: (() => void) | null = null;
+  let selectedDraft = $state<Draft | null>(null);
 
   // Auto-sync every 60 seconds (fallback for Gmail accounts without push)
   const AUTO_SYNC_INTERVAL = 60 * 1000;
@@ -60,6 +64,14 @@
       lastLoadedFolder = folder;
       view.set("inbox");
       loadEmails(accountId, null, folder);
+    }
+  });
+
+  // Clear selectedDraft when view changes away from compose (unless coming from drafts)
+  $effect(() => {
+    const currentView = $view;
+    if (currentView !== "compose") {
+      selectedDraft = null;
     }
   });
 
@@ -171,10 +183,17 @@
     }
   }
 
-  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent") {
+  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts") {
     isLoading.set(true);
     try {
       const targetFolder = folder ?? $currentFolder;
+
+      // Handle drafts folder specially
+      if (targetFolder === "drafts") {
+        await loadDrafts(accountId);
+        return;
+      }
+
       let msgs;
       if (targetFolder === "starred") {
         msgs = await api.getStarredEmails(accountId);
@@ -210,6 +229,27 @@
     } finally {
       isLoading.set(false);
     }
+  }
+
+  async function loadDrafts(accountId: string) {
+    try {
+      const draftsList = await api.getDrafts(accountId);
+      drafts.set(draftsList);
+      // Clear email selection since we're viewing drafts
+      emails.set([]);
+      selectedEmailId.set(null);
+      selectedIndex.set(0);
+    } catch (err) {
+      handleError(err);
+    } finally {
+      isLoading.set(false);
+    }
+  }
+
+  function openDraft(draft: Draft) {
+    selectedDraft = draft;
+    composeMode.set((draft.reply_mode as "new" | "reply" | "replyAll" | "forward") || "new");
+    view.set("compose");
   }
 
   async function syncEmails() {
@@ -266,11 +306,15 @@
         </button>
       </div>
     {:else if $view === "inbox"}
-      <EmailList loading={$isLoading} />
+      {#if $currentFolder === "drafts"}
+        <DraftList loading={$isLoading} onOpenDraft={openDraft} />
+      {:else}
+        <EmailList loading={$isLoading} />
+      {/if}
     {:else if $view === "email"}
       <EmailView />
     {:else if $view === "compose"}
-      <Compose replyTo={$replyToEmail} mode={$composeMode} />
+      <Compose replyTo={$replyToEmail} mode={$composeMode} draft={selectedDraft} />
     {/if}
   </main>
 

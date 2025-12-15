@@ -1,15 +1,16 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { api, type Email } from "$lib/api";
-  import { view, selectedAccountId, selectedEmail } from "$lib/stores";
+  import { onMount, onDestroy } from "svelte";
+  import { api, type Email, type Draft } from "$lib/api";
+  import { view, selectedAccountId, currentDraftId, drafts } from "$lib/stores";
   import { get } from "svelte/store";
 
   interface Props {
     replyTo?: Email | null;
     mode?: "new" | "reply" | "replyAll" | "forward";
+    draft?: Draft | null;
   }
 
-  let { replyTo = null, mode = "new" }: Props = $props();
+  let { replyTo = null, mode = "new", draft = null }: Props = $props();
 
   let to = $state("");
   let cc = $state("");
@@ -20,12 +21,65 @@
   let showBcc = $state(false);
   let sending = $state(false);
   let error = $state("");
+  let lastSaved = $state<string | null>(null);
 
   let toInput: HTMLInputElement;
+  let draftId = draft?.id || crypto.randomUUID();
+  let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+  let lastSavedContent = "";
+
+  // Generate a content hash for change detection
+  function getContentHash(): string {
+    return `${to}|${cc}|${bcc}|${subject}|${body}`;
+  }
+
+  // Auto-save draft every 5 seconds if content changed
+  async function autoSave() {
+    const accountId = get(selectedAccountId);
+    if (!accountId) return;
+
+    const currentHash = getContentHash();
+    if (currentHash === lastSavedContent) return; // No changes
+
+    // Don't save completely empty drafts
+    if (!to && !cc && !bcc && !subject && !body) return;
+
+    try {
+      await api.saveDraft({
+        id: draftId,
+        accountId,
+        to: to.trim(),
+        cc: cc.trim() || undefined,
+        bcc: bcc.trim() || undefined,
+        subject: subject.trim(),
+        body,
+        replyToId: replyTo?.id,
+        replyMode: mode !== "new" ? mode : undefined,
+      });
+
+      lastSavedContent = currentHash;
+      lastSaved = new Date().toLocaleTimeString();
+      currentDraftId.set(draftId);
+    } catch (e) {
+      console.error("Auto-save failed:", e);
+    }
+  }
 
   onMount(() => {
-    // Pre-fill based on mode
-    if (replyTo && mode !== "new") {
+    // Load from existing draft if provided
+    if (draft) {
+      to = draft.to_addresses || "";
+      cc = draft.cc_addresses || "";
+      bcc = draft.bcc_addresses || "";
+      subject = draft.subject || "";
+      body = draft.body || "";
+      if (cc) showCc = true;
+      if (bcc) showBcc = true;
+      draftId = draft.id;
+      lastSavedContent = getContentHash();
+    }
+    // Pre-fill based on mode (for new compositions)
+    else if (replyTo && mode !== "new") {
       if (mode === "reply") {
         to = replyTo.from_email;
         subject = replyTo.subject.startsWith("Re:") ? replyTo.subject : `Re: ${replyTo.subject}`;
@@ -51,6 +105,9 @@
       }
     }
 
+    // Start auto-save timer
+    autoSaveTimer = setInterval(autoSave, 5000);
+
     // Focus the appropriate field
     setTimeout(() => {
       if (mode === "new" || mode === "forward") {
@@ -60,6 +117,13 @@
         document.querySelector<HTMLTextAreaElement>(".compose-body")?.focus();
       }
     }, 100);
+  });
+
+  onDestroy(() => {
+    if (autoSaveTimer) {
+      clearInterval(autoSaveTimer);
+    }
+    currentDraftId.set(null);
   });
 
   function buildQuotedReply(email: Email): string {
@@ -80,7 +144,16 @@ To: ${email.to_addresses}<br><br>
 ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
-  function handleClose() {
+  async function handleClose() {
+    // Delete the draft if it's empty (discarding)
+    if (!to && !cc && !bcc && !subject && !body) {
+      try {
+        await api.deleteDraft(draftId);
+        drafts.update(d => d.filter(draft => draft.id !== draftId));
+      } catch (e) {
+        // Ignore errors when deleting draft
+      }
+    }
     view.set("inbox");
   }
 
@@ -118,7 +191,13 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       if (result.error) {
         error = result.error;
       } else {
-        // Success - go back to inbox
+        // Success - delete the draft and go back to inbox
+        try {
+          await api.deleteDraft(draftId);
+          drafts.update(d => d.filter(draft => draft.id !== draftId));
+        } catch (e) {
+          // Ignore errors when deleting draft
+        }
         view.set("inbox");
       }
     } catch (err) {
@@ -223,6 +302,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       <kbd>⌘↵</kbd>
     </button>
     <button class="discard-btn" onclick={handleClose}>Discard</button>
+    {#if lastSaved}
+      <span class="saved-indicator">Saved at {lastSaved}</span>
+    {/if}
   </footer>
 </div>
 
@@ -380,5 +462,11 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
 
   .discard-btn:hover {
     color: var(--danger);
+  }
+
+  .saved-indicator {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
   }
 </style>

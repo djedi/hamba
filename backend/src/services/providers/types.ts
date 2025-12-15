@@ -2,6 +2,7 @@
 export interface EmailProvider {
   sync(options?: SyncOptions): Promise<SyncResult>;
   syncSent(options?: SyncOptions): Promise<SyncResult>;
+  syncDrafts(options?: SyncOptions): Promise<SyncResult>;
   markRead(emailId: string): Promise<void>;
   markUnread(emailId: string): Promise<void>;
   star(emailId: string): Promise<void>;
@@ -9,6 +10,7 @@ export interface EmailProvider {
   archive(emailId: string): Promise<void>;
   trash(emailId: string): Promise<void>;
   send(params: SendParams): Promise<SendResult>;
+  deleteDraft(draftId: string): Promise<void>;
   validateCredentials(): Promise<boolean>;
 }
 

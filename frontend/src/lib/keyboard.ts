@@ -65,11 +65,19 @@ function goToSent() {
   updateUrlWithEmail(null);
 }
 
-// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent)
+// Go to drafts view
+function goToDrafts() {
+  currentFolder.set("drafts");
+  view.set("inbox");
+  updateUrlWithEmail(null);
+}
+
+// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts)
 const sequenceHandlers: Record<string, KeyHandler> = {
   "gi": goToInbox,
   "gs": goToStarred,
   "gt": goToSent,
+  "gd": goToDrafts,
 };
 
 const handlers: Record<string, KeyHandler> = {

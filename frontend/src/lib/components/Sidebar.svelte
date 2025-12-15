@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder } from "$lib/stores";
+  import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder, drafts } from "$lib/stores";
 
   interface Props {
     onSync: () => void;
@@ -38,6 +38,15 @@
     url.searchParams.delete("email");
     window.history.pushState({}, "", url);
   }
+
+  function goToDrafts() {
+    currentFolder.set("drafts");
+    view.set("inbox");
+    // Clear URL param
+    const url = new URL(window.location.href);
+    url.searchParams.delete("email");
+    window.history.pushState({}, "", url);
+  }
 </script>
 
 <aside class="sidebar">
@@ -62,9 +71,12 @@
       <span class="nav-icon">📤</span>
       <span class="nav-label">Sent</span>
     </button>
-    <button class="nav-item">
+    <button class="nav-item" class:active={$currentFolder === "drafts" && ($view === "inbox" || $view === "email")} onclick={goToDrafts}>
       <span class="nav-icon">📝</span>
       <span class="nav-label">Drafts</span>
+      {#if $drafts.length > 0}
+        <span class="badge">{$drafts.length}</span>
+      {/if}
     </button>
     <button class="nav-item">
       <span class="nav-icon">🗑️</span>
@@ -109,6 +121,7 @@
     <div class="shortcut"><kbd>gi</kbd> inbox</div>
     <div class="shortcut"><kbd>gs</kbd> starred</div>
     <div class="shortcut"><kbd>gt</kbd> sent</div>
+    <div class="shortcut"><kbd>gd</kbd> drafts</div>
     <div class="shortcut"><kbd>␣</kbd> scroll</div>
     <div class="shortcut"><kbd>e</kbd><kbd>y</kbd> archive</div>
     <div class="shortcut"><kbd>s</kbd> star</div>

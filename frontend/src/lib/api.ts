@@ -92,6 +92,36 @@ export const api = {
       method: "POST",
       body: JSON.stringify(params),
     }),
+
+  // Drafts
+  getDrafts: (accountId: string) =>
+    request<Draft[]>(`/drafts?accountId=${accountId}`),
+
+  getDraft: (id: string) => request<Draft>(`/drafts/${id}`),
+
+  saveDraft: (params: {
+    id: string;
+    accountId: string;
+    to?: string;
+    cc?: string;
+    bcc?: string;
+    subject?: string;
+    body?: string;
+    replyToId?: string;
+    replyMode?: string;
+  }) =>
+    request<{ success: boolean; id: string; error?: string }>("/drafts", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  deleteDraft: (id: string) =>
+    request<{ success: boolean; error?: string }>(`/drafts/${id}`, {
+      method: "DELETE",
+    }),
+
+  syncDrafts: (accountId: string) =>
+    request<{ synced: number; total: number }>(`/drafts/sync/${accountId}`, { method: "POST" }),
 };
 
 export interface Account {
@@ -142,4 +172,19 @@ export interface Email {
   is_archived: number;
   is_trashed: number;
   received_at: number;
+}
+
+export interface Draft {
+  id: string;
+  account_id: string;
+  remote_id: string | null;
+  to_addresses: string;
+  cc_addresses: string;
+  bcc_addresses: string;
+  subject: string;
+  body: string;
+  reply_to_id: string | null;
+  reply_mode: string | null;
+  updated_at: number;
+  created_at: number;
 }

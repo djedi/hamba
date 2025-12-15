@@ -10,7 +10,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Implement Sent view** - Add a "Sent" folder view. For Gmail, fetch messages with SENT label. For IMAP, fetch from "Sent" or "Sent Items" folder. Store sent emails in the database with a `folder` column or label system.
 
-- [ ] **Implement Drafts view** - Add drafts support. Create a `drafts` table in the database. Auto-save compose content every 5 seconds. Load drafts in the Drafts sidebar view. For Gmail/IMAP, sync drafts from server.
+- [x] **Implement Drafts view** - Add drafts support. Create a `drafts` table in the database. Auto-save compose content every 5 seconds. Load drafts in the Drafts sidebar view. For Gmail/IMAP, sync drafts from server.
 
 - [ ] **Implement Trash view** - Add a "Trash" folder view showing emails where `is_trashed = 1`. Add ability to permanently delete or restore from trash. Auto-delete emails after 30 days.
 
