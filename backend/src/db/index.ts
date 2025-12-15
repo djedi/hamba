@@ -1,0 +1,207 @@
+import { Database } from "bun:sqlite";
+
+export const db = new Database("hamba.db");
+
+// Initialize tables immediately
+db.run(`
+  CREATE TABLE IF NOT EXISTS accounts (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT,
+    provider_type TEXT DEFAULT 'gmail',
+    access_token TEXT,
+    refresh_token TEXT,
+    token_expires_at INTEGER,
+    imap_host TEXT,
+    imap_port INTEGER DEFAULT 993,
+    imap_use_tls INTEGER DEFAULT 1,
+    smtp_host TEXT,
+    smtp_port INTEGER DEFAULT 587,
+    smtp_use_tls INTEGER DEFAULT 1,
+    password TEXT,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch())
+  )
+`);
+
+// Add columns for existing databases (migrations)
+const addColumnIfNotExists = (table: string, column: string, definition: string) => {
+  try {
+    db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch (e) {
+    // Column already exists
+  }
+};
+
+addColumnIfNotExists("accounts", "provider_type", "TEXT DEFAULT 'gmail'");
+addColumnIfNotExists("accounts", "imap_host", "TEXT");
+addColumnIfNotExists("accounts", "imap_port", "INTEGER DEFAULT 993");
+addColumnIfNotExists("accounts", "imap_use_tls", "INTEGER DEFAULT 1");
+addColumnIfNotExists("accounts", "smtp_host", "TEXT");
+addColumnIfNotExists("accounts", "smtp_port", "INTEGER DEFAULT 587");
+addColumnIfNotExists("accounts", "smtp_use_tls", "INTEGER DEFAULT 1");
+addColumnIfNotExists("accounts", "password", "TEXT");
+
+// Remove body_html_dark column - dark mode now applied via CSS filter at render time
+try {
+  db.run("ALTER TABLE emails DROP COLUMN body_html_dark");
+} catch (e) {
+  // Column doesn't exist or already removed
+}
+
+// Add username field for IMAP accounts (defaults to email if not specified)
+addColumnIfNotExists("accounts", "username", "TEXT");
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS emails (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    thread_id TEXT,
+    message_id TEXT UNIQUE,
+    subject TEXT,
+    snippet TEXT,
+    from_name TEXT,
+    from_email TEXT,
+    to_addresses TEXT,
+    cc_addresses TEXT,
+    bcc_addresses TEXT,
+    body_text TEXT,
+    body_html TEXT,
+    labels TEXT,
+    is_read INTEGER DEFAULT 0,
+    is_starred INTEGER DEFAULT 0,
+    is_archived INTEGER DEFAULT 0,
+    is_trashed INTEGER DEFAULT 0,
+    received_at INTEGER,
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (account_id) REFERENCES accounts(id)
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_emails_account_id ON emails(account_id)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_emails_thread_id ON emails(thread_id)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_emails_received_at ON emails(received_at DESC)`);
+
+// Attachments table for embedded images and files
+db.run(`
+  CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    email_id TEXT NOT NULL,
+    content_id TEXT,
+    filename TEXT,
+    mime_type TEXT,
+    size INTEGER,
+    data BLOB,
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (email_id) REFERENCES emails(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_attachments_email_id ON attachments(email_id)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_attachments_content_id ON attachments(content_id)`);
+
+// Full-text search for emails
+db.run(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
+    subject,
+    snippet,
+    from_name,
+    from_email,
+    body_text,
+    content='emails',
+    content_rowid='rowid'
+  )
+`);
+
+console.log("📦 Database initialized");
+
+// Account operations
+export const accountQueries = {
+  getAll: db.prepare("SELECT * FROM accounts"),
+  getById: db.prepare("SELECT * FROM accounts WHERE id = ?"),
+  getByEmail: db.prepare("SELECT * FROM accounts WHERE email = ?"),
+
+  upsert: db.prepare(`
+    INSERT INTO accounts (id, email, name, access_token, refresh_token, token_expires_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+    ON CONFLICT(email) DO UPDATE SET
+      name = excluded.name,
+      access_token = excluded.access_token,
+      refresh_token = excluded.refresh_token,
+      token_expires_at = excluded.token_expires_at,
+      updated_at = unixepoch()
+  `),
+
+  delete: db.prepare("DELETE FROM accounts WHERE id = ?"),
+};
+
+// Email operations
+export const emailQueries = {
+  getByAccount: db.prepare(`
+    SELECT * FROM emails
+    WHERE account_id = ? AND is_trashed = 0 AND is_archived = 0
+    ORDER BY received_at DESC
+    LIMIT ? OFFSET ?
+  `),
+
+  getById: db.prepare("SELECT * FROM emails WHERE id = ?"),
+
+  getByThread: db.prepare(`
+    SELECT * FROM emails WHERE thread_id = ? ORDER BY received_at ASC
+  `),
+
+  search: db.prepare(`
+    SELECT emails.* FROM emails_fts
+    JOIN emails ON emails.rowid = emails_fts.rowid
+    WHERE emails_fts MATCH ?
+    ORDER BY rank
+    LIMIT ?
+  `),
+
+  upsert: db.prepare(`
+    INSERT INTO emails (
+      id, account_id, thread_id, message_id, subject, snippet,
+      from_name, from_email, to_addresses, cc_addresses, bcc_addresses,
+      body_text, body_html, labels, is_read, is_starred, received_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(message_id) DO UPDATE SET
+      subject = excluded.subject,
+      snippet = excluded.snippet,
+      labels = excluded.labels,
+      is_read = excluded.is_read,
+      is_starred = excluded.is_starred
+  `),
+
+  markRead: db.prepare("UPDATE emails SET is_read = 1 WHERE id = ?"),
+  markUnread: db.prepare("UPDATE emails SET is_read = 0 WHERE id = ?"),
+  star: db.prepare("UPDATE emails SET is_starred = 1 WHERE id = ?"),
+  unstar: db.prepare("UPDATE emails SET is_starred = 0 WHERE id = ?"),
+  archive: db.prepare("UPDATE emails SET is_archived = 1 WHERE id = ?"),
+  unarchive: db.prepare("UPDATE emails SET is_archived = 0 WHERE id = ?"),
+  trash: db.prepare("UPDATE emails SET is_trashed = 1 WHERE id = ?"),
+
+  delete: db.prepare("DELETE FROM emails WHERE id = ?"),
+
+  // For reconciliation - get IDs of non-archived emails for an account
+  getActiveIdsByAccount: db.prepare(`
+    SELECT id FROM emails
+    WHERE account_id = ? AND is_archived = 0 AND is_trashed = 0
+  `),
+};
+
+// Attachment operations
+export const attachmentQueries = {
+  getByEmailId: db.prepare("SELECT * FROM attachments WHERE email_id = ?"),
+
+  getByContentId: db.prepare(`
+    SELECT * FROM attachments
+    WHERE email_id = ? AND content_id = ?
+  `),
+
+  insert: db.prepare(`
+    INSERT OR IGNORE INTO attachments (id, email_id, content_id, filename, mime_type, size, data)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `),
+
+  delete: db.prepare("DELETE FROM attachments WHERE email_id = ?"),
+};

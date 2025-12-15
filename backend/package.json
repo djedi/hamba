@@ -1,0 +1,26 @@
+{
+  "name": "hamba-backend",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --env-file=../.env --hot run src/index.ts",
+    "start": "bun --env-file=../.env run src/index.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/mailparser": "^3.4.6",
+    "@types/nodemailer": "^7.0.4"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.4.0",
+    "elysia": "^1.4.19",
+    "imapflow": "^1.2.0",
+    "mailparser": "^3.9.1",
+    "nodemailer": "^7.0.11"
+  }
+}
