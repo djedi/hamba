@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --env-file=../.env --hot run src/index.ts",
     "start": "bun --env-file=../.env run src/index.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "test:coverage": "bun test --coverage"
   },
   "devDependencies": {
     "@types/bun": "latest",

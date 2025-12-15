@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+show_help() {
+    echo "Usage: ./test [target] [options]"
+    echo ""
+    echo "Targets:"
+    echo "  (none)      Run all tests (frontend and backend)"
+    echo "  frontend    Run frontend tests only"
+    echo "  fe          Alias for frontend"
+    echo "  backend     Run backend tests only"
+    echo "  be          Alias for backend"
+    echo ""
+    echo "Options:"
+    echo "  --report    Generate HTML coverage report and open in browser"
+    echo "  --watch     Run tests in watch mode (frontend only)"
+    echo "  --help      Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  ./test                    # Run all tests"
+    echo "  ./test fe                 # Run frontend tests"
+    echo "  ./test backend --report   # Run backend tests with coverage report"
+}
+
+run_frontend() {
+    local report=$1
+    local watch=$2
+    echo -e "${BLUE}Running frontend tests...${NC}"
+    cd "$SCRIPT_DIR/frontend"
+
+    if [ "$watch" = true ]; then
+        bun run test:watch
+    elif [ "$report" = true ]; then
+        bun run test:coverage
+        echo -e "${GREEN}Opening coverage report...${NC}"
+        open coverage/index.html 2>/dev/null || xdg-open coverage/index.html 2>/dev/null || echo "Coverage report at: frontend/coverage/index.html"
+    else
+        bun run test
+    fi
+}
+
+run_backend() {
+    local report=$1
+    echo -e "${BLUE}Running backend tests...${NC}"
+    cd "$SCRIPT_DIR/backend"
+
+    if [ "$report" = true ]; then
+        bun run test:coverage
+        echo -e "${GREEN}Coverage report generated.${NC}"
+        # Bun coverage outputs to console by default, HTML reports need additional setup
+    else
+        bun run test
+    fi
+}
+
+# Parse arguments
+TARGET=""
+REPORT=false
+WATCH=false
+
+for arg in "$@"; do
+    case $arg in
+        --report)
+            REPORT=true
+            ;;
+        --watch)
+            WATCH=true
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        frontend|fe)
+            TARGET="frontend"
+            ;;
+        backend|be)
+            TARGET="backend"
+            ;;
+        *)
+            echo -e "${RED}Unknown argument: $arg${NC}"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+# Run tests
+case $TARGET in
+    frontend)
+        run_frontend $REPORT $WATCH
+        ;;
+    backend)
+        run_backend $REPORT
+        ;;
+    "")
+        # Run all tests
+        echo -e "${BLUE}Running all tests...${NC}"
+        echo ""
+        run_backend $REPORT
+        echo ""
+        run_frontend $REPORT $WATCH
+        echo ""
+        echo -e "${GREEN}All tests complete!${NC}"
+        ;;
+esac

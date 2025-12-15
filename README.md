@@ -114,6 +114,23 @@ cd frontend && bun run tauri:dev
 | `g`            | Go to top            |
 | `Shift+G`      | Go to bottom         |
 
+## Testing
+
+Run tests with the helper script:
+
+```bash
+./test              # Run all tests (frontend + backend)
+./test frontend     # Run frontend tests only (alias: fe)
+./test backend      # Run backend tests only (alias: be)
+./test --report     # Generate HTML coverage report
+./test --watch      # Watch mode (frontend only)
+```
+
+Tests live alongside their source files (e.g., `stores.ts` has `stores.test.ts`).
+
+- **Frontend**: [Vitest](https://vitest.dev) with jsdom + [@testing-library/svelte](https://testing-library.com/docs/svelte-testing-library/intro)
+- **Backend**: [Bun's built-in test runner](https://bun.sh/docs/cli/test)
+
 ## Project Structure
 
 ```

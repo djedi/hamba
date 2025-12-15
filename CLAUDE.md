@@ -25,6 +25,14 @@ cd frontend && bun run tauri:build  # Production build with bundled backend
 cd frontend && bun run check
 ```
 
+**Testing:**
+```bash
+./test              # Run all tests
+./test fe           # Frontend tests only
+./test be           # Backend tests only
+./test --report     # Run with coverage report
+```
+
 ## Architecture
 
 ### Provider Abstraction
@@ -99,3 +107,12 @@ Gmail uses polling (every 60s) as fallback. For true push notifications:
 - Send `{"type": "subscribe", "accountId": "..."}` to subscribe
 - Receive `{"type": "new_mail", "accountId": "..."}` on new mail
 - Receive `{"type": "sync_complete", "accountId": "...", "count": N}` after sync
+
+## Testing
+
+Unit tests live alongside the files they test (e.g., `stores.ts` → `stores.test.ts`).
+
+- **Frontend**: Vitest with jsdom, `@testing-library/svelte`
+- **Backend**: Bun's built-in test runner
+
+Run `./test --help` for all options.
