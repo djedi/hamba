@@ -24,7 +24,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ### Snooze & Reminders
 
-- [ ] **Implement Snooze functionality** - Add `snoozed_until` timestamp column to emails table. Create UI to snooze an email (keyboard shortcut `h`). Options: Later today, Tomorrow, This weekend, Next week, Pick date. Snoozed emails disappear from inbox until the snooze time, then reappear at the top. Add a "Snoozed" view in sidebar.
+- [x] **Implement Snooze functionality** - Add `snoozed_until` timestamp column to emails table. Create UI to snooze an email (keyboard shortcut `h`). Options: Later today, Tomorrow, This weekend, Next week, Pick date. Snoozed emails disappear from inbox until the snooze time, then reappear at the top. Add a "Snoozed" view in sidebar.
 
 - [ ] **Implement Follow-up Reminders** - Add `remind_at` timestamp column. If you send an email and don't get a reply by the remind date, surface it in inbox with "Follow up?" prompt. UI in compose to set reminder. Keyboard shortcut `Shift+H` to set reminder on sent email.
 

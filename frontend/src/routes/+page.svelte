@@ -12,6 +12,7 @@
     isLoading,
     view,
     isCommandPaletteOpen,
+    isSnoozeModalOpen,
     composeMode,
     replyToEmail,
     toasts,
@@ -34,6 +35,7 @@
   import DraftList from "$lib/components/DraftList.svelte";
   import LabelManager from "$lib/components/LabelManager.svelte";
   import InboxTabs from "$lib/components/InboxTabs.svelte";
+  import SnoozeModal from "$lib/components/SnoozeModal.svelte";
 
   let needsReauth = $state(false);
   let errorMessage = $state("");
@@ -171,6 +173,8 @@
           fetchPromise = api.getTrashedEmails(currentAccountId);
         } else if (folder === "archive") {
           fetchPromise = api.getArchivedEmails(currentAccountId);
+        } else if (folder === "snoozed") {
+          fetchPromise = api.getSnoozedEmails(currentAccountId);
         } else if (folder === "inbox") {
           // Use split inbox tabs
           if (tab === "important") {
@@ -220,7 +224,7 @@
     }
   }
 
-  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "label") {
+  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "label") {
     isLoading.set(true);
     try {
       const targetFolder = folder ?? $currentFolder;
@@ -242,6 +246,8 @@
         msgs = await api.getTrashedEmails(accountId);
       } else if (targetFolder === "archive") {
         msgs = await api.getArchivedEmails(accountId);
+      } else if (targetFolder === "snoozed") {
+        msgs = await api.getSnoozedEmails(accountId);
       } else if (targetFolder === "label") {
         // Load emails for the selected label
         const labelId = $selectedLabelId;
@@ -389,6 +395,10 @@
 
   {#if showLabelManager}
     <LabelManager onClose={() => (showLabelManager = false)} />
+  {/if}
+
+  {#if $isSnoozeModalOpen && $selectedEmailId}
+    <SnoozeModal emailId={$selectedEmailId} onClose={() => isSnoozeModalOpen.set(false)} />
   {/if}
 
   <Toasts />

@@ -422,4 +422,43 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
 
     emailQueries.markNotImportant.run(params.id);
     return { success: true };
+  })
+
+  .get("/snoozed", ({ query }) => {
+    const { accountId, limit = "50", offset = "0" } = query;
+
+    if (!accountId) {
+      return { error: "accountId required" };
+    }
+
+    return emailQueries.getSnoozed.all(
+      accountId,
+      parseInt(limit as string),
+      parseInt(offset as string)
+    );
+  })
+
+  .post("/:id/snooze", async ({ params, body }) => {
+    const email = emailQueries.getById.get(params.id) as any;
+    if (!email) {
+      return { success: false, error: "Email not found" };
+    }
+
+    const { snoozedUntil } = body as { snoozedUntil: number };
+    if (!snoozedUntil || typeof snoozedUntil !== "number") {
+      return { success: false, error: "snoozedUntil timestamp required" };
+    }
+
+    emailQueries.snooze.run(snoozedUntil, params.id);
+    return { success: true };
+  })
+
+  .post("/:id/unsnooze", async ({ params }) => {
+    const email = emailQueries.getById.get(params.id) as any;
+    if (!email) {
+      return { success: false, error: "Email not found" };
+    }
+
+    emailQueries.unsnooze.run(params.id);
+    return { success: true };
   });

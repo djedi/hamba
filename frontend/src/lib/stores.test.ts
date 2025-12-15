@@ -34,7 +34,9 @@ vi.mock('./api', () => ({
 		permanentDelete: vi.fn().mockResolvedValue({}),
 		getEmail: vi.fn().mockResolvedValue(null),
 		markImportant: vi.fn().mockResolvedValue({}),
-		markNotImportant: vi.fn().mockResolvedValue({})
+		markNotImportant: vi.fn().mockResolvedValue({}),
+		snooze: vi.fn().mockResolvedValue({}),
+		unsnooze: vi.fn().mockResolvedValue({})
 	}
 }));
 
@@ -58,6 +60,7 @@ const mockEmail = (id: string, overrides = {}) => ({
 	is_archived: 0,
 	is_trashed: 0,
 	is_important: 0,
+	snoozed_until: null,
 	received_at: Date.now(),
 	...overrides
 });

@@ -7,7 +7,7 @@ import { labelRoutes } from "./routes/labels";
 // Database is initialized on import
 import "./db";
 import { emailQueries } from "./db";
-import { addClient, removeClient, subscribeToAccount } from "./services/realtime";
+import { addClient, removeClient, subscribeToAccount, notifySyncComplete } from "./services/realtime";
 import { startAllIdle, getIdleStatus } from "./services/imap-idle";
 
 interface WebSocketData {
@@ -69,8 +69,29 @@ function cleanupOldTrashedEmails() {
   }
 }
 
+// Unsnooze emails when their snooze time expires
+function unsnoozeDueEmails() {
+  try {
+    const dueEmails = emailQueries.getDueToUnsnooze.all() as any[];
+    for (const email of dueEmails) {
+      emailQueries.unsnooze.run(email.id);
+      // Notify connected clients about the unsnoozed email
+      notifySyncComplete(email.account_id, 1);
+    }
+    if (dueEmails.length > 0) {
+      console.log(`⏰ Unsnoozed ${dueEmails.length} email(s)`);
+    }
+  } catch (error) {
+    console.error("Error unsnoozing emails:", error);
+  }
+}
+
 // Run cleanup immediately on startup and then every hour
 cleanupOldTrashedEmails();
 setInterval(cleanupOldTrashedEmails, 60 * 60 * 1000);
+
+// Check for snoozed emails every minute
+unsnoozeDueEmails();
+setInterval(unsnoozeDueEmails, 60 * 1000);
 
 export type App = typeof app;

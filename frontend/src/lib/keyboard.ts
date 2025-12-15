@@ -5,6 +5,7 @@ import {
   selectedEmailId,
   view,
   isCommandPaletteOpen,
+  isSnoozeModalOpen,
   composeMode,
   replyToEmail,
   emailActions,
@@ -87,7 +88,14 @@ function goToArchive() {
   updateUrlWithEmail(null);
 }
 
-// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts, "gx" = go to trash, "ga" = go to archive)
+// Go to snoozed view
+function goToSnoozed() {
+  currentFolder.set("snoozed");
+  view.set("inbox");
+  updateUrlWithEmail(null);
+}
+
+// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts, "gx" = go to trash, "ga" = go to archive, "gh" = go to snoozed)
 const sequenceHandlers: Record<string, KeyHandler> = {
   "gi": goToInbox,
   "gs": goToStarred,
@@ -95,6 +103,7 @@ const sequenceHandlers: Record<string, KeyHandler> = {
   "gd": goToDrafts,
   "gx": goToTrash,
   "ga": goToArchive,
+  "gh": goToSnoozed,
 };
 
 const handlers: Record<string, KeyHandler> = {
@@ -245,6 +254,14 @@ const handlers: Record<string, KeyHandler> = {
     const $selectedEmailId = get(selectedEmailId);
     if ($selectedEmailId) {
       emailActions.toggleImportant($selectedEmailId);
+    }
+  },
+
+  // Snooze (h key)
+  h: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      isSnoozeModalOpen.set(true);
     }
   },
 

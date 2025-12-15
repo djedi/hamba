@@ -63,6 +63,9 @@ export const api = {
   getOtherEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails/other?accountId=${accountId}&limit=${limit}&offset=${offset}`),
 
+  getSnoozedEmails: (accountId: string, limit = 50, offset = 0) =>
+    request<Email[]>(`/emails/snoozed?accountId=${accountId}&limit=${limit}&offset=${offset}`),
+
   classifyEmails: (accountId: string) =>
     request<{ success: boolean; classified: number }>(`/emails/classify/${accountId}`, { method: "POST" }),
 
@@ -91,6 +94,13 @@ export const api = {
   trash: (id: string) => request(`/emails/${id}/trash`, { method: "POST" }),
   untrash: (id: string) => request(`/emails/${id}/untrash`, { method: "POST" }),
   permanentDelete: (id: string) => request(`/emails/${id}/permanent`, { method: "DELETE" }),
+
+  snooze: (id: string, snoozedUntil: number) =>
+    request(`/emails/${id}/snooze`, {
+      method: "POST",
+      body: JSON.stringify({ snoozedUntil }),
+    }),
+  unsnooze: (id: string) => request(`/emails/${id}/unsnooze`, { method: "POST" }),
 
   // Send
   sendEmail: (params: {
@@ -232,6 +242,7 @@ export interface Email {
   is_archived: number;
   is_trashed: number;
   is_important: number;
+  snoozed_until: number | null;
   received_at: number;
 }
 

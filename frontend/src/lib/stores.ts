@@ -11,8 +11,8 @@ export const isLoading = writable(false);
 export const searchQuery = writable("");
 export const view = writable<"inbox" | "email" | "compose">("inbox");
 
-// Current folder (inbox, starred, sent, drafts, trash, archive, label, etc.)
-export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "label";
+// Current folder (inbox, starred, sent, drafts, trash, archive, snoozed, label, etc.)
+export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "label";
 export const currentFolder = writable<Folder>("inbox");
 
 // Split inbox tab (important, other, all) - only applies when currentFolder is "inbox"
@@ -38,6 +38,9 @@ export const replyToEmail = writable<Email | null>(null);
 
 // Command palette
 export const isCommandPaletteOpen = writable(false);
+
+// Snooze modal
+export const isSnoozeModalOpen = writable(false);
 
 // Email body cache for prefetching
 export const emailBodyCache = writable<Map<string, { text: string; html: string }>>(new Map());
@@ -268,6 +271,54 @@ export const emailActions = {
     } else {
       emailActions.markImportant(emailId);
     }
+  },
+
+  snooze: (emailId: string, snoozedUntil: number) => {
+    const $emails = get(emails);
+    const email = $emails.find((e) => e.id === emailId);
+    const $currentFolder = get(currentFolder);
+
+    // Optimistic update: remove from current view (except snoozed view)
+    if ($currentFolder !== "snoozed") {
+      emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
+    } else {
+      // Update snoozed_until in snoozed view
+      emails.update(($emails) =>
+        $emails.map((e) =>
+          e.id === emailId ? { ...e, snoozed_until: snoozedUntil } : e
+        )
+      );
+    }
+
+    api.snooze(emailId, snoozedUntil).catch(() => {
+      // Rollback: add back to list
+      if (email) {
+        emails.update(($emails) => {
+          const newList = [...$emails, { ...email, snoozed_until: null }];
+          return newList.sort((a, b) => b.received_at - a.received_at);
+        });
+      }
+      showToast("Failed to snooze email");
+    });
+  },
+
+  unsnooze: (emailId: string) => {
+    const $emails = get(emails);
+    const email = $emails.find((e) => e.id === emailId);
+
+    // Optimistic remove from snoozed view
+    emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
+
+    api.unsnooze(emailId).catch(() => {
+      // Rollback: add back to list
+      if (email) {
+        emails.update(($emails) => {
+          const newList = [...$emails, email];
+          return newList.sort((a, b) => (a.snoozed_until || 0) - (b.snoozed_until || 0));
+        });
+      }
+      showToast("Failed to unsnooze email");
+    });
   },
 };
 
