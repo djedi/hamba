@@ -439,6 +439,47 @@ export const labelQueries = {
   deleteByAccount: db.prepare("DELETE FROM labels WHERE account_id = ?"),
 };
 
+// Pending sends table for undo send functionality
+db.run(`
+  CREATE TABLE IF NOT EXISTS pending_sends (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    to_addresses TEXT NOT NULL,
+    cc_addresses TEXT,
+    bcc_addresses TEXT,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    reply_to_id TEXT,
+    attachments TEXT,
+    send_at INTEGER NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_pending_sends_send_at ON pending_sends(send_at)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_pending_sends_account_id ON pending_sends(account_id)`);
+
+// Pending send operations
+export const pendingSendQueries = {
+  getById: db.prepare("SELECT * FROM pending_sends WHERE id = ?"),
+
+  getReady: db.prepare(`
+    SELECT * FROM pending_sends
+    WHERE send_at <= unixepoch()
+    ORDER BY send_at ASC
+  `),
+
+  insert: db.prepare(`
+    INSERT INTO pending_sends (id, account_id, to_addresses, cc_addresses, bcc_addresses, subject, body, reply_to_id, attachments, send_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+
+  delete: db.prepare("DELETE FROM pending_sends WHERE id = ?"),
+
+  deleteByAccount: db.prepare("DELETE FROM pending_sends WHERE account_id = ?"),
+};
+
 // Email-Label junction operations
 export const emailLabelQueries = {
   getLabelsForEmail: db.prepare(`

@@ -32,7 +32,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add attachment support for sending** - Update `ComposeView.svelte` to accept file attachments. Add drag-and-drop zone. Store attachments as base64 or multipart. Update `GmailProvider.send()` and `ImapSmtpProvider.send()` to handle attachments using proper MIME encoding.
 
-- [ ] **Implement Undo Send** - After sending, show a toast "Email sent - Undo" for 5-10 seconds. If clicked, cancel the send. For Gmail, use the Gmail API's undo feature. For IMAP/SMTP, delay the actual send by the undo window duration, keeping it in a pending queue.
+- [x] **Implement Undo Send** - After sending, show a toast "Email sent - Undo" for 5-10 seconds. If clicked, cancel the send. For Gmail, use the Gmail API's undo feature. For IMAP/SMTP, delay the actual send by the undo window duration, keeping it in a pending queue.
 
 - [ ] **Implement Send Later / Scheduling** - Add UI to schedule email for later. Store scheduled emails in a `scheduled_emails` table with `send_at` timestamp. Run a background job every minute to send due emails. Show "Scheduled" view in sidebar.
 

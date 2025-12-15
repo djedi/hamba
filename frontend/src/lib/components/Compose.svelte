@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { api, type Email, type Draft } from "$lib/api";
-  import { view, selectedAccountId, currentDraftId, drafts } from "$lib/stores";
+  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast } from "$lib/stores";
   import { get } from "svelte/store";
 
   interface Props {
@@ -245,37 +245,82 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     sending = true;
     error = "";
 
+    // Store form data for potential undo/retry
+    const sendData = {
+      accountId,
+      to: to.trim(),
+      cc: cc.trim() || undefined,
+      bcc: bcc.trim() || undefined,
+      subject: subject.trim(),
+      body: body || "<p></p>",
+      replyToId: replyTo?.id,
+      attachments: attachments.length > 0
+        ? attachments.map((a) => ({
+            filename: a.filename,
+            mimeType: a.mimeType,
+            content: a.content,
+          }))
+        : undefined,
+    };
+
+    // Store reminder setting
+    const savedReminderDays = reminderDays;
+
     try {
-      const result = await api.sendEmail({
-        accountId,
-        to: to.trim(),
-        cc: cc.trim() || undefined,
-        bcc: bcc.trim() || undefined,
-        subject: subject.trim(),
-        body: body || "<p></p>",
-        replyToId: replyTo?.id,
-        attachments: attachments.length > 0
-          ? attachments.map((a) => ({
-              filename: a.filename,
-              mimeType: a.mimeType,
-              content: a.content,
-            }))
-          : undefined,
-      });
+      // Queue the email for sending (with undo window)
+      const result = await api.queueSendEmail(sendData);
 
       if (result.error) {
         error = result.error;
-      } else {
-        // Success - delete the draft
-        try {
-          await api.deleteDraft(draftId);
-          drafts.update(d => d.filter(draft => draft.id !== draftId));
-        } catch (e) {
-          // Ignore errors when deleting draft
-        }
+        sending = false;
+        return;
+      }
 
-        // If user set a reminder, sync sent folder and set reminder on the sent email
-        if (reminderDays !== null) {
+      // Success - delete the draft
+      try {
+        await api.deleteDraft(draftId);
+        drafts.update(d => d.filter(draft => draft.id !== draftId));
+      } catch (e) {
+        // Ignore errors when deleting draft
+      }
+
+      // Navigate back to inbox immediately
+      view.set("inbox");
+      sending = false;
+
+      // Show toast with undo option
+      const undoWindowMs = (result.undoWindowSeconds || 5) * 1000;
+      let undone = false;
+
+      const toastId = showToast("Email sent", "success", {
+        duration: undoWindowMs,
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            if (undone) return;
+            undone = true;
+
+            try {
+              const cancelResult = await api.cancelPendingSend(result.pendingId!);
+              if (cancelResult.success) {
+                showToast("Email cancelled", "success");
+                // Re-open compose with the same data
+                // The user can manually re-compose if needed
+              } else {
+                showToast(cancelResult.error || "Could not undo - email already sent", "error");
+              }
+            } catch (e) {
+              showToast("Could not undo - email already sent", "error");
+            }
+          },
+        },
+      });
+
+      // Handle reminder setting after the email is sent (after undo window)
+      if (savedReminderDays !== null) {
+        setTimeout(async () => {
+          if (undone) return; // Don't set reminder if undone
+
           try {
             // Sync sent folder to get the sent email
             await api.syncSentEmails(accountId);
@@ -283,24 +328,21 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
             const sentEmails = await api.getSentEmails(accountId, 10);
             // Find the email that matches our subject and recipient (best effort)
             const sentEmail = sentEmails.find(
-              e => e.subject === subject.trim() && e.to_addresses.includes(to.trim().split(',')[0])
+              e => e.subject === sendData.subject && e.to_addresses.includes(sendData.to.split(',')[0])
             );
             if (sentEmail) {
               // Set reminder for X days from now
-              const remindAt = Math.floor(Date.now() / 1000) + (reminderDays * 24 * 60 * 60);
+              const remindAt = Math.floor(Date.now() / 1000) + (savedReminderDays * 24 * 60 * 60);
               await api.setReminder(sentEmail.id, remindAt);
             }
           } catch (e) {
             console.error("Failed to set reminder on sent email:", e);
             // Don't show error to user - the email was sent successfully
           }
-        }
-
-        view.set("inbox");
+        }, undoWindowMs + 2000); // Wait a bit after undo window for the email to be sent
       }
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to send";
-    } finally {
       sending = false;
     }
   }

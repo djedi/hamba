@@ -48,15 +48,41 @@ export const isReminderModalOpen = writable(false);
 // Email body cache for prefetching
 export const emailBodyCache = writable<Map<string, { text: string; html: string }>>(new Map());
 
-// Toast notifications for errors
-export const toasts = writable<Array<{ id: string; message: string; type: "error" | "success" }>>([]);
+// Toast notifications
+export interface Toast {
+  id: string;
+  message: string;
+  type: "error" | "success";
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
+  duration?: number; // ms, 0 for no auto-dismiss
+}
 
-function showToast(message: string, type: "error" | "success" = "error") {
+export const toasts = writable<Toast[]>([]);
+
+export function showToast(
+  message: string,
+  type: "error" | "success" = "error",
+  options?: { action?: { label: string; onClick: () => void }; duration?: number }
+): string {
   const id = crypto.randomUUID();
-  toasts.update((t) => [...t, { id, message, type }]);
-  setTimeout(() => {
-    toasts.update((t) => t.filter((toast) => toast.id !== id));
-  }, 3000);
+  const duration = options?.duration ?? 3000;
+
+  toasts.update((t) => [...t, { id, message, type, action: options?.action, duration }]);
+
+  if (duration > 0) {
+    setTimeout(() => {
+      toasts.update((t) => t.filter((toast) => toast.id !== id));
+    }, duration);
+  }
+
+  return id;
+}
+
+export function dismissToast(id: string) {
+  toasts.update((t) => t.filter((toast) => toast.id !== id));
 }
 
 // Optimistic email actions

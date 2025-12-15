@@ -3,6 +3,7 @@ import { emailQueries, accountQueries, attachmentQueries } from "../db";
 import { getProvider } from "../services/providers";
 import { notifySyncComplete } from "../services/realtime";
 import { classifyAndUpdateEmail, classifyAllEmails } from "../services/importance";
+import { queueSend, cancelSend, UNDO_WINDOW_SECONDS } from "../services/pending-send";
 
 export const emailRoutes = new Elysia({ prefix: "/emails" })
   .get("/", async ({ query }) => {
@@ -510,4 +511,54 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
 
     emailQueries.clearReminder.run(params.id);
     return { success: true };
+  })
+
+  // Queue send with undo support
+  .post("/queue-send", async ({ body }) => {
+    const { accountId, to, cc, bcc, subject, body: emailBody, replyToId, attachments } = body as {
+      accountId: string;
+      to: string;
+      cc?: string;
+      bcc?: string;
+      subject: string;
+      body: string;
+      replyToId?: string;
+      attachments?: Array<{
+        filename: string;
+        mimeType: string;
+        content: string;
+      }>;
+    };
+
+    if (!accountId || !to || !subject) {
+      return { error: "accountId, to, and subject are required", success: false };
+    }
+
+    const result = queueSend({
+      accountId,
+      to,
+      cc,
+      bcc,
+      subject,
+      body: emailBody,
+      replyToId,
+      attachments,
+    });
+
+    if (result.success) {
+      return {
+        success: true,
+        pendingId: result.pendingId,
+        sendAt: result.sendAt,
+        undoWindowSeconds: UNDO_WINDOW_SECONDS,
+      };
+    } else {
+      return { success: false, error: result.error };
+    }
+  })
+
+  // Cancel a pending send (undo)
+  .delete("/pending/:pendingId", async ({ params }) => {
+    const result = cancelSend(params.pendingId);
+    return result;
   });

@@ -112,7 +112,7 @@ export const api = {
     }),
   clearReminder: (id: string) => request(`/emails/${id}/reminder`, { method: "DELETE" }),
 
-  // Send
+  // Send (immediate, no undo)
   sendEmail: (params: {
     accountId: string;
     to: string;
@@ -130,6 +130,32 @@ export const api = {
     request<{ success: boolean; messageId?: string; error?: string }>("/emails/send", {
       method: "POST",
       body: JSON.stringify(params),
+    }),
+
+  // Queue send with undo support
+  queueSendEmail: (params: {
+    accountId: string;
+    to: string;
+    cc?: string;
+    bcc?: string;
+    subject: string;
+    body: string;
+    replyToId?: string;
+    attachments?: Array<{
+      filename: string;
+      mimeType: string;
+      content: string; // base64 encoded
+    }>;
+  }) =>
+    request<{ success: boolean; pendingId?: string; sendAt?: number; undoWindowSeconds?: number; error?: string }>("/emails/queue-send", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  // Cancel a pending send (undo)
+  cancelPendingSend: (pendingId: string) =>
+    request<{ success: boolean; error?: string }>(`/emails/pending/${pendingId}`, {
+      method: "DELETE",
     }),
 
   // IMAP Account

@@ -9,6 +9,7 @@ import "./db";
 import { emailQueries } from "./db";
 import { addClient, removeClient, subscribeToAccount, notifySyncComplete } from "./services/realtime";
 import { startAllIdle, getIdleStatus } from "./services/imap-idle";
+import { startPendingSendProcessor } from "./services/pending-send";
 
 interface WebSocketData {
   accountIds: Set<string>;
@@ -55,6 +56,9 @@ console.log(`🚀 Hamba API running at http://localhost:${app.server?.port}`);
 
 // Start IMAP IDLE connections for all IMAP accounts
 startAllIdle().catch(console.error);
+
+// Start pending send processor for undo send feature
+startPendingSendProcessor();
 
 // Cleanup old trashed emails (30+ days old)
 function cleanupOldTrashedEmails() {
