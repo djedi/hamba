@@ -13,6 +13,7 @@
     view,
     isCommandPaletteOpen,
     isSnoozeModalOpen,
+    isReminderModalOpen,
     composeMode,
     replyToEmail,
     toasts,
@@ -36,6 +37,7 @@
   import LabelManager from "$lib/components/LabelManager.svelte";
   import InboxTabs from "$lib/components/InboxTabs.svelte";
   import SnoozeModal from "$lib/components/SnoozeModal.svelte";
+  import ReminderModal from "$lib/components/ReminderModal.svelte";
 
   let needsReauth = $state(false);
   let errorMessage = $state("");
@@ -175,6 +177,8 @@
           fetchPromise = api.getArchivedEmails(currentAccountId);
         } else if (folder === "snoozed") {
           fetchPromise = api.getSnoozedEmails(currentAccountId);
+        } else if (folder === "reminders") {
+          fetchPromise = api.getReminderEmails(currentAccountId);
         } else if (folder === "inbox") {
           // Use split inbox tabs
           if (tab === "important") {
@@ -224,7 +228,7 @@
     }
   }
 
-  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "label") {
+  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "reminders" | "label") {
     isLoading.set(true);
     try {
       const targetFolder = folder ?? $currentFolder;
@@ -248,6 +252,8 @@
         msgs = await api.getArchivedEmails(accountId);
       } else if (targetFolder === "snoozed") {
         msgs = await api.getSnoozedEmails(accountId);
+      } else if (targetFolder === "reminders") {
+        msgs = await api.getReminderEmails(accountId);
       } else if (targetFolder === "label") {
         // Load emails for the selected label
         const labelId = $selectedLabelId;
@@ -399,6 +405,10 @@
 
   {#if $isSnoozeModalOpen && $selectedEmailId}
     <SnoozeModal emailId={$selectedEmailId} onClose={() => isSnoozeModalOpen.set(false)} />
+  {/if}
+
+  {#if $isReminderModalOpen && $selectedEmailId}
+    <ReminderModal emailId={$selectedEmailId} onClose={() => isReminderModalOpen.set(false)} />
   {/if}
 
   <Toasts />

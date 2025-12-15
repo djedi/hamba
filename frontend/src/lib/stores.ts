@@ -11,8 +11,8 @@ export const isLoading = writable(false);
 export const searchQuery = writable("");
 export const view = writable<"inbox" | "email" | "compose">("inbox");
 
-// Current folder (inbox, starred, sent, drafts, trash, archive, snoozed, label, etc.)
-export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "label";
+// Current folder (inbox, starred, sent, drafts, trash, archive, snoozed, reminders, label, etc.)
+export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "reminders" | "label";
 export const currentFolder = writable<Folder>("inbox");
 
 // Split inbox tab (important, other, all) - only applies when currentFolder is "inbox"
@@ -41,6 +41,9 @@ export const isCommandPaletteOpen = writable(false);
 
 // Snooze modal
 export const isSnoozeModalOpen = writable(false);
+
+// Reminder modal
+export const isReminderModalOpen = writable(false);
 
 // Email body cache for prefetching
 export const emailBodyCache = writable<Map<string, { text: string; html: string }>>(new Map());
@@ -318,6 +321,68 @@ export const emailActions = {
         });
       }
       showToast("Failed to unsnooze email");
+    });
+  },
+
+  setReminder: (emailId: string, remindAt: number) => {
+    const $emails = get(emails);
+    const email = $emails.find((e) => e.id === emailId);
+    const $currentFolder = get(currentFolder);
+
+    // Optimistic update
+    emails.update(($emails) =>
+      $emails.map((e) =>
+        e.id === emailId ? { ...e, remind_at: remindAt } : e
+      )
+    );
+
+    api.setReminder(emailId, remindAt).catch(() => {
+      // Rollback
+      if (email) {
+        emails.update(($emails) =>
+          $emails.map((e) =>
+            e.id === emailId ? { ...e, remind_at: email.remind_at } : e
+          )
+        );
+      }
+      showToast("Failed to set reminder");
+    });
+  },
+
+  clearReminder: (emailId: string) => {
+    const $emails = get(emails);
+    const email = $emails.find((e) => e.id === emailId);
+    const $currentFolder = get(currentFolder);
+
+    // If viewing reminders folder, remove from list
+    if ($currentFolder === "reminders") {
+      emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
+    } else {
+      // Optimistic update
+      emails.update(($emails) =>
+        $emails.map((e) =>
+          e.id === emailId ? { ...e, remind_at: null } : e
+        )
+      );
+    }
+
+    api.clearReminder(emailId).catch(() => {
+      // Rollback
+      if (email) {
+        if ($currentFolder === "reminders") {
+          emails.update(($emails) => {
+            const newList = [...$emails, email];
+            return newList.sort((a, b) => (a.remind_at || 0) - (b.remind_at || 0));
+          });
+        } else {
+          emails.update(($emails) =>
+            $emails.map((e) =>
+              e.id === emailId ? { ...e, remind_at: email.remind_at } : e
+            )
+          );
+        }
+      }
+      showToast("Failed to clear reminder");
     });
   },
 };

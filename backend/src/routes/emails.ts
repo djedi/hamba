@@ -461,4 +461,43 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
 
     emailQueries.unsnooze.run(params.id);
     return { success: true };
+  })
+
+  .get("/reminders", ({ query }) => {
+    const { accountId, limit = "50", offset = "0" } = query;
+
+    if (!accountId) {
+      return { error: "accountId required" };
+    }
+
+    return emailQueries.getReminders.all(
+      accountId,
+      parseInt(limit as string),
+      parseInt(offset as string)
+    );
+  })
+
+  .post("/:id/reminder", async ({ params, body }) => {
+    const email = emailQueries.getById.get(params.id) as any;
+    if (!email) {
+      return { success: false, error: "Email not found" };
+    }
+
+    const { remindAt } = body as { remindAt: number };
+    if (!remindAt || typeof remindAt !== "number") {
+      return { success: false, error: "remindAt timestamp required" };
+    }
+
+    emailQueries.setReminder.run(remindAt, params.id);
+    return { success: true };
+  })
+
+  .delete("/:id/reminder", async ({ params }) => {
+    const email = emailQueries.getById.get(params.id) as any;
+    if (!email) {
+      return { success: false, error: "Email not found" };
+    }
+
+    emailQueries.clearReminder.run(params.id);
+    return { success: true };
   });

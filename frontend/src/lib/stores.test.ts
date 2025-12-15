@@ -61,6 +61,7 @@ const mockEmail = (id: string, overrides = {}) => ({
 	is_trashed: 0,
 	is_important: 0,
 	snoozed_until: null,
+	remind_at: null,
 	received_at: Date.now(),
 	...overrides
 });

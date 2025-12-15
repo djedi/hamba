@@ -66,6 +66,9 @@ export const api = {
   getSnoozedEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails/snoozed?accountId=${accountId}&limit=${limit}&offset=${offset}`),
 
+  getReminderEmails: (accountId: string, limit = 50, offset = 0) =>
+    request<Email[]>(`/emails/reminders?accountId=${accountId}&limit=${limit}&offset=${offset}`),
+
   classifyEmails: (accountId: string) =>
     request<{ success: boolean; classified: number }>(`/emails/classify/${accountId}`, { method: "POST" }),
 
@@ -101,6 +104,13 @@ export const api = {
       body: JSON.stringify({ snoozedUntil }),
     }),
   unsnooze: (id: string) => request(`/emails/${id}/unsnooze`, { method: "POST" }),
+
+  setReminder: (id: string, remindAt: number) =>
+    request(`/emails/${id}/reminder`, {
+      method: "POST",
+      body: JSON.stringify({ remindAt }),
+    }),
+  clearReminder: (id: string) => request(`/emails/${id}/reminder`, { method: "DELETE" }),
 
   // Send
   sendEmail: (params: {
@@ -243,6 +253,7 @@ export interface Email {
   is_trashed: number;
   is_important: number;
   snoozed_until: number | null;
+  remind_at: number | null;
   received_at: number;
 }
 

@@ -76,6 +76,15 @@
     window.history.pushState({}, "", url);
   }
 
+  function goToReminders() {
+    currentFolder.set("reminders");
+    view.set("inbox");
+    // Clear URL param
+    const url = new URL(window.location.href);
+    url.searchParams.delete("email");
+    window.history.pushState({}, "", url);
+  }
+
   function goToLabel(labelId: string) {
     currentFolder.set("label");
     selectedLabelId.set(labelId);
@@ -119,6 +128,10 @@
     <button class="nav-item" class:active={$currentFolder === "snoozed" && ($view === "inbox" || $view === "email")} onclick={goToSnoozed}>
       <span class="nav-icon">⏰</span>
       <span class="nav-label">Snoozed</span>
+    </button>
+    <button class="nav-item" class:active={$currentFolder === "reminders" && ($view === "inbox" || $view === "email")} onclick={goToReminders}>
+      <span class="nav-icon">🔔</span>
+      <span class="nav-label">Reminders</span>
     </button>
     <button class="nav-item" class:active={$currentFolder === "trash" && ($view === "inbox" || $view === "email")} onclick={goToTrash}>
       <span class="nav-icon">🗑️</span>
@@ -194,10 +207,12 @@
     <div class="shortcut"><kbd>gx</kbd> trash</div>
     <div class="shortcut"><kbd>ga</kbd> archive</div>
     <div class="shortcut"><kbd>gh</kbd> snoozed</div>
+    <div class="shortcut"><kbd>gr</kbd> reminders</div>
     <div class="shortcut"><kbd>␣</kbd> scroll</div>
     <div class="shortcut"><kbd>e</kbd><kbd>y</kbd> archive</div>
     <div class="shortcut"><kbd>s</kbd> star</div>
     <div class="shortcut"><kbd>h</kbd> snooze</div>
+    <div class="shortcut"><kbd>⇧H</kbd> remind</div>
     <div class="shortcut"><kbd>!</kbd> important</div>
     <div class="shortcut"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> inbox tabs</div>
     <div class="shortcut"><kbd>#</kbd><kbd>⌫</kbd> trash</div>

@@ -64,6 +64,9 @@ addColumnIfNotExists("emails", "is_important", "INTEGER DEFAULT 0");
 // Add snoozed_until column for snooze functionality
 addColumnIfNotExists("emails", "snoozed_until", "INTEGER");
 
+// Add remind_at column for follow-up reminders
+addColumnIfNotExists("emails", "remind_at", "INTEGER");
+
 db.run(`
   CREATE TABLE IF NOT EXISTS emails (
     id TEXT PRIMARY KEY,
@@ -86,6 +89,7 @@ db.run(`
     is_trashed INTEGER DEFAULT 0,
     is_important INTEGER DEFAULT 0,
     snoozed_until INTEGER,
+    remind_at INTEGER,
     received_at INTEGER,
     created_at INTEGER DEFAULT (unixepoch()),
     folder TEXT DEFAULT 'inbox',
@@ -99,6 +103,7 @@ db.run(`CREATE INDEX IF NOT EXISTS idx_emails_received_at ON emails(received_at 
 db.run(`CREATE INDEX IF NOT EXISTS idx_emails_folder ON emails(folder)`);
 db.run(`CREATE INDEX IF NOT EXISTS idx_emails_is_important ON emails(is_important)`);
 db.run(`CREATE INDEX IF NOT EXISTS idx_emails_snoozed_until ON emails(snoozed_until)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_emails_remind_at ON emails(remind_at)`);
 
 // Attachments table for embedded images and files
 db.run(`
@@ -327,6 +332,23 @@ export const emailQueries = {
   getDueToUnsnooze: db.prepare(`
     SELECT * FROM emails
     WHERE snoozed_until IS NOT NULL AND snoozed_until <= unixepoch()
+  `),
+
+  // Reminder operations
+  setReminder: db.prepare("UPDATE emails SET remind_at = ? WHERE id = ?"),
+  clearReminder: db.prepare("UPDATE emails SET remind_at = NULL WHERE id = ?"),
+
+  getReminders: db.prepare(`
+    SELECT * FROM emails
+    WHERE account_id = ? AND remind_at IS NOT NULL AND is_trashed = 0
+    ORDER BY remind_at ASC
+    LIMIT ? OFFSET ?
+  `),
+
+  // Get emails with due reminders (remind_at <= now)
+  getDueReminders: db.prepare(`
+    SELECT * FROM emails
+    WHERE remind_at IS NOT NULL AND remind_at <= unixepoch() AND is_trashed = 0
   `),
 };
 

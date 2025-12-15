@@ -22,6 +22,8 @@
   let sending = $state(false);
   let error = $state("");
   let lastSaved = $state<string | null>(null);
+  let reminderDays = $state<number | null>(null);
+  let showReminderPicker = $state(false);
 
   let toInput: HTMLInputElement;
   let draftId = draft?.id || crypto.randomUUID();
@@ -191,13 +193,36 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       if (result.error) {
         error = result.error;
       } else {
-        // Success - delete the draft and go back to inbox
+        // Success - delete the draft
         try {
           await api.deleteDraft(draftId);
           drafts.update(d => d.filter(draft => draft.id !== draftId));
         } catch (e) {
           // Ignore errors when deleting draft
         }
+
+        // If user set a reminder, sync sent folder and set reminder on the sent email
+        if (reminderDays !== null) {
+          try {
+            // Sync sent folder to get the sent email
+            await api.syncSentEmails(accountId);
+            // Get sent emails and find the one we just sent
+            const sentEmails = await api.getSentEmails(accountId, 10);
+            // Find the email that matches our subject and recipient (best effort)
+            const sentEmail = sentEmails.find(
+              e => e.subject === subject.trim() && e.to_addresses.includes(to.trim().split(',')[0])
+            );
+            if (sentEmail) {
+              // Set reminder for X days from now
+              const remindAt = Math.floor(Date.now() / 1000) + (reminderDays * 24 * 60 * 60);
+              await api.setReminder(sentEmail.id, remindAt);
+            }
+          } catch (e) {
+            console.error("Failed to set reminder on sent email:", e);
+            // Don't show error to user - the email was sent successfully
+          }
+        }
+
         view.set("inbox");
       }
     } catch (err) {
@@ -301,6 +326,25 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       {/if}
       <kbd>⌘↵</kbd>
     </button>
+    <div class="reminder-picker">
+      <button
+        class="reminder-btn"
+        class:active={reminderDays !== null}
+        onclick={() => showReminderPicker = !showReminderPicker}
+      >
+        🔔 {reminderDays !== null ? `${reminderDays}d` : 'Remind'}
+      </button>
+      {#if showReminderPicker}
+        <div class="reminder-dropdown">
+          <button onclick={() => { reminderDays = null; showReminderPicker = false; }}>No reminder</button>
+          <button onclick={() => { reminderDays = 1; showReminderPicker = false; }}>1 day</button>
+          <button onclick={() => { reminderDays = 2; showReminderPicker = false; }}>2 days</button>
+          <button onclick={() => { reminderDays = 3; showReminderPicker = false; }}>3 days</button>
+          <button onclick={() => { reminderDays = 7; showReminderPicker = false; }}>1 week</button>
+          <button onclick={() => { reminderDays = 14; showReminderPicker = false; }}>2 weeks</button>
+        </div>
+      {/if}
+    </div>
     <button class="discard-btn" onclick={handleClose}>Discard</button>
     {#if lastSaved}
       <span class="saved-indicator">Saved at {lastSaved}</span>
@@ -468,5 +512,60 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     margin-left: auto;
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .reminder-picker {
+    position: relative;
+  }
+
+  .reminder-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .reminder-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .reminder-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .reminder-dropdown {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    z-index: 10;
+    min-width: 120px;
+  }
+
+  .reminder-dropdown button {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .reminder-dropdown button:hover {
+    background: var(--bg-hover);
   }
 </style>

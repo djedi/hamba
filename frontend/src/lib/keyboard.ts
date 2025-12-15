@@ -6,6 +6,7 @@ import {
   view,
   isCommandPaletteOpen,
   isSnoozeModalOpen,
+  isReminderModalOpen,
   composeMode,
   replyToEmail,
   emailActions,
@@ -95,7 +96,14 @@ function goToSnoozed() {
   updateUrlWithEmail(null);
 }
 
-// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts, "gx" = go to trash, "ga" = go to archive, "gh" = go to snoozed)
+// Go to reminders view
+function goToReminders() {
+  currentFolder.set("reminders");
+  view.set("inbox");
+  updateUrlWithEmail(null);
+}
+
+// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts, "gx" = go to trash, "ga" = go to archive, "gh" = go to snoozed, "gr" = go to reminders)
 const sequenceHandlers: Record<string, KeyHandler> = {
   "gi": goToInbox,
   "gs": goToStarred,
@@ -104,6 +112,7 @@ const sequenceHandlers: Record<string, KeyHandler> = {
   "gx": goToTrash,
   "ga": goToArchive,
   "gh": goToSnoozed,
+  "gr": goToReminders,
 };
 
 const handlers: Record<string, KeyHandler> = {
@@ -262,6 +271,14 @@ const handlers: Record<string, KeyHandler> = {
     const $selectedEmailId = get(selectedEmailId);
     if ($selectedEmailId) {
       isSnoozeModalOpen.set(true);
+    }
+  },
+
+  // Reminder (Shift+H key)
+  "Shift+h": () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      isReminderModalOpen.set(true);
     }
   },
 
