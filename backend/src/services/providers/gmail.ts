@@ -1,6 +1,6 @@
 import type { EmailProvider, SendParams, SendResult, SyncOptions, SyncResult } from "./types";
 import { getValidAccessToken } from "../token";
-import { emailQueries, accountQueries, attachmentQueries, draftQueries } from "../../db";
+import { emailQueries, accountQueries, attachmentQueries, draftQueries, labelQueries, emailLabelQueries } from "../../db";
 
 interface AttachmentInfo {
   attachmentId: string;
@@ -110,6 +110,21 @@ function extractBodyAndAttachments(payload: any): { text: string; html: string; 
   return { text, html, attachments };
 }
 
+// System labels that should not be synced
+const SYSTEM_LABELS = new Set([
+  "INBOX", "SENT", "DRAFT", "TRASH", "SPAM", "STARRED", "UNREAD",
+  "IMPORTANT", "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
+  "CATEGORY_UPDATES", "CATEGORY_FORUMS"
+]);
+
+// Default colors for Gmail labels
+const LABEL_COLORS: Record<string, string> = {
+  "INBOX": "#4285f4",
+  "SENT": "#34a853",
+  "STARRED": "#fbbc05",
+  "IMPORTANT": "#ea4335",
+};
+
 export class GmailProvider implements EmailProvider {
   private accountId: string;
 
@@ -126,6 +141,63 @@ export class GmailProvider implements EmailProvider {
     return getValidAccessToken(this.accountId);
   }
 
+  // Sync Gmail labels to local database
+  async syncLabels(): Promise<void> {
+    const accessToken = await this.getToken();
+    if (!accessToken) return;
+
+    try {
+      const response = await fetch(
+        "https://gmail.googleapis.com/gmail/v1/users/me/labels",
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      if (!response.ok) return;
+
+      const data = await response.json() as { labels?: Array<{ id: string; name: string; type: string }> };
+      const labels = data.labels || [];
+
+      for (const label of labels) {
+        // Skip system labels
+        if (SYSTEM_LABELS.has(label.id) || label.type === "system") {
+          continue;
+        }
+
+        const localId = `gmail:${this.accountId}:${label.id}`;
+        const color = LABEL_COLORS[label.id] || "#6366f1";
+
+        labelQueries.upsert.run(
+          localId,
+          this.accountId,
+          label.name,
+          color,
+          label.type === "user" ? "user" : "system",
+          label.id
+        );
+      }
+    } catch (e) {
+      console.error("[Gmail] Error syncing labels:", e);
+    }
+  }
+
+  // Associate email with its labels
+  private associateEmailLabels(emailId: string, labelIds: string[]): void {
+    // First remove all existing label associations
+    emailLabelQueries.removeAllLabelsFromEmail.run(emailId);
+
+    // Add new associations for user labels
+    for (const labelId of labelIds) {
+      if (SYSTEM_LABELS.has(labelId)) continue;
+
+      const localLabelId = `gmail:${this.accountId}:${labelId}`;
+      const label = labelQueries.getById.get(localLabelId) as any;
+
+      if (label) {
+        emailLabelQueries.addLabelToEmail.run(emailId, localLabelId);
+      }
+    }
+  }
+
   async sync(options?: SyncOptions): Promise<SyncResult> {
     const tokenResult = await this.getTokenWithError();
 
@@ -140,6 +212,9 @@ export class GmailProvider implements EmailProvider {
     const accessToken = tokenResult.accessToken;
     const maxMessages = options?.maxMessages || 100;
     const seenEmailIds = new Set<string>();
+
+    // Sync labels first so we can associate them with emails
+    await this.syncLabels();
 
     // Fetch message list from Gmail - only INBOX messages
     const listResponse = await fetch(
@@ -202,6 +277,11 @@ export class GmailProvider implements EmailProvider {
 
         // Ensure this email is not marked as archived (in case it was moved back to INBOX)
         emailQueries.unarchive.run(parsed.id);
+
+        // Associate email with its labels
+        if (msg.labelIds) {
+          this.associateEmailLabels(parsed.id, msg.labelIds);
+        }
 
         // Fetch and store inline attachments (those with contentId for cid: references)
         for (const att of attachments) {
@@ -335,6 +415,11 @@ export class GmailProvider implements EmailProvider {
           parsed.receivedAt,
           "sent"
         );
+
+        // Associate email with its labels
+        if (msg.labelIds) {
+          this.associateEmailLabels(parsed.id, msg.labelIds);
+        }
 
         // Fetch and store inline attachments (those with contentId for cid: references)
         for (const att of attachments) {

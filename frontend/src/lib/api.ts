@@ -131,6 +131,45 @@ export const api = {
 
   syncDrafts: (accountId: string) =>
     request<{ synced: number; total: number }>(`/drafts/sync/${accountId}`, { method: "POST" }),
+
+  // Labels
+  getLabels: (accountId: string) =>
+    request<Label[]>(`/labels?accountId=${accountId}`),
+
+  getLabel: (id: string) => request<Label>(`/labels/${id}`),
+
+  getEmailsForLabel: (labelId: string, limit = 50, offset = 0) =>
+    request<Email[]>(`/labels/${labelId}/emails?limit=${limit}&offset=${offset}`),
+
+  getLabelsForEmail: (emailId: string) =>
+    request<Label[]>(`/labels/email/${emailId}`),
+
+  createLabel: (params: { accountId: string; name: string; color?: string }) =>
+    request<{ success: boolean; id?: string; error?: string }>("/labels", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  updateLabel: (id: string, params: { name?: string; color?: string }) =>
+    request<{ success: boolean; error?: string }>(`/labels/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(params),
+    }),
+
+  deleteLabel: (id: string) =>
+    request<{ success: boolean; error?: string }>(`/labels/${id}`, {
+      method: "DELETE",
+    }),
+
+  addLabelToEmail: (labelId: string, emailId: string) =>
+    request<{ success: boolean; error?: string }>(`/labels/${labelId}/emails/${emailId}`, {
+      method: "POST",
+    }),
+
+  removeLabelFromEmail: (labelId: string, emailId: string) =>
+    request<{ success: boolean; error?: string }>(`/labels/${labelId}/emails/${emailId}`, {
+      method: "DELETE",
+    }),
 };
 
 export interface Account {
@@ -195,5 +234,15 @@ export interface Draft {
   reply_to_id: string | null;
   reply_mode: string | null;
   updated_at: number;
+  created_at: number;
+}
+
+export interface Label {
+  id: string;
+  account_id: string;
+  name: string;
+  color: string;
+  type: string;
+  remote_id: string | null;
   created_at: number;
 }

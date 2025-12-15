@@ -129,6 +129,38 @@ db.run(`
 
 db.run(`CREATE INDEX IF NOT EXISTS idx_drafts_account_id ON drafts(account_id)`);
 
+// Labels table for Gmail labels and IMAP folders
+db.run(`
+  CREATE TABLE IF NOT EXISTS labels (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    color TEXT DEFAULT '#6366f1',
+    type TEXT DEFAULT 'user',
+    remote_id TEXT,
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+    UNIQUE(account_id, name)
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_labels_account_id ON labels(account_id)`);
+
+// Junction table for email-label associations
+db.run(`
+  CREATE TABLE IF NOT EXISTS email_labels (
+    email_id TEXT NOT NULL,
+    label_id TEXT NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch()),
+    PRIMARY KEY (email_id, label_id),
+    FOREIGN KEY (email_id) REFERENCES emails(id) ON DELETE CASCADE,
+    FOREIGN KEY (label_id) REFERENCES labels(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_email_labels_email_id ON email_labels(email_id)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_email_labels_label_id ON email_labels(label_id)`);
+
 // Full-text search for emails
 db.run(`
   CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
@@ -298,4 +330,81 @@ export const draftQueries = {
   delete: db.prepare("DELETE FROM drafts WHERE id = ?"),
 
   deleteByAccount: db.prepare("DELETE FROM drafts WHERE account_id = ?"),
+};
+
+// Label operations
+export const labelQueries = {
+  getByAccount: db.prepare(`
+    SELECT * FROM labels
+    WHERE account_id = ?
+    ORDER BY type DESC, name ASC
+  `),
+
+  getById: db.prepare("SELECT * FROM labels WHERE id = ?"),
+
+  getByName: db.prepare(`
+    SELECT * FROM labels WHERE account_id = ? AND name = ?
+  `),
+
+  getByRemoteId: db.prepare(`
+    SELECT * FROM labels WHERE account_id = ? AND remote_id = ?
+  `),
+
+  insert: db.prepare(`
+    INSERT INTO labels (id, account_id, name, color, type, remote_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `),
+
+  upsert: db.prepare(`
+    INSERT INTO labels (id, account_id, name, color, type, remote_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(account_id, name) DO UPDATE SET
+      color = COALESCE(excluded.color, labels.color),
+      type = excluded.type,
+      remote_id = COALESCE(excluded.remote_id, labels.remote_id)
+  `),
+
+  update: db.prepare(`
+    UPDATE labels SET name = ?, color = ? WHERE id = ?
+  `),
+
+  delete: db.prepare("DELETE FROM labels WHERE id = ?"),
+
+  deleteByAccount: db.prepare("DELETE FROM labels WHERE account_id = ?"),
+};
+
+// Email-Label junction operations
+export const emailLabelQueries = {
+  getLabelsForEmail: db.prepare(`
+    SELECT labels.* FROM labels
+    JOIN email_labels ON labels.id = email_labels.label_id
+    WHERE email_labels.email_id = ?
+  `),
+
+  getEmailsForLabel: db.prepare(`
+    SELECT emails.* FROM emails
+    JOIN email_labels ON emails.id = email_labels.email_id
+    WHERE email_labels.label_id = ? AND emails.is_trashed = 0
+    ORDER BY emails.received_at DESC
+    LIMIT ? OFFSET ?
+  `),
+
+  addLabelToEmail: db.prepare(`
+    INSERT OR IGNORE INTO email_labels (email_id, label_id)
+    VALUES (?, ?)
+  `),
+
+  removeLabelFromEmail: db.prepare(`
+    DELETE FROM email_labels WHERE email_id = ? AND label_id = ?
+  `),
+
+  removeAllLabelsFromEmail: db.prepare(`
+    DELETE FROM email_labels WHERE email_id = ?
+  `),
+
+  countEmailsForLabel: db.prepare(`
+    SELECT COUNT(*) as count FROM email_labels
+    JOIN emails ON emails.id = email_labels.email_id
+    WHERE email_labels.label_id = ? AND emails.is_trashed = 0
+  `),
 };

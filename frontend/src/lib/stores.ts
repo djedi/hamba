@@ -1,5 +1,5 @@
 import { writable, derived, get } from "svelte/store";
-import type { Account, Email, Draft } from "./api";
+import type { Account, Email, Draft, Label } from "./api";
 import { api } from "./api";
 
 // Current state
@@ -11,9 +11,16 @@ export const isLoading = writable(false);
 export const searchQuery = writable("");
 export const view = writable<"inbox" | "email" | "compose">("inbox");
 
-// Current folder (inbox, starred, sent, drafts, trash, archive, etc.)
-export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive";
+// Current folder (inbox, starred, sent, drafts, trash, archive, label, etc.)
+export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "label";
 export const currentFolder = writable<Folder>("inbox");
+
+// Labels store
+export const labels = writable<Label[]>([]);
+export const selectedLabelId = writable<string | null>(null);
+
+// Email labels cache (email ID -> labels)
+export const emailLabelsCache = writable<Map<string, Label[]>>(new Map());
 
 // Drafts store
 export const drafts = writable<Draft[]>([]);
@@ -295,3 +302,165 @@ export const unreadCount = derived(emails, ($emails) =>
 
 // Keyboard navigation index
 export const selectedIndex = writable(0);
+
+// Label actions
+export const labelActions = {
+  loadLabels: async (accountId: string) => {
+    try {
+      const fetchedLabels = await api.getLabels(accountId);
+      labels.set(fetchedLabels);
+    } catch (e) {
+      console.error("Failed to load labels:", e);
+    }
+  },
+
+  createLabel: async (accountId: string, name: string, color?: string) => {
+    try {
+      const result = await api.createLabel({ accountId, name, color });
+      if (result.success && result.id) {
+        labels.update(($labels) => [
+          ...$labels,
+          {
+            id: result.id!,
+            account_id: accountId,
+            name,
+            color: color || "#6366f1",
+            type: "user",
+            remote_id: null,
+            created_at: Math.floor(Date.now() / 1000),
+          },
+        ]);
+      }
+      return result;
+    } catch (e) {
+      console.error("Failed to create label:", e);
+      return { success: false, error: String(e) };
+    }
+  },
+
+  updateLabel: async (id: string, params: { name?: string; color?: string }) => {
+    try {
+      const result = await api.updateLabel(id, params);
+      if (result.success) {
+        labels.update(($labels) =>
+          $labels.map((l) =>
+            l.id === id
+              ? { ...l, name: params.name || l.name, color: params.color || l.color }
+              : l
+          )
+        );
+      }
+      return result;
+    } catch (e) {
+      console.error("Failed to update label:", e);
+      return { success: false, error: String(e) };
+    }
+  },
+
+  deleteLabel: async (id: string) => {
+    try {
+      const result = await api.deleteLabel(id);
+      if (result.success) {
+        labels.update(($labels) => $labels.filter((l) => l.id !== id));
+      }
+      return result;
+    } catch (e) {
+      console.error("Failed to delete label:", e);
+      return { success: false, error: String(e) };
+    }
+  },
+
+  addLabelToEmail: async (labelId: string, emailId: string) => {
+    const $labels = get(labels);
+    const label = $labels.find((l) => l.id === labelId);
+    if (!label) return { success: false, error: "Label not found" };
+
+    // Optimistic update
+    emailLabelsCache.update((cache) => {
+      const existing = cache.get(emailId) || [];
+      if (!existing.find((l) => l.id === labelId)) {
+        cache.set(emailId, [...existing, label]);
+      }
+      return cache;
+    });
+
+    try {
+      const result = await api.addLabelToEmail(labelId, emailId);
+      if (!result.success) {
+        // Rollback on failure
+        emailLabelsCache.update((cache) => {
+          const existing = cache.get(emailId) || [];
+          cache.set(emailId, existing.filter((l) => l.id !== labelId));
+          return cache;
+        });
+      }
+      return result;
+    } catch (e) {
+      // Rollback on error
+      emailLabelsCache.update((cache) => {
+        const existing = cache.get(emailId) || [];
+        cache.set(emailId, existing.filter((l) => l.id !== labelId));
+        return cache;
+      });
+      return { success: false, error: String(e) };
+    }
+  },
+
+  removeLabelFromEmail: async (labelId: string, emailId: string) => {
+    const $emailLabelsCache = get(emailLabelsCache);
+    const existingLabels = $emailLabelsCache.get(emailId) || [];
+    const label = existingLabels.find((l) => l.id === labelId);
+
+    // Optimistic update
+    emailLabelsCache.update((cache) => {
+      const existing = cache.get(emailId) || [];
+      cache.set(emailId, existing.filter((l) => l.id !== labelId));
+      return cache;
+    });
+
+    try {
+      const result = await api.removeLabelFromEmail(labelId, emailId);
+      if (!result.success && label) {
+        // Rollback on failure
+        emailLabelsCache.update((cache) => {
+          const existing = cache.get(emailId) || [];
+          cache.set(emailId, [...existing, label]);
+          return cache;
+        });
+      }
+      return result;
+    } catch (e) {
+      // Rollback on error
+      if (label) {
+        emailLabelsCache.update((cache) => {
+          const existing = cache.get(emailId) || [];
+          cache.set(emailId, [...existing, label]);
+          return cache;
+        });
+      }
+      return { success: false, error: String(e) };
+    }
+  },
+
+  loadLabelsForEmail: async (emailId: string) => {
+    const $cache = get(emailLabelsCache);
+    if ($cache.has(emailId)) return;
+
+    try {
+      const emailLabels = await api.getLabelsForEmail(emailId);
+      emailLabelsCache.update((cache) => {
+        cache.set(emailId, emailLabels);
+        return cache;
+      });
+    } catch (e) {
+      console.error("Failed to load labels for email:", e);
+    }
+  },
+};
+
+// Selected label (derived)
+export const selectedLabel = derived(
+  [labels, selectedLabelId],
+  ([$labels, $selectedLabelId]) =>
+    $labels.find((l) => l.id === $selectedLabelId) || null
+);

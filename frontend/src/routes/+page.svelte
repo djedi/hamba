@@ -17,6 +17,9 @@
     toasts,
     currentFolder,
     drafts,
+    labels,
+    selectedLabelId,
+    labelActions,
   } from "$lib/stores";
   import type { Draft } from "$lib/api";
   import EmailList from "$lib/components/EmailList.svelte";
@@ -28,10 +31,12 @@
   import AddAccountModal from "$lib/components/AddAccountModal.svelte";
   import Toasts from "$lib/components/Toasts.svelte";
   import DraftList from "$lib/components/DraftList.svelte";
+  import LabelManager from "$lib/components/LabelManager.svelte";
 
   let needsReauth = $state(false);
   let errorMessage = $state("");
   let showAddAccountModal = $state(false);
+  let showLabelManager = $state(false);
   let autoSyncInterval: ReturnType<typeof setInterval> | null = null;
   let lastLoadedAccountId: string | null = null;
   let unsubscribeRealtime: (() => void) | null = null;
@@ -53,6 +58,8 @@
       url.searchParams.delete("email");
       window.history.pushState({}, "", url);
       loadEmails(accountId);
+      // Also load labels for the new account
+      labelActions.loadLabels(accountId);
     }
   });
 
@@ -109,7 +116,8 @@
         // Subscribe to real-time updates for all accounts
         accts.forEach(acct => subscribe(acct.id));
 
-        // Load emails with URL param to restore view state
+        // Load labels and emails with URL param to restore view state
+        await labelActions.loadLabels(firstAccountId);
         await loadEmails(firstAccountId, emailIdFromUrl);
 
         // Start auto-sync as fallback (for Gmail without push)
@@ -187,7 +195,7 @@
     }
   }
 
-  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive") {
+  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "label") {
     isLoading.set(true);
     try {
       const targetFolder = folder ?? $currentFolder;
@@ -198,7 +206,7 @@
         return;
       }
 
-      let msgs;
+      let msgs: Awaited<ReturnType<typeof api.getEmails>> = [];
       if (targetFolder === "starred") {
         msgs = await api.getStarredEmails(accountId);
       } else if (targetFolder === "sent") {
@@ -209,6 +217,14 @@
         msgs = await api.getTrashedEmails(accountId);
       } else if (targetFolder === "archive") {
         msgs = await api.getArchivedEmails(accountId);
+      } else if (targetFolder === "label") {
+        // Load emails for the selected label
+        const labelId = $selectedLabelId;
+        if (labelId) {
+          msgs = await api.getEmailsForLabel(labelId);
+        } else {
+          msgs = [];
+        }
       } else {
         msgs = await api.getEmails(accountId);
       }
@@ -287,7 +303,7 @@
 </script>
 
 <div class="app">
-  <Sidebar onSync={syncEmails} onAddAccount={() => (showAddAccountModal = true)} />
+  <Sidebar onSync={syncEmails} onAddAccount={() => (showAddAccountModal = true)} onManageLabels={() => (showLabelManager = true)} />
 
   <main class="main">
     {#if needsReauth}
@@ -332,6 +348,10 @@
 
   {#if showAddAccountModal}
     <AddAccountModal onClose={() => (showAddAccountModal = false)} />
+  {/if}
+
+  {#if showLabelManager}
+    <LabelManager onClose={() => (showLabelManager = false)} />
   {/if}
 
   <Toasts />

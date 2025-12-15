@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Email } from "$lib/api";
-  import { selectedEmailId, selectedIndex, view, emailActions, prefetchEmail } from "$lib/stores";
+  import { selectedEmailId, selectedIndex, view, emailActions, prefetchEmail, emailLabelsCache, labelActions } from "$lib/stores";
+  import { onMount } from "svelte";
 
   interface Props {
     email: Email;
@@ -9,6 +10,14 @@
   }
 
   let { email, selected, index }: Props = $props();
+
+  // Get labels for this email from cache
+  const emailLabels = $derived($emailLabelsCache.get(email.id) || []);
+
+  // Load labels for this email on mount
+  onMount(() => {
+    labelActions.loadLabelsForEmail(email.id);
+  });
 
   function formatDate(timestamp: number): string {
     const date = new Date(timestamp * 1000);
@@ -84,6 +93,18 @@
 
   <div class="content">
     <span class="subject">{email.subject || "(no subject)"}</span>
+    {#if emailLabels.length > 0}
+      <span class="labels">
+        {#each emailLabels.slice(0, 2) as label (label.id)}
+          <span class="label-chip" style="background-color: {label.color}20; color: {label.color}; border-color: {label.color}40">
+            {label.name}
+          </span>
+        {/each}
+        {#if emailLabels.length > 2}
+          <span class="label-more">+{emailLabels.length - 2}</span>
+        {/if}
+      </span>
+    {/if}
     <span class="separator">—</span>
     <span class="snippet">{email.snippet}</span>
   </div>
@@ -183,6 +204,28 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .labels {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .label-chip {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+
+  .label-more {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-weight: 500;
   }
 
   .date {

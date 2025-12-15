@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder, drafts } from "$lib/stores";
+  import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions } from "$lib/stores";
 
   interface Props {
     onSync: () => void;
     onAddAccount: () => void;
+    onManageLabels?: () => void;
   }
 
-  let { onSync, onAddAccount }: Props = $props();
+  let { onSync, onAddAccount, onManageLabels }: Props = $props();
 
   function getProviderIcon(providerType: string): string {
     return providerType === "gmail" ? "G" : "@";
@@ -65,6 +66,16 @@
     url.searchParams.delete("email");
     window.history.pushState({}, "", url);
   }
+
+  function goToLabel(labelId: string) {
+    currentFolder.set("label");
+    selectedLabelId.set(labelId);
+    view.set("inbox");
+    // Clear URL param
+    const url = new URL(window.location.href);
+    url.searchParams.delete("email");
+    window.history.pushState({}, "", url);
+  }
 </script>
 
 <aside class="sidebar">
@@ -105,6 +116,29 @@
       <span class="nav-label">Archive</span>
     </button>
   </nav>
+
+  {#if $labels.length > 0}
+    <div class="labels-section">
+      <div class="labels-header">
+        <h3>Labels</h3>
+        {#if onManageLabels}
+          <button class="manage-labels-btn" onclick={onManageLabels} title="Manage labels">+</button>
+        {/if}
+      </div>
+      <div class="labels-list">
+        {#each $labels as label (label.id)}
+          <button
+            class="label-item"
+            class:active={$currentFolder === "label" && $selectedLabelId === label.id}
+            onclick={() => goToLabel(label.id)}
+          >
+            <span class="label-dot" style="background-color: {label.color}"></span>
+            <span class="label-name">{label.name}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   <div class="accounts">
     <h3>Accounts</h3>
@@ -186,7 +220,86 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
+  }
+
+  .labels-section {
+    margin-bottom: 16px;
+  }
+
+  .labels-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    margin-bottom: 8px;
+  }
+
+  .labels-header h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0;
+    letter-spacing: 0.5px;
+  }
+
+  .manage-labels-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .manage-labels-btn:hover {
+    color: var(--accent);
+  }
+
+  .labels-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .label-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    text-align: left;
+    color: var(--text-secondary);
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .label-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .label-item.active {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .label-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .label-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
   }
 
   .nav-item {

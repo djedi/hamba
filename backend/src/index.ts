@@ -3,6 +3,7 @@ import { cors } from "@elysiajs/cors";
 import { authRoutes } from "./routes/auth";
 import { emailRoutes } from "./routes/emails";
 import { draftRoutes } from "./routes/drafts";
+import { labelRoutes } from "./routes/labels";
 // Database is initialized on import
 import "./db";
 import { emailQueries } from "./db";
@@ -22,6 +23,7 @@ const app = new Elysia()
   .use(authRoutes)
   .use(emailRoutes)
   .use(draftRoutes)
+  .use(labelRoutes)
   // WebSocket for real-time updates
   .ws("/ws", {
     open(ws) {

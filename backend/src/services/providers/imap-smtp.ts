@@ -1,8 +1,17 @@
 import { ImapFlow } from "imapflow";
 import nodemailer from "nodemailer";
 import type { EmailProvider, SendParams, SendResult, SyncOptions, SyncResult } from "./types";
-import { accountQueries, emailQueries, attachmentQueries, draftQueries } from "../../db";
+import { accountQueries, emailQueries, attachmentQueries, draftQueries, labelQueries, emailLabelQueries } from "../../db";
 import { simpleParser, type Attachment } from "mailparser";
+
+// Default colors for IMAP folders
+const FOLDER_COLORS: Record<string, string> = {
+  "INBOX": "#4285f4",
+  "Sent": "#34a853",
+  "Drafts": "#fbbc05",
+  "Trash": "#ea4335",
+  "Archive": "#6366f1",
+};
 
 export class ImapSmtpProvider implements EmailProvider {
   private accountId: string;
@@ -11,6 +20,43 @@ export class ImapSmtpProvider implements EmailProvider {
   constructor(accountId: string) {
     this.accountId = accountId;
     this.account = accountQueries.getById.get(accountId);
+  }
+
+  // Sync IMAP folders as labels
+  async syncFolders(): Promise<void> {
+    const client = this.createImapClient();
+
+    try {
+      await client.connect();
+      const mailboxes = await client.list();
+
+      for (const mailbox of mailboxes) {
+        // Skip special/system folders
+        const specialFolders = ["INBOX", "Sent", "Sent Items", "Sent Mail", "Drafts", "Draft", "Trash", "Deleted", "Deleted Items", "Spam", "Junk"];
+        const isSpecial = specialFolders.some(f =>
+          mailbox.path === f || mailbox.name === f ||
+          mailbox.path.endsWith(`/${f}`) || mailbox.path.startsWith("[Gmail]")
+        );
+
+        if (isSpecial) continue;
+
+        const localId = `imap:${this.accountId}:${mailbox.path}`;
+        const color = FOLDER_COLORS[mailbox.name] || "#6366f1";
+
+        labelQueries.upsert.run(
+          localId,
+          this.accountId,
+          mailbox.name,
+          color,
+          "folder",
+          mailbox.path
+        );
+      }
+
+      await client.logout();
+    } catch (e) {
+      console.error("[IMAP] Error syncing folders:", e);
+    }
   }
 
   private createImapClient(): ImapFlow {
@@ -39,6 +85,9 @@ export class ImapSmtpProvider implements EmailProvider {
   }
 
   async sync(options?: SyncOptions): Promise<SyncResult> {
+    // Sync folders first
+    await this.syncFolders();
+
     const client = this.createImapClient();
     let synced = 0;
     const seenEmailIds = new Set<string>();
