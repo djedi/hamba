@@ -533,6 +533,52 @@ export const scheduledEmailQueries = {
   deleteByAccount: db.prepare("DELETE FROM scheduled_emails WHERE account_id = ?"),
 };
 
+// Snippets table for email templates
+db.run(`
+  CREATE TABLE IF NOT EXISTS snippets (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    shortcut TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+    UNIQUE(account_id, shortcut)
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_snippets_account_id ON snippets(account_id)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_snippets_shortcut ON snippets(account_id, shortcut)`);
+
+// Snippet operations
+export const snippetQueries = {
+  getByAccount: db.prepare(`
+    SELECT * FROM snippets
+    WHERE account_id = ?
+    ORDER BY name ASC
+  `),
+
+  getById: db.prepare("SELECT * FROM snippets WHERE id = ?"),
+
+  getByShortcut: db.prepare(`
+    SELECT * FROM snippets WHERE account_id = ? AND shortcut = ?
+  `),
+
+  insert: db.prepare(`
+    INSERT INTO snippets (id, account_id, name, shortcut, content)
+    VALUES (?, ?, ?, ?, ?)
+  `),
+
+  update: db.prepare(`
+    UPDATE snippets SET name = ?, shortcut = ?, content = ?, updated_at = unixepoch() WHERE id = ?
+  `),
+
+  delete: db.prepare("DELETE FROM snippets WHERE id = ?"),
+
+  deleteByAccount: db.prepare("DELETE FROM snippets WHERE account_id = ?"),
+};
+
 // Email-Label junction operations
 export const emailLabelQueries = {
   getLabelsForEmail: db.prepare(`

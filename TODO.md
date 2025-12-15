@@ -36,7 +36,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Implement Send Later / Scheduling** - Add UI to schedule email for later. Store scheduled emails in a `scheduled_emails` table with `send_at` timestamp. Run a background job every minute to send due emails. Show "Scheduled" view in sidebar.
 
-- [ ] **Implement Email Templates / Snippets** - Create a `snippets` table with `name`, `shortcut`, `content`. In compose, typing `;shortcut` expands to the snippet content. Add UI to manage snippets in settings. Superhuman uses `;` prefix.
+- [x] **Implement Email Templates / Snippets** - Create a `snippets` table with `name`, `shortcut`, `content`. In compose, typing `;shortcut` expands to the snippet content. Add UI to manage snippets in settings. Superhuman uses `;` prefix.
 
 - [ ] **Add CC/BCC UI in compose** - Currently CC/BCC fields may not be visible by default. Add Cc/Bcc links that expand input fields. Remember preference. Keyboard shortcut `Cmd+Shift+C` for Cc, `Cmd+Shift+B` for Bcc.
 

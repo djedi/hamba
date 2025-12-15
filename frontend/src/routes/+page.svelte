@@ -25,6 +25,7 @@
     labelActions,
     scheduledEmails,
     scheduledEmailActions,
+    snippetActions,
   } from "$lib/stores";
   import type { Draft } from "$lib/api";
   import EmailList from "$lib/components/EmailList.svelte";
@@ -37,6 +38,7 @@
   import Toasts from "$lib/components/Toasts.svelte";
   import DraftList from "$lib/components/DraftList.svelte";
   import LabelManager from "$lib/components/LabelManager.svelte";
+  import SnippetManager from "$lib/components/SnippetManager.svelte";
   import InboxTabs from "$lib/components/InboxTabs.svelte";
   import SnoozeModal from "$lib/components/SnoozeModal.svelte";
   import ReminderModal from "$lib/components/ReminderModal.svelte";
@@ -46,6 +48,7 @@
   let errorMessage = $state("");
   let showAddAccountModal = $state(false);
   let showLabelManager = $state(false);
+  let showSnippetManager = $state(false);
   let autoSyncInterval: ReturnType<typeof setInterval> | null = null;
   let lastLoadedAccountId: string | null = null;
   let unsubscribeRealtime: (() => void) | null = null;
@@ -68,8 +71,9 @@
       url.searchParams.delete("email");
       window.history.pushState({}, "", url);
       loadEmails(accountId);
-      // Also load labels for the new account
+      // Also load labels and snippets for the new account
       labelActions.loadLabels(accountId);
+      snippetActions.loadSnippets(accountId);
     }
   });
 
@@ -138,8 +142,9 @@
         // Subscribe to real-time updates for all accounts
         accts.forEach(acct => subscribe(acct.id));
 
-        // Load labels and emails with URL param to restore view state
+        // Load labels, snippets and emails with URL param to restore view state
         await labelActions.loadLabels(firstAccountId);
+        await snippetActions.loadSnippets(firstAccountId);
         await loadEmails(firstAccountId, emailIdFromUrl);
 
         // Start auto-sync as fallback (for Gmail without push)
@@ -372,7 +377,7 @@
 </script>
 
 <div class="app">
-  <Sidebar onSync={syncEmails} onAddAccount={() => (showAddAccountModal = true)} onManageLabels={() => (showLabelManager = true)} />
+  <Sidebar onSync={syncEmails} onAddAccount={() => (showAddAccountModal = true)} onManageLabels={() => (showLabelManager = true)} onManageSnippets={() => (showSnippetManager = true)} />
 
   <main class="main">
     {#if needsReauth}
@@ -426,6 +431,10 @@
 
   {#if showLabelManager}
     <LabelManager onClose={() => (showLabelManager = false)} />
+  {/if}
+
+  {#if showSnippetManager}
+    <SnippetManager onClose={() => (showSnippetManager = false)} />
   {/if}
 
   {#if $isSnoozeModalOpen && $selectedEmailId}

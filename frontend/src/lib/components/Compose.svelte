@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { api, type Email, type Draft } from "$lib/api";
-  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails } from "$lib/stores";
+  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails, snippets, snippetActions } from "$lib/stores";
   import { get } from "svelte/store";
 
   interface Props {
@@ -37,12 +37,146 @@
   let showSchedulePicker = $state(false);
   let customScheduleDate = $state("");
   let customScheduleTime = $state("");
+  let snippetQuery = $state("");
+  let showSnippetSuggestions = $state(false);
+  let selectedSnippetIndex = $state(0);
 
   let toInput: HTMLInputElement;
   let fileInput: HTMLInputElement;
+  let bodyTextarea: HTMLTextAreaElement;
   let draftId = draft?.id || crypto.randomUUID();
   let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   let lastSavedContent = "";
+
+  // Filter snippets based on query
+  $effect(() => {
+    if (snippetQuery) {
+      selectedSnippetIndex = 0;
+    }
+  });
+
+  // Get filtered snippets
+  function getFilteredSnippets() {
+    const $snippets = get(snippets);
+    if (!snippetQuery) return [];
+    const query = snippetQuery.toLowerCase();
+    return $snippets.filter(
+      (s) => s.shortcut.toLowerCase().startsWith(query) || s.name.toLowerCase().includes(query)
+    );
+  }
+
+  // Check if body text ends with a snippet trigger pattern (;shortcut)
+  function checkForSnippetTrigger(text: string, cursorPos: number): string | null {
+    // Look backward from cursor to find a semicolon
+    const textBeforeCursor = text.slice(0, cursorPos);
+    const lastSemicolon = textBeforeCursor.lastIndexOf(";");
+
+    if (lastSemicolon === -1) return null;
+
+    // Check if there's only valid shortcut characters after the semicolon
+    const afterSemicolon = textBeforeCursor.slice(lastSemicolon + 1);
+
+    // If there's a space or newline, the trigger is broken
+    if (/[\s\n]/.test(afterSemicolon)) return null;
+
+    // Valid shortcut characters: alphanumeric, underscore, hyphen
+    if (!/^[a-zA-Z0-9_-]*$/.test(afterSemicolon)) return null;
+
+    return afterSemicolon;
+  }
+
+  // Handle body input and check for snippet triggers
+  function handleBodyInput(e: Event) {
+    const textarea = e.target as HTMLTextAreaElement;
+    const cursorPos = textarea.selectionStart || 0;
+    const trigger = checkForSnippetTrigger(textarea.value, cursorPos);
+
+    if (trigger !== null) {
+      snippetQuery = trigger;
+      const filteredSnippets = getFilteredSnippets();
+      showSnippetSuggestions = filteredSnippets.length > 0;
+      selectedSnippetIndex = 0;
+    } else {
+      snippetQuery = "";
+      showSnippetSuggestions = false;
+    }
+  }
+
+  // Expand a snippet at the current cursor position
+  function expandSnippet(snippetContent: string) {
+    if (!bodyTextarea) return;
+
+    const cursorPos = bodyTextarea.selectionStart || 0;
+    const text = body;
+
+    // Find the start of the trigger (the semicolon)
+    const textBeforeCursor = text.slice(0, cursorPos);
+    const lastSemicolon = textBeforeCursor.lastIndexOf(";");
+
+    if (lastSemicolon === -1) return;
+
+    // Replace from semicolon to cursor with the snippet content
+    const beforeTrigger = text.slice(0, lastSemicolon);
+    const afterCursor = text.slice(cursorPos);
+
+    body = beforeTrigger + snippetContent + afterCursor;
+
+    // Reset snippet state
+    snippetQuery = "";
+    showSnippetSuggestions = false;
+
+    // Move cursor to end of inserted content
+    setTimeout(() => {
+      if (bodyTextarea) {
+        const newCursorPos = beforeTrigger.length + snippetContent.length;
+        bodyTextarea.setSelectionRange(newCursorPos, newCursorPos);
+        bodyTextarea.focus();
+      }
+    }, 0);
+  }
+
+  // Handle snippet selection
+  function selectSnippet(index: number) {
+    const filtered = getFilteredSnippets();
+    if (index >= 0 && index < filtered.length) {
+      expandSnippet(filtered[index].content);
+    }
+  }
+
+  // Handle keyboard navigation in snippet suggestions
+  function handleSnippetKeydown(e: KeyboardEvent) {
+    if (!showSnippetSuggestions) return false;
+
+    const filtered = getFilteredSnippets();
+    if (filtered.length === 0) return false;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      selectedSnippetIndex = (selectedSnippetIndex + 1) % filtered.length;
+      return true;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      selectedSnippetIndex = (selectedSnippetIndex - 1 + filtered.length) % filtered.length;
+      return true;
+    }
+
+    if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      selectSnippet(selectedSnippetIndex);
+      return true;
+    }
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      snippetQuery = "";
+      showSnippetSuggestions = false;
+      return true;
+    }
+
+    return false;
+  }
 
   // Generate a content hash for change detection
   function getContentHash(): string {
@@ -123,6 +257,12 @@
 
     // Start auto-save timer
     autoSaveTimer = setInterval(autoSave, 5000);
+
+    // Load snippets for the current account
+    const accountId = get(selectedAccountId);
+    if (accountId) {
+      snippetActions.loadSnippets(accountId);
+    }
 
     // Focus the appropriate field
     setTimeout(() => {
@@ -351,13 +491,23 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    // Handle snippet keyboard navigation first
+    if (handleSnippetKeydown(e)) {
+      return;
+    }
+
     // Cmd/Ctrl + Enter to send
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       handleSend();
     }
-    // Escape to close (unless in textarea with content)
+    // Escape to close (unless in textarea with content or snippet suggestions shown)
     if (e.key === "Escape") {
+      if (showSnippetSuggestions) {
+        snippetQuery = "";
+        showSnippetSuggestions = false;
+        return;
+      }
       if (!body && !to && !subject) {
         handleClose();
       }
@@ -560,9 +710,31 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   >
     <textarea
       class="compose-body"
+      bind:this={bodyTextarea}
       bind:value={body}
-      placeholder="Write your message..."
+      oninput={handleBodyInput}
+      placeholder="Write your message... (type ;shortcut to expand snippets)"
     ></textarea>
+    {#if showSnippetSuggestions}
+      {@const filteredSnippets = getFilteredSnippets()}
+      <div class="snippet-suggestions">
+        <div class="snippet-header">Snippets</div>
+        {#each filteredSnippets as snippet, index (snippet.id)}
+          <button
+            class="snippet-item"
+            class:selected={index === selectedSnippetIndex}
+            onclick={() => selectSnippet(index)}
+            onmouseenter={() => selectedSnippetIndex = index}
+          >
+            <span class="snippet-shortcut">;{snippet.shortcut}</span>
+            <span class="snippet-name">{snippet.name}</span>
+          </button>
+        {/each}
+        <div class="snippet-hint">
+          <kbd>↑</kbd><kbd>↓</kbd> to navigate, <kbd>Tab</kbd> or <kbd>Enter</kbd> to expand, <kbd>Esc</kbd> to dismiss
+        </div>
+      </div>
+    {/if}
     {#if isDragging}
       <div class="drop-overlay">
         Drop files to attach
@@ -1097,5 +1269,93 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
 
   .schedule-custom-btn:hover {
     filter: brightness(1.1);
+  }
+
+  .snippet-suggestions {
+    position: absolute;
+    top: 0;
+    right: 24px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    z-index: 20;
+    min-width: 250px;
+    max-width: 350px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .snippet-header {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-primary);
+  }
+
+  .snippet-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .snippet-item:hover,
+  .snippet-item.selected {
+    background: var(--bg-hover);
+  }
+
+  .snippet-item.selected {
+    background: var(--accent);
+  }
+
+  .snippet-item.selected .snippet-shortcut,
+  .snippet-item.selected .snippet-name {
+    color: white;
+  }
+
+  .snippet-shortcut {
+    font-family: monospace;
+    font-size: 13px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .snippet-name {
+    font-size: 13px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .snippet-hint {
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    background: var(--bg-primary);
+  }
+
+  .snippet-hint kbd {
+    display: inline-block;
+    padding: 2px 5px;
+    font-size: 10px;
+    font-family: monospace;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    margin: 0 2px;
   }
 </style>

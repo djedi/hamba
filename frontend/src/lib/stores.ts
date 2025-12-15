@@ -1,5 +1,5 @@
 import { writable, derived, get } from "svelte/store";
-import type { Account, Email, Draft, Label, ScheduledEmail } from "./api";
+import type { Account, Email, Draft, Label, ScheduledEmail, Snippet } from "./api";
 import { api } from "./api";
 
 // Current state
@@ -31,6 +31,9 @@ export const drafts = writable<Draft[]>([]);
 
 // Scheduled emails store
 export const scheduledEmails = writable<ScheduledEmail[]>([]);
+
+// Snippets store
+export const snippets = writable<Snippet[]>([]);
 
 // Current draft being edited (for auto-save)
 export const currentDraftId = writable<string | null>(null);
@@ -704,5 +707,119 @@ export const scheduledEmailActions = {
       showToast("Failed to cancel scheduled email");
       return { success: false, error: String(e) };
     }
+  },
+};
+
+// Snippet actions
+export const snippetActions = {
+  loadSnippets: async (accountId: string) => {
+    try {
+      const fetched = await api.getSnippets(accountId);
+      snippets.set(fetched);
+    } catch (e) {
+      console.error("Failed to load snippets:", e);
+    }
+  },
+
+  createSnippet: async (accountId: string, name: string, shortcut: string, content: string) => {
+    try {
+      const result = await api.createSnippet({ accountId, name, shortcut, content });
+      if (result.success && result.id) {
+        snippets.update(($snippets) => [
+          ...$snippets,
+          {
+            id: result.id!,
+            account_id: accountId,
+            name,
+            shortcut,
+            content,
+            created_at: Math.floor(Date.now() / 1000),
+            updated_at: Math.floor(Date.now() / 1000),
+          },
+        ].sort((a, b) => a.name.localeCompare(b.name)));
+        showToast("Snippet created", "success");
+      } else {
+        showToast(result.error || "Failed to create snippet");
+      }
+      return result;
+    } catch (e) {
+      console.error("Failed to create snippet:", e);
+      showToast("Failed to create snippet");
+      return { success: false, error: String(e) };
+    }
+  },
+
+  updateSnippet: async (id: string, params: { name?: string; shortcut?: string; content?: string }) => {
+    const $snippets = get(snippets);
+    const original = $snippets.find((s) => s.id === id);
+
+    // Optimistic update
+    snippets.update(($snippets) =>
+      $snippets.map((s) =>
+        s.id === id
+          ? { ...s, ...params, updated_at: Math.floor(Date.now() / 1000) }
+          : s
+      ).sort((a, b) => a.name.localeCompare(b.name))
+    );
+
+    try {
+      const result = await api.updateSnippet(id, params);
+      if (!result.success) {
+        // Rollback
+        if (original) {
+          snippets.update(($snippets) =>
+            $snippets.map((s) => (s.id === id ? original : s))
+          );
+        }
+        showToast(result.error || "Failed to update snippet");
+      } else {
+        showToast("Snippet updated", "success");
+      }
+      return result;
+    } catch (e) {
+      // Rollback
+      if (original) {
+        snippets.update(($snippets) =>
+          $snippets.map((s) => (s.id === id ? original : s))
+        );
+      }
+      showToast("Failed to update snippet");
+      return { success: false, error: String(e) };
+    }
+  },
+
+  deleteSnippet: async (id: string) => {
+    const $snippets = get(snippets);
+    const snippet = $snippets.find((s) => s.id === id);
+
+    // Optimistic remove
+    snippets.update(($snippets) => $snippets.filter((s) => s.id !== id));
+
+    try {
+      const result = await api.deleteSnippet(id);
+      if (!result.success) {
+        // Rollback
+        if (snippet) {
+          snippets.update(($snippets) => [...$snippets, snippet].sort((a, b) => a.name.localeCompare(b.name)));
+        }
+        showToast(result.error || "Failed to delete snippet");
+      } else {
+        showToast("Snippet deleted", "success");
+      }
+      return result;
+    } catch (e) {
+      // Rollback
+      if (snippet) {
+        snippets.update(($snippets) => [...$snippets, snippet].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+      showToast("Failed to delete snippet");
+      return { success: false, error: String(e) };
+    }
+  },
+
+  // Get snippet by shortcut (for inline expansion)
+  getByShortcut: (shortcut: string): Snippet | undefined => {
+    const $snippets = get(snippets);
+    return $snippets.find((s) => s.shortcut === shortcut);
   },
 };

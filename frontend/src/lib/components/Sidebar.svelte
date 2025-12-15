@@ -5,9 +5,10 @@
     onSync: () => void;
     onAddAccount: () => void;
     onManageLabels?: () => void;
+    onManageSnippets?: () => void;
   }
 
-  let { onSync, onAddAccount, onManageLabels }: Props = $props();
+  let { onSync, onAddAccount, onManageLabels, onManageSnippets }: Props = $props();
 
   function getProviderIcon(providerType: string): string {
     return providerType === "gmail" ? "G" : "@";
@@ -210,6 +211,16 @@
         🔄 Sync
       {/if}
     </button>
+  </div>
+
+  <div class="snippets-section">
+    <div class="snippets-header">
+      <h4>Snippets</h4>
+      {#if onManageSnippets}
+        <button class="manage-snippets-btn" onclick={onManageSnippets} title="Manage snippets">⚙</button>
+      {/if}
+    </div>
+    <div class="snippet-hint">Type <code>;shortcut</code> in compose</div>
   </div>
 
   <div class="shortcuts">
@@ -512,5 +523,54 @@
     font-size: 12px;
     color: var(--text-muted);
     margin-bottom: 4px;
+  }
+
+  .snippets-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .snippets-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .snippets-header h4 {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0;
+    letter-spacing: 0.5px;
+  }
+
+  .manage-snippets-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .manage-snippets-btn:hover {
+    color: var(--accent);
+  }
+
+  .snippet-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .snippet-hint code {
+    background: var(--bg-primary);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+    color: var(--accent);
   }
 </style>

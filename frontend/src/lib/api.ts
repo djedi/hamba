@@ -283,6 +283,32 @@ export const api = {
     request<{ success: boolean; error?: string }>(`/emails/scheduled/${id}`, {
       method: "DELETE",
     }),
+
+  // Snippets
+  getSnippets: (accountId: string) =>
+    request<Snippet[]>(`/snippets?accountId=${accountId}`),
+
+  getSnippet: (id: string) => request<Snippet>(`/snippets/${id}`),
+
+  getSnippetByShortcut: (accountId: string, shortcut: string) =>
+    request<Snippet | null>(`/snippets/by-shortcut/${shortcut}?accountId=${accountId}`),
+
+  createSnippet: (params: { accountId: string; name: string; shortcut: string; content: string }) =>
+    request<{ success: boolean; id?: string; error?: string }>("/snippets", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  updateSnippet: (id: string, params: { name?: string; shortcut?: string; content?: string }) =>
+    request<{ success: boolean; error?: string }>(`/snippets/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(params),
+    }),
+
+  deleteSnippet: (id: string) =>
+    request<{ success: boolean; error?: string }>(`/snippets/${id}`, {
+      method: "DELETE",
+    }),
 };
 
 export interface Account {
@@ -375,4 +401,14 @@ export interface ScheduledEmail {
   attachments: string | null;
   send_at: number;
   created_at: number;
+}
+
+export interface Snippet {
+  id: string;
+  account_id: string;
+  name: string;
+  shortcut: string;
+  content: string;
+  created_at: number;
+  updated_at: number;
 }

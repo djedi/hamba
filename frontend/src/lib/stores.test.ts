@@ -18,7 +18,9 @@ import {
 	composeMode,
 	replyToEmail,
 	isCommandPaletteOpen,
-	currentFolder
+	currentFolder,
+	snippets,
+	snippetActions
 } from './stores';
 
 // Mock the api module
@@ -36,7 +38,11 @@ vi.mock('./api', () => ({
 		markImportant: vi.fn().mockResolvedValue({}),
 		markNotImportant: vi.fn().mockResolvedValue({}),
 		snooze: vi.fn().mockResolvedValue({}),
-		unsnooze: vi.fn().mockResolvedValue({})
+		unsnooze: vi.fn().mockResolvedValue({}),
+		getSnippets: vi.fn().mockResolvedValue([]),
+		createSnippet: vi.fn().mockResolvedValue({ success: true, id: 'new-snippet-id' }),
+		updateSnippet: vi.fn().mockResolvedValue({ success: true }),
+		deleteSnippet: vi.fn().mockResolvedValue({ success: true })
 	}
 }));
 
@@ -83,6 +89,7 @@ describe('stores', () => {
 		replyToEmail.set(null);
 		isCommandPaletteOpen.set(false);
 		currentFolder.set('inbox');
+		snippets.set([]);
 	});
 
 	describe('selectedEmail derived store', () => {
@@ -243,6 +250,53 @@ describe('stores', () => {
 
 			currentFolder.set('inbox');
 			expect(get(currentFolder)).toBe('inbox');
+		});
+	});
+
+	describe('snippets store', () => {
+		const mockSnippet = (id: string, shortcut: string, overrides = {}) => ({
+			id,
+			account_id: 'acc-1',
+			name: `Snippet ${id}`,
+			shortcut,
+			content: `Content for ${shortcut}`,
+			created_at: Math.floor(Date.now() / 1000),
+			updated_at: Math.floor(Date.now() / 1000),
+			...overrides
+		});
+
+		it('starts empty', () => {
+			expect(get(snippets)).toEqual([]);
+		});
+
+		it('can store snippets', () => {
+			const testSnippets = [mockSnippet('1', 'hi'), mockSnippet('2', 'thanks')];
+			snippets.set(testSnippets);
+
+			expect(get(snippets)).toEqual(testSnippets);
+		});
+
+		describe('snippetActions.getByShortcut', () => {
+			it('finds a snippet by shortcut', () => {
+				const testSnippets = [
+					mockSnippet('1', 'hi'),
+					mockSnippet('2', 'thanks'),
+					mockSnippet('3', 'followup')
+				];
+				snippets.set(testSnippets);
+
+				const found = snippetActions.getByShortcut('thanks');
+				expect(found).toBeDefined();
+				expect(found?.shortcut).toBe('thanks');
+			});
+
+			it('returns undefined for non-existent shortcut', () => {
+				const testSnippets = [mockSnippet('1', 'hi')];
+				snippets.set(testSnippets);
+
+				const found = snippetActions.getByShortcut('nonexistent');
+				expect(found).toBeUndefined();
+			});
 		});
 	});
 });
