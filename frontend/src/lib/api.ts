@@ -57,6 +57,18 @@ export const api = {
   getArchivedEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails/archived?accountId=${accountId}&limit=${limit}&offset=${offset}`),
 
+  getImportantEmails: (accountId: string, limit = 50, offset = 0) =>
+    request<Email[]>(`/emails/important?accountId=${accountId}&limit=${limit}&offset=${offset}`),
+
+  getOtherEmails: (accountId: string, limit = 50, offset = 0) =>
+    request<Email[]>(`/emails/other?accountId=${accountId}&limit=${limit}&offset=${offset}`),
+
+  classifyEmails: (accountId: string) =>
+    request<{ success: boolean; classified: number }>(`/emails/classify/${accountId}`, { method: "POST" }),
+
+  markImportant: (id: string) => request(`/emails/${id}/important`, { method: "POST" }),
+  markNotImportant: (id: string) => request(`/emails/${id}/not-important`, { method: "POST" }),
+
   getEmail: (id: string) => request<Email>(`/emails/${id}`),
 
   getThread: (threadId: string) => request<Email[]>(`/emails/thread/${threadId}`),
@@ -219,6 +231,7 @@ export interface Email {
   is_starred: number;
   is_archived: number;
   is_trashed: number;
+  is_important: number;
   received_at: number;
 }
 

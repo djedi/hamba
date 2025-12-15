@@ -15,6 +15,10 @@ export const view = writable<"inbox" | "email" | "compose">("inbox");
 export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "label";
 export const currentFolder = writable<Folder>("inbox");
 
+// Split inbox tab (important, other, all) - only applies when currentFolder is "inbox"
+export type InboxTab = "important" | "other" | "all";
+export const inboxTab = writable<InboxTab>("important");
+
 // Labels store
 export const labels = writable<Label[]>([]);
 export const selectedLabelId = writable<string | null>(null);
@@ -212,6 +216,58 @@ export const emailActions = {
       }
       showToast("Failed to delete email");
     });
+  },
+
+  markImportant: (emailId: string) => {
+    const $inboxTab = get(inboxTab);
+
+    // Optimistic update
+    emails.update(($emails) =>
+      $emails.map((e) => (e.id === emailId ? { ...e, is_important: 1 } : e))
+    );
+
+    // If viewing "other" tab, remove from list
+    if ($inboxTab === "other") {
+      emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
+    }
+
+    api.markImportant(emailId).catch(() => {
+      emails.update(($emails) =>
+        $emails.map((e) => (e.id === emailId ? { ...e, is_important: 0 } : e))
+      );
+      showToast("Failed to mark as important");
+    });
+  },
+
+  markNotImportant: (emailId: string) => {
+    const $inboxTab = get(inboxTab);
+
+    // Optimistic update
+    emails.update(($emails) =>
+      $emails.map((e) => (e.id === emailId ? { ...e, is_important: 0 } : e))
+    );
+
+    // If viewing "important" tab, remove from list
+    if ($inboxTab === "important") {
+      emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
+    }
+
+    api.markNotImportant(emailId).catch(() => {
+      emails.update(($emails) =>
+        $emails.map((e) => (e.id === emailId ? { ...e, is_important: 1 } : e))
+      );
+      showToast("Failed to mark as not important");
+    });
+  },
+
+  toggleImportant: (emailId: string) => {
+    const $emails = get(emails);
+    const email = $emails.find((e) => e.id === emailId);
+    if (email?.is_important) {
+      emailActions.markNotImportant(emailId);
+    } else {
+      emailActions.markImportant(emailId);
+    }
   },
 };
 

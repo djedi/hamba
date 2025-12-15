@@ -20,7 +20,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ### Split Inbox
 
-- [ ] **Implement Split Inbox (Important/Other)** - Superhuman's killer feature. Create an ML model or rules-based system to classify emails as Important vs Other. Factors: sender frequency, reply rate, domain (personal vs automated), keywords. Store `is_important` flag. Add UI tabs above inbox to switch between Important/Other/All. Default to Important view.
+- [x] **Implement Split Inbox (Important/Other)** - Superhuman's killer feature. Create an ML model or rules-based system to classify emails as Important vs Other. Factors: sender frequency, reply rate, domain (personal vs automated), keywords. Store `is_important` flag. Add UI tabs above inbox to switch between Important/Other/All. Default to Important view.
 
 ### Snooze & Reminders
 

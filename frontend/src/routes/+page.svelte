@@ -16,6 +16,7 @@
     replyToEmail,
     toasts,
     currentFolder,
+    inboxTab,
     drafts,
     labels,
     selectedLabelId,
@@ -32,6 +33,7 @@
   import Toasts from "$lib/components/Toasts.svelte";
   import DraftList from "$lib/components/DraftList.svelte";
   import LabelManager from "$lib/components/LabelManager.svelte";
+  import InboxTabs from "$lib/components/InboxTabs.svelte";
 
   let needsReauth = $state(false);
   let errorMessage = $state("");
@@ -46,6 +48,7 @@
   const AUTO_SYNC_INTERVAL = 60 * 1000;
 
   let lastLoadedFolder: string | null = null;
+  let lastLoadedTab: string | null = null;
 
   // Load emails when selected account changes (but not on initial mount)
   $effect(() => {
@@ -70,6 +73,17 @@
     if (accountId && lastLoadedFolder !== null && folder !== lastLoadedFolder) {
       lastLoadedFolder = folder;
       view.set("inbox");
+      loadEmails(accountId, null, folder);
+    }
+  });
+
+  // Load emails when inbox tab changes (Important/Other/All)
+  $effect(() => {
+    const tab = $inboxTab;
+    const folder = $currentFolder;
+    const accountId = $selectedAccountId;
+    if (accountId && folder === "inbox" && lastLoadedTab !== null && tab !== lastLoadedTab) {
+      lastLoadedTab = tab;
       loadEmails(accountId, null, folder);
     }
   });
@@ -112,6 +126,7 @@
         selectedAccountId.set(firstAccountId);
         lastLoadedAccountId = firstAccountId;
         lastLoadedFolder = $currentFolder;
+        lastLoadedTab = $inboxTab;
 
         // Subscribe to real-time updates for all accounts
         accts.forEach(acct => subscribe(acct.id));
@@ -146,6 +161,7 @@
       if (currentAccountId && data.accountId === currentAccountId) {
         // Silently refresh emails without showing loading state
         const folder = $currentFolder;
+        const tab = $inboxTab;
         let fetchPromise;
         if (folder === "starred") {
           fetchPromise = api.getStarredEmails(currentAccountId);
@@ -155,6 +171,15 @@
           fetchPromise = api.getTrashedEmails(currentAccountId);
         } else if (folder === "archive") {
           fetchPromise = api.getArchivedEmails(currentAccountId);
+        } else if (folder === "inbox") {
+          // Use split inbox tabs
+          if (tab === "important") {
+            fetchPromise = api.getImportantEmails(currentAccountId);
+          } else if (tab === "other") {
+            fetchPromise = api.getOtherEmails(currentAccountId);
+          } else {
+            fetchPromise = api.getEmails(currentAccountId);
+          }
         } else {
           fetchPromise = api.getEmails(currentAccountId);
         }
@@ -226,7 +251,16 @@
           msgs = [];
         }
       } else {
-        msgs = await api.getEmails(accountId);
+        // Inbox view - use split inbox tabs
+        const tab = $inboxTab;
+        if (tab === "important") {
+          msgs = await api.getImportantEmails(accountId);
+        } else if (tab === "other") {
+          msgs = await api.getOtherEmails(accountId);
+        } else {
+          // "all" tab shows all inbox emails
+          msgs = await api.getEmails(accountId);
+        }
       }
       emails.set(msgs);
 
@@ -333,6 +367,9 @@
       {#if $currentFolder === "drafts"}
         <DraftList loading={$isLoading} onOpenDraft={openDraft} />
       {:else}
+        {#if $currentFolder === "inbox"}
+          <InboxTabs />
+        {/if}
         <EmailList loading={$isLoading} />
       {/if}
     {:else if $view === "email"}

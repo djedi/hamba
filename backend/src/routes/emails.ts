@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { emailQueries, accountQueries, attachmentQueries } from "../db";
 import { getProvider } from "../services/providers";
 import { notifySyncComplete } from "../services/realtime";
+import { classifyAndUpdateEmail, classifyAllEmails } from "../services/importance";
 
 export const emailRoutes = new Elysia({ prefix: "/emails" })
   .get("/", async ({ query }) => {
@@ -94,10 +95,43 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
     );
   })
 
+  .get("/important", ({ query }) => {
+    const { accountId, limit = "50", offset = "0" } = query;
+
+    if (!accountId) {
+      return { error: "accountId required" };
+    }
+
+    return emailQueries.getImportant.all(
+      accountId,
+      parseInt(limit as string),
+      parseInt(offset as string)
+    );
+  })
+
+  .get("/other", ({ query }) => {
+    const { accountId, limit = "50", offset = "0" } = query;
+
+    if (!accountId) {
+      return { error: "accountId required" };
+    }
+
+    return emailQueries.getOther.all(
+      accountId,
+      parseInt(limit as string),
+      parseInt(offset as string)
+    );
+  })
+
   .post("/sync/:accountId", async ({ params }) => {
     try {
       const provider = getProvider(params.accountId);
       const result = await provider.sync({ maxMessages: 100 });
+
+      // Classify emails for importance after sync
+      if (result.synced > 0) {
+        classifyAllEmails(params.accountId);
+      }
 
       // Notify connected clients of sync completion
       if (result.synced > 0) {
@@ -359,4 +393,33 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
     } catch (error) {
       return { error: String(error), success: false };
     }
+  })
+
+  .post("/classify/:accountId", async ({ params }) => {
+    try {
+      const classified = classifyAllEmails(params.accountId);
+      return { success: true, classified };
+    } catch (error) {
+      return { success: false, error: String(error), classified: 0 };
+    }
+  })
+
+  .post("/:id/important", async ({ params }) => {
+    const email = emailQueries.getById.get(params.id) as any;
+    if (!email) {
+      return { success: false, error: "Email not found" };
+    }
+
+    emailQueries.markImportant.run(params.id);
+    return { success: true };
+  })
+
+  .post("/:id/not-important", async ({ params }) => {
+    const email = emailQueries.getById.get(params.id) as any;
+    if (!email) {
+      return { success: false, error: "Email not found" };
+    }
+
+    emailQueries.markNotImportant.run(params.id);
+    return { success: true };
   });

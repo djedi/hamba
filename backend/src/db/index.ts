@@ -58,6 +58,9 @@ addColumnIfNotExists("accounts", "username", "TEXT");
 // Add folder column to emails for tracking inbox vs sent vs other folders
 addColumnIfNotExists("emails", "folder", "TEXT DEFAULT 'inbox'");
 
+// Add is_important column for split inbox feature
+addColumnIfNotExists("emails", "is_important", "INTEGER DEFAULT 0");
+
 db.run(`
   CREATE TABLE IF NOT EXISTS emails (
     id TEXT PRIMARY KEY,
@@ -78,6 +81,7 @@ db.run(`
     is_starred INTEGER DEFAULT 0,
     is_archived INTEGER DEFAULT 0,
     is_trashed INTEGER DEFAULT 0,
+    is_important INTEGER DEFAULT 0,
     received_at INTEGER,
     created_at INTEGER DEFAULT (unixepoch()),
     folder TEXT DEFAULT 'inbox',
@@ -89,6 +93,7 @@ db.run(`CREATE INDEX IF NOT EXISTS idx_emails_account_id ON emails(account_id)`)
 db.run(`CREATE INDEX IF NOT EXISTS idx_emails_thread_id ON emails(thread_id)`);
 db.run(`CREATE INDEX IF NOT EXISTS idx_emails_received_at ON emails(received_at DESC)`);
 db.run(`CREATE INDEX IF NOT EXISTS idx_emails_folder ON emails(folder)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_emails_is_important ON emails(is_important)`);
 
 // Attachments table for embedded images and files
 db.run(`
@@ -284,6 +289,23 @@ export const emailQueries = {
     ORDER BY received_at DESC
     LIMIT ? OFFSET ?
   `),
+
+  getImportant: db.prepare(`
+    SELECT * FROM emails
+    WHERE account_id = ? AND is_important = 1 AND is_trashed = 0 AND is_archived = 0
+    ORDER BY received_at DESC
+    LIMIT ? OFFSET ?
+  `),
+
+  getOther: db.prepare(`
+    SELECT * FROM emails
+    WHERE account_id = ? AND is_important = 0 AND is_trashed = 0 AND is_archived = 0
+    ORDER BY received_at DESC
+    LIMIT ? OFFSET ?
+  `),
+
+  markImportant: db.prepare("UPDATE emails SET is_important = 1 WHERE id = ?"),
+  markNotImportant: db.prepare("UPDATE emails SET is_important = 0 WHERE id = ?"),
 };
 
 // Attachment operations

@@ -183,6 +183,8 @@
     <div class="shortcut"><kbd>␣</kbd> scroll</div>
     <div class="shortcut"><kbd>e</kbd><kbd>y</kbd> archive</div>
     <div class="shortcut"><kbd>s</kbd> star</div>
+    <div class="shortcut"><kbd>!</kbd> important</div>
+    <div class="shortcut"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> inbox tabs</div>
     <div class="shortcut"><kbd>#</kbd><kbd>⌫</kbd> trash</div>
     <div class="shortcut"><kbd>⇧R</kbd> sync</div>
     <div class="shortcut"><kbd>⌘K</kbd> command</div>

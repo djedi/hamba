@@ -10,6 +10,7 @@ import {
   emailActions,
   prefetchAdjacentEmails,
   currentFolder,
+  inboxTab,
 } from "./stores";
 
 type KeyHandler = () => void | Promise<void>;
@@ -236,6 +237,36 @@ const handlers: Record<string, KeyHandler> = {
     const $selectedEmailId = get(selectedEmailId);
     if ($selectedEmailId) {
       emailActions.toggleRead($selectedEmailId);
+    }
+  },
+
+  // Toggle importance (! key)
+  "!": () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      emailActions.toggleImportant($selectedEmailId);
+    }
+  },
+
+  // Switch inbox tabs (1 = Important, 2 = Other, 3 = All)
+  "1": () => {
+    const $folder = get(currentFolder);
+    if ($folder === "inbox") {
+      inboxTab.set("important");
+    }
+  },
+
+  "2": () => {
+    const $folder = get(currentFolder);
+    if ($folder === "inbox") {
+      inboxTab.set("other");
+    }
+  },
+
+  "3": () => {
+    const $folder = get(currentFolder);
+    if ($folder === "inbox") {
+      inboxTab.set("all");
     }
   },
 
