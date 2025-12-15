@@ -25,8 +25,24 @@
   let bcc = $state("");
   let subject = $state("");
   let body = $state("");
-  let showCc = $state(false);
-  let showBcc = $state(false);
+  // Load CC/BCC visibility preferences from localStorage
+  const savedShowCc = typeof localStorage !== 'undefined' ? localStorage.getItem('compose.showCc') === 'true' : false;
+  const savedShowBcc = typeof localStorage !== 'undefined' ? localStorage.getItem('compose.showBcc') === 'true' : false;
+  let showCc = $state(savedShowCc);
+  let showBcc = $state(savedShowBcc);
+
+  // Persist CC/BCC preferences when they change
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('compose.showCc', String(showCc));
+    }
+  });
+
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('compose.showBcc', String(showBcc));
+    }
+  });
   let sending = $state(false);
   let error = $state("");
   let lastSaved = $state<string | null>(null);
@@ -490,6 +506,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     }
   }
 
+  let ccInput: HTMLInputElement;
+  let bccInput: HTMLInputElement;
+
   function handleKeydown(e: KeyboardEvent) {
     // Handle snippet keyboard navigation first
     if (handleSnippetKeydown(e)) {
@@ -501,6 +520,21 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       e.preventDefault();
       handleSend();
     }
+
+    // Cmd/Ctrl + Shift + C to toggle/focus Cc field
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "c") {
+      e.preventDefault();
+      showCc = true;
+      setTimeout(() => ccInput?.focus(), 0);
+    }
+
+    // Cmd/Ctrl + Shift + B to toggle/focus Bcc field
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      showBcc = true;
+      setTimeout(() => bccInput?.focus(), 0);
+    }
+
     // Escape to close (unless in textarea with content or snippet suggestions shown)
     if (e.key === "Escape") {
       if (showSnippetSuggestions) {
@@ -684,14 +718,14 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     {#if showCc}
       <div class="field">
         <label for="cc">Cc</label>
-        <input id="cc" type="text" bind:value={cc} placeholder="cc@example.com" />
+        <input bind:this={ccInput} id="cc" type="text" bind:value={cc} placeholder="cc@example.com" />
       </div>
     {/if}
 
     {#if showBcc}
       <div class="field">
         <label for="bcc">Bcc</label>
-        <input id="bcc" type="text" bind:value={bcc} placeholder="bcc@example.com" />
+        <input bind:this={bccInput} id="bcc" type="text" bind:value={bcc} placeholder="bcc@example.com" />
       </div>
     {/if}
 
