@@ -96,7 +96,8 @@ export class ImapSmtpProvider implements EmailProvider {
               "[]",
               parsed.isRead ? 1 : 0,
               parsed.isStarred ? 1 : 0,
-              parsed.receivedAt
+              parsed.receivedAt,
+              "inbox"
             );
 
             // Ensure this email is not marked as archived (in case it was un-archived elsewhere)
@@ -160,6 +161,118 @@ export class ImapSmtpProvider implements EmailProvider {
     }
 
     return archived;
+  }
+
+  async syncSent(options?: SyncOptions): Promise<SyncResult> {
+    const client = this.createImapClient();
+    let synced = 0;
+
+    try {
+      await client.connect();
+
+      // List mailboxes to find the sent folder
+      const mailboxes = await client.list();
+      const sentNames = ["Sent", "Sent Items", "Sent Mail", "[Gmail]/Sent Mail", "INBOX.Sent"];
+      let sentFolder: string | null = null;
+
+      // Find existing sent folder
+      for (const name of sentNames) {
+        if (mailboxes.some(m => m.path === name || m.name === name)) {
+          sentFolder = name;
+          break;
+        }
+      }
+
+      if (!sentFolder) {
+        await client.logout();
+        return { synced: 0, total: 0, error: "Sent folder not found" };
+      }
+
+      const lock = await client.getMailboxLock(sentFolder);
+
+      try {
+        const maxMessages = options?.maxMessages || 100;
+
+        // Get total message count
+        const mailbox = client.mailbox;
+        const total = mailbox && typeof mailbox === "object" ? mailbox.exists : 0;
+
+        if (total === 0) {
+          return { synced: 0, total: 0 };
+        }
+
+        // Fetch last N messages (most recent)
+        const start = Math.max(1, total - maxMessages + 1);
+        const range = `${start}:*`;
+
+        for await (const msg of client.fetch(range, {
+          envelope: true,
+          source: true,
+          flags: true,
+          uid: true,
+        })) {
+          try {
+            const parsed = await this.parseImapMessage(msg);
+
+            // Generate composite ID for uniqueness (prefix with 'sent:' to avoid collision with inbox)
+            const emailId = `${this.accountId}:sent:${msg.uid}`;
+
+            emailQueries.upsert.run(
+              emailId,
+              this.accountId,
+              parsed.threadId,
+              parsed.messageId,
+              parsed.subject,
+              parsed.snippet,
+              parsed.fromName,
+              parsed.fromEmail,
+              parsed.toAddresses,
+              parsed.ccAddresses,
+              "",
+              parsed.bodyText,
+              parsed.bodyHtml,
+              "[]",
+              parsed.isRead ? 1 : 0,
+              parsed.isStarred ? 1 : 0,
+              parsed.receivedAt,
+              "sent"
+            );
+
+            // Store inline attachments (those with cid for embedded images)
+            for (const att of parsed.attachments) {
+              const contentId = att.cid || null;
+              if (contentId && att.contentType?.startsWith("image/")) {
+                try {
+                  attachmentQueries.insert.run(
+                    `${emailId}:${contentId}`,
+                    emailId,
+                    contentId,
+                    att.filename || "attachment",
+                    att.contentType,
+                    att.size || att.content.length,
+                    att.content
+                  );
+                } catch (e) {
+                  // Ignore duplicate attachment errors
+                }
+              }
+            }
+
+            synced++;
+          } catch (e) {
+            console.error("Error parsing sent message:", e);
+          }
+        }
+      } finally {
+        lock.release();
+      }
+
+      await client.logout();
+      return { synced, total: synced };
+    } catch (error) {
+      console.error("IMAP syncSent error:", error);
+      return { synced: 0, total: 0, error: String(error) };
+    }
   }
 
   private async parseImapMessage(msg: any): Promise<any> {

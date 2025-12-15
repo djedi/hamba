@@ -48,6 +48,9 @@ export const api = {
   getStarredEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails/starred?accountId=${accountId}&limit=${limit}&offset=${offset}`),
 
+  getSentEmails: (accountId: string, limit = 50, offset = 0) =>
+    request<Email[]>(`/emails/sent?accountId=${accountId}&limit=${limit}&offset=${offset}`),
+
   getEmail: (id: string) => request<Email>(`/emails/${id}`),
 
   getThread: (threadId: string) => request<Email[]>(`/emails/thread/${threadId}`),
@@ -57,6 +60,9 @@ export const api = {
 
   syncEmails: (accountId: string) =>
     request<{ synced: number; total: number }>(`/emails/sync/${accountId}`, { method: "POST" }),
+
+  syncSentEmails: (accountId: string) =>
+    request<{ synced: number; total: number }>(`/emails/sync-sent/${accountId}`, { method: "POST" }),
 
   markRead: (id: string) => request(`/emails/${id}/read`, { method: "POST" }),
   markUnread: (id: string) => request(`/emails/${id}/unread`, { method: "POST" }),

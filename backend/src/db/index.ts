@@ -52,6 +52,9 @@ try {
 // Add username field for IMAP accounts (defaults to email if not specified)
 addColumnIfNotExists("accounts", "username", "TEXT");
 
+// Add folder column to emails for tracking inbox vs sent vs other folders
+addColumnIfNotExists("emails", "folder", "TEXT DEFAULT 'inbox'");
+
 db.run(`
   CREATE TABLE IF NOT EXISTS emails (
     id TEXT PRIMARY KEY,
@@ -74,6 +77,7 @@ db.run(`
     is_trashed INTEGER DEFAULT 0,
     received_at INTEGER,
     created_at INTEGER DEFAULT (unixepoch()),
+    folder TEXT DEFAULT 'inbox',
     FOREIGN KEY (account_id) REFERENCES accounts(id)
   )
 `);
@@ -81,6 +85,7 @@ db.run(`
 db.run(`CREATE INDEX IF NOT EXISTS idx_emails_account_id ON emails(account_id)`);
 db.run(`CREATE INDEX IF NOT EXISTS idx_emails_thread_id ON emails(thread_id)`);
 db.run(`CREATE INDEX IF NOT EXISTS idx_emails_received_at ON emails(received_at DESC)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_emails_folder ON emails(folder)`);
 
 // Attachments table for embedded images and files
 db.run(`
@@ -162,14 +167,15 @@ export const emailQueries = {
     INSERT INTO emails (
       id, account_id, thread_id, message_id, subject, snippet,
       from_name, from_email, to_addresses, cc_addresses, bcc_addresses,
-      body_text, body_html, labels, is_read, is_starred, received_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      body_text, body_html, labels, is_read, is_starred, received_at, folder
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(message_id) DO UPDATE SET
       subject = excluded.subject,
       snippet = excluded.snippet,
       labels = excluded.labels,
       is_read = excluded.is_read,
-      is_starred = excluded.is_starred
+      is_starred = excluded.is_starred,
+      folder = excluded.folder
   `),
 
   markRead: db.prepare("UPDATE emails SET is_read = 1 WHERE id = ?"),
@@ -191,6 +197,13 @@ export const emailQueries = {
   getStarred: db.prepare(`
     SELECT * FROM emails
     WHERE account_id = ? AND is_starred = 1 AND is_trashed = 0
+    ORDER BY received_at DESC
+    LIMIT ? OFFSET ?
+  `),
+
+  getSent: db.prepare(`
+    SELECT * FROM emails
+    WHERE account_id = ? AND folder = 'sent' AND is_trashed = 0
     ORDER BY received_at DESC
     LIMIT ? OFFSET ?
   `),

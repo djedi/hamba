@@ -133,6 +133,38 @@ describe('api', () => {
 		});
 	});
 
+	describe('api.getSentEmails', () => {
+		it('fetches sent emails with default pagination', async () => {
+			const mockEmails = [{ id: '1', subject: 'Sent Email', folder: 'sent' }];
+			mockFetch.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve(mockEmails)
+			});
+
+			const emails = await api.getSentEmails('account-1');
+
+			expect(emails).toEqual(mockEmails);
+			expect(mockFetch).toHaveBeenCalledWith(
+				'http://localhost:3001/emails/sent?accountId=account-1&limit=50&offset=0',
+				expect.any(Object)
+			);
+		});
+
+		it('fetches sent emails with custom pagination', async () => {
+			mockFetch.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([])
+			});
+
+			await api.getSentEmails('account-1', 25, 10);
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				'http://localhost:3001/emails/sent?accountId=account-1&limit=25&offset=10',
+				expect.any(Object)
+			);
+		});
+	});
+
 	describe('api.searchEmails', () => {
 		it('encodes query parameter', async () => {
 			mockFetch.mockResolvedValueOnce({
@@ -175,6 +207,23 @@ describe('api', () => {
 			expect(result).toEqual({ synced: 10, total: 100 });
 			expect(mockFetch).toHaveBeenCalledWith(
 				'http://localhost:3001/emails/sync/account-1',
+				expect.objectContaining({ method: 'POST' })
+			);
+		});
+	});
+
+	describe('api.syncSentEmails', () => {
+		it('calls sync-sent endpoint with POST', async () => {
+			mockFetch.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve({ synced: 5, total: 50 })
+			});
+
+			const result = await api.syncSentEmails('account-1');
+
+			expect(result).toEqual({ synced: 5, total: 50 });
+			expect(mockFetch).toHaveBeenCalledWith(
+				'http://localhost:3001/emails/sync-sent/account-1',
 				expect.objectContaining({ method: 'POST' })
 			);
 		});

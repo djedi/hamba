@@ -11,8 +11,8 @@ export const isLoading = writable(false);
 export const searchQuery = writable("");
 export const view = writable<"inbox" | "email" | "compose">("inbox");
 
-// Current folder (inbox, starred, etc.)
-export type Folder = "inbox" | "starred";
+// Current folder (inbox, starred, sent, etc.)
+export type Folder = "inbox" | "starred" | "sent";
 export const currentFolder = writable<Folder>("inbox");
 
 // Compose state

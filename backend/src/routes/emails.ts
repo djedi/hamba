@@ -52,6 +52,20 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
     );
   })
 
+  .get("/sent", ({ query }) => {
+    const { accountId, limit = "50", offset = "0" } = query;
+
+    if (!accountId) {
+      return { error: "accountId required" };
+    }
+
+    return emailQueries.getSent.all(
+      accountId,
+      parseInt(limit as string),
+      parseInt(offset as string)
+    );
+  })
+
   .post("/sync/:accountId", async ({ params }) => {
     try {
       const provider = getProvider(params.accountId);
@@ -62,6 +76,16 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
         notifySyncComplete(params.accountId, result.synced);
       }
 
+      return result;
+    } catch (error) {
+      return { error: String(error), synced: 0, total: 0 };
+    }
+  })
+
+  .post("/sync-sent/:accountId", async ({ params }) => {
+    try {
+      const provider = getProvider(params.accountId);
+      const result = await provider.syncSent({ maxMessages: 100 });
       return result;
     } catch (error) {
       return { error: String(error), synced: 0, total: 0 };

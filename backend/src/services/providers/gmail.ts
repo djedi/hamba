@@ -196,7 +196,8 @@ export class GmailProvider implements EmailProvider {
           parsed.labels,
           parsed.isRead ? 1 : 0,
           parsed.isStarred ? 1 : 0,
-          parsed.receivedAt
+          parsed.receivedAt,
+          "inbox"
         );
 
         // Ensure this email is not marked as archived (in case it was moved back to INBOX)
@@ -262,6 +263,117 @@ export class GmailProvider implements EmailProvider {
     }
 
     return archived;
+  }
+
+  async syncSent(options?: SyncOptions): Promise<SyncResult> {
+    const tokenResult = await this.getTokenWithError();
+
+    if (!tokenResult.accessToken) {
+      return {
+        synced: 0,
+        total: 0,
+        error: tokenResult.error || "Not authenticated",
+      };
+    }
+
+    const accessToken = tokenResult.accessToken;
+    const maxMessages = options?.maxMessages || 100;
+
+    // Fetch message list from Gmail - only SENT messages
+    const listResponse = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxMessages}&labelIds=SENT`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    if (!listResponse.ok) {
+      const err = await listResponse.json() as { error?: { message?: string } };
+      return { synced: 0, total: 0, error: err.error?.message || "Failed to fetch sent messages" };
+    }
+
+    const listData = await listResponse.json() as { messages?: Array<{ id: string }> };
+    const messages = listData.messages || [];
+
+    // Fetch full message details in batches
+    let synced = 0;
+    const batchSize = 20;
+
+    for (let i = 0; i < messages.length; i += batchSize) {
+      const batch = messages.slice(i, i + batchSize);
+
+      const messagePromises = batch.map((m: any) =>
+        fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        ).then((res) => res.json() as Promise<any>)
+      );
+
+      const fullMessages = await Promise.all(messagePromises);
+
+      for (const msg of fullMessages) {
+        if (msg.error) continue;
+
+        const parsed = parseGmailMessage(msg, this.accountId);
+        const { text, html, attachments } = extractBodyAndAttachments(msg.payload);
+
+        emailQueries.upsert.run(
+          parsed.id,
+          parsed.accountId,
+          parsed.threadId,
+          parsed.messageId,
+          parsed.subject,
+          parsed.snippet,
+          parsed.fromName,
+          parsed.fromEmail,
+          parsed.toAddresses,
+          parsed.ccAddresses,
+          parsed.bccAddresses,
+          text,
+          html,
+          parsed.labels,
+          parsed.isRead ? 1 : 0,
+          parsed.isStarred ? 1 : 0,
+          parsed.receivedAt,
+          "sent"
+        );
+
+        // Fetch and store inline attachments (those with contentId for cid: references)
+        for (const att of attachments) {
+          if (att.contentId && att.mimeType.startsWith("image/")) {
+            try {
+              const attResponse = await fetch(
+                `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}/attachments/${att.attachmentId}`,
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+              );
+
+              if (attResponse.ok) {
+                const attData = await attResponse.json() as { data: string; size: number };
+                // Gmail returns base64url encoded data
+                const binaryData = Buffer.from(
+                  attData.data.replace(/-/g, "+").replace(/_/g, "/"),
+                  "base64"
+                );
+
+                attachmentQueries.insert.run(
+                  `${parsed.id}:${att.contentId}`,
+                  parsed.id,
+                  att.contentId,
+                  att.filename,
+                  att.mimeType,
+                  binaryData.length,
+                  binaryData
+                );
+              }
+            } catch (e) {
+              console.error(`Failed to fetch attachment ${att.contentId}:`, e);
+            }
+          }
+        }
+
+        synced++;
+      }
+    }
+
+    return { synced, total: messages.length };
   }
 
   private async modifyMessage(emailId: string, modifications: { addLabelIds?: string[]; removeLabelIds?: string[] }): Promise<void> {

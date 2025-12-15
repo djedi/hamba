@@ -212,9 +212,17 @@ describe('stores', () => {
 			expect(get(currentFolder)).toBe('starred');
 		});
 
-		it('can switch between inbox and starred', () => {
+		it('can be set to sent', () => {
+			currentFolder.set('sent');
+			expect(get(currentFolder)).toBe('sent');
+		});
+
+		it('can switch between inbox, starred, and sent', () => {
 			currentFolder.set('starred');
 			expect(get(currentFolder)).toBe('starred');
+
+			currentFolder.set('sent');
+			expect(get(currentFolder)).toBe('sent');
 
 			currentFolder.set('inbox');
 			expect(get(currentFolder)).toBe('inbox');

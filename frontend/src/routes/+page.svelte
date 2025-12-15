@@ -126,9 +126,14 @@
       if (currentAccountId && data.accountId === currentAccountId) {
         // Silently refresh emails without showing loading state
         const folder = $currentFolder;
-        const fetchPromise = folder === "starred"
-          ? api.getStarredEmails(currentAccountId)
-          : api.getEmails(currentAccountId);
+        let fetchPromise;
+        if (folder === "starred") {
+          fetchPromise = api.getStarredEmails(currentAccountId);
+        } else if (folder === "sent") {
+          fetchPromise = api.getSentEmails(currentAccountId);
+        } else {
+          fetchPromise = api.getEmails(currentAccountId);
+        }
 
         fetchPromise.then(msgs => {
           const currentSelectedId = $selectedEmailId;
@@ -166,13 +171,20 @@
     }
   }
 
-  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred") {
+  async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent") {
     isLoading.set(true);
     try {
       const targetFolder = folder ?? $currentFolder;
-      const msgs = targetFolder === "starred"
-        ? await api.getStarredEmails(accountId)
-        : await api.getEmails(accountId);
+      let msgs;
+      if (targetFolder === "starred") {
+        msgs = await api.getStarredEmails(accountId);
+      } else if (targetFolder === "sent") {
+        // Sync sent emails first, then load them
+        await api.syncSentEmails(accountId);
+        msgs = await api.getSentEmails(accountId);
+      } else {
+        msgs = await api.getEmails(accountId);
+      }
       emails.set(msgs);
 
       if (msgs.length > 0) {
