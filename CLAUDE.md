@@ -256,3 +256,35 @@ docker run -p 3001:3001 -v $(pwd)/data:/app/data --env-file .env hamba-backend
 The backend exposes health endpoints used by Docker:
 - `GET /health` - Basic health check
 - `GET /health/detailed` - Detailed health with metrics
+
+## CI/CD Pipeline
+
+GitHub Actions workflows are configured in `.github/workflows/`:
+
+### CI Workflow (ci.yml)
+Runs on all pushes and pull requests to master:
+- **Lint & Typecheck**: Runs `bun run check` on frontend
+- **Backend Tests**: Runs `bun test` in backend
+- **Frontend Tests**: Runs `bun run test` in frontend
+- **Build**: Builds frontend after all checks pass
+
+### Deploy Workflow (deploy.yml)
+Runs on pushes to master and manual triggers:
+- Builds Docker images for backend and frontend
+- Pushes to GitHub Container Registry (ghcr.io)
+- Images are tagged with commit SHA and `latest`
+
+### Running CI Locally
+```bash
+# Type checking
+cd frontend && bun run check
+
+# All tests
+./test
+
+# Just frontend tests
+./test fe
+
+# Just backend tests
+./test be
+```

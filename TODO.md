@@ -130,7 +130,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Dockerize the application** - Create Dockerfile for backend and frontend. Docker Compose for local development. Document deployment process.
 
-- [ ] **Add CI/CD pipeline** - GitHub Actions for: lint, typecheck, test on PR. Auto-deploy on merge to main.
+- [x] **Add CI/CD pipeline** - GitHub Actions for: lint, typecheck, test on PR. Auto-deploy on merge to main.
 
 ## Documentation
 
