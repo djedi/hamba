@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { initKeyboardNavigation } from "$lib/keyboard";
   import { registerServiceWorker, initOnlineListener } from "$lib/offline";
+  import ErrorBoundary from "$lib/components/ErrorBoundary.svelte";
 
   let { children } = $props();
 
@@ -30,4 +31,6 @@
   <link rel="manifest" href="/manifest.json" />
 </svelte:head>
 
-{@render children()}
+<ErrorBoundary>
+  {@render children()}
+</ErrorBoundary>

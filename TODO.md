@@ -88,7 +88,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ### Error Handling
 
-- [ ] **Add global error boundary** - Catch and display errors gracefully. Show "Something went wrong" with retry button instead of crashing.
+- [x] **Add global error boundary** - Catch and display errors gracefully. Show "Something went wrong" with retry button instead of crashing.
 
 - [ ] **Add connection status indicator** - Show when offline or WebSocket disconnected. Auto-reconnect with exponential backoff. Show "Reconnecting..." status.
 
