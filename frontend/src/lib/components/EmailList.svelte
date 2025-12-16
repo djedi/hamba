@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { emails, selectedEmailId, selectedIndex } from "$lib/stores";
+  import { emails, selectedEmailId, selectedIndex, searchQuery } from "$lib/stores";
+  import { extractSearchTerms } from "$lib/search";
   import EmailRow from "./EmailRow.svelte";
 
   interface Props {
@@ -7,6 +8,9 @@
   }
 
   let { loading = false }: Props = $props();
+
+  // Extract search terms from the current search query
+  const searchTerms = $derived(extractSearchTerms($searchQuery));
 </script>
 
 <div class="email-list">
@@ -28,6 +32,7 @@
           {email}
           selected={email.id === $selectedEmailId}
           {index}
+          {searchTerms}
         />
       {/each}
     </div>

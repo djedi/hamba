@@ -2,14 +2,16 @@
   import type { Email } from "$lib/api";
   import { selectedEmailId, selectedIndex, view, emailActions, prefetchEmail, emailLabelsCache, labelActions } from "$lib/stores";
   import { onMount } from "svelte";
+  import HighlightText from "./HighlightText.svelte";
 
   interface Props {
     email: Email;
     selected: boolean;
     index: number;
+    searchTerms?: string[];
   }
 
-  let { email, selected, index }: Props = $props();
+  let { email, selected, index, searchTerms = [] }: Props = $props();
 
   // Get labels for this email from cache
   const emailLabels = $derived($emailLabelsCache.get(email.id) || []);
@@ -88,11 +90,21 @@
   </span>
 
   <div class="sender">
-    {email.from_name || email.from_email.split("@")[0]}
+    {#if searchTerms.length > 0}
+      <HighlightText text={email.from_name || email.from_email.split("@")[0]} {searchTerms} />
+    {:else}
+      {email.from_name || email.from_email.split("@")[0]}
+    {/if}
   </div>
 
   <div class="content">
-    <span class="subject">{email.subject || "(no subject)"}</span>
+    <span class="subject">
+      {#if searchTerms.length > 0}
+        <HighlightText text={email.subject || "(no subject)"} {searchTerms} />
+      {:else}
+        {email.subject || "(no subject)"}
+      {/if}
+    </span>
     {#if emailLabels.length > 0}
       <span class="labels">
         {#each emailLabels.slice(0, 2) as label (label.id)}
@@ -106,7 +118,13 @@
       </span>
     {/if}
     <span class="separator">—</span>
-    <span class="snippet">{email.snippet}</span>
+    <span class="snippet">
+      {#if searchTerms.length > 0}
+        <HighlightText text={email.snippet} {searchTerms} />
+      {:else}
+        {email.snippet}
+      {/if}
+    </span>
   </div>
 
   <div class="date">{formatDate(email.received_at)}</div>

@@ -1,8 +1,13 @@
 <script lang="ts">
-  import { selectedEmail, view, emails, composeMode, replyToEmail, emailActions, selectedIndex, selectedEmailId, currentFolder } from "$lib/stores";
+  import { selectedEmail, view, emails, composeMode, replyToEmail, emailActions, selectedIndex, selectedEmailId, currentFolder, searchQuery } from "$lib/stores";
   import { get } from "svelte/store";
+  import { extractSearchTerms, highlightHTMLContent, getHighlightCSS } from "$lib/search";
+  import HighlightText from "./HighlightText.svelte";
 
   let iframeRef: HTMLIFrameElement;
+
+  // Extract search terms from the current search query
+  const searchTerms = $derived(extractSearchTerms($searchQuery));
 
   // Escape HTML entities for plain text display
   function escapeHtml(text: string): string {
@@ -56,15 +61,26 @@
   }
 
   // Write email content to iframe for CSS isolation
-  function renderEmailBody(iframe: HTMLIFrameElement, html: string, emailId: string, isPlainText = false) {
+  function renderEmailBody(iframe: HTMLIFrameElement, html: string, emailId: string, isPlainText = false, terms: string[] = []) {
     if (!iframe) return;
 
     const doc = iframe.contentDocument;
     if (!doc) return;
 
-    const content = isPlainText
-      ? `<pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${escapeHtml(html)}</pre>`
-      : sanitizeEmailHtml(html, emailId);
+    let content: string;
+    if (isPlainText) {
+      // For plain text, escape HTML first, then apply highlighting
+      const escaped = escapeHtml(html);
+      const highlighted = terms.length > 0 ? highlightHTMLContent(escaped, terms) : escaped;
+      content = `<pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${highlighted}</pre>`;
+    } else {
+      // For HTML, sanitize first, then apply highlighting
+      const sanitized = sanitizeEmailHtml(html, emailId);
+      content = terms.length > 0 ? highlightHTMLContent(sanitized, terms) : sanitized;
+    }
+
+    // Add highlight CSS if we have search terms
+    const highlightCSS = terms.length > 0 ? getHighlightCSS() : "";
 
     doc.open();
     doc.write(`
@@ -118,6 +134,7 @@
             td, th { vertical-align: top; }
             hr { border-color: #bbb; }
             pre, code { background: #f5f5f5; }
+            ${highlightCSS}
           </style>
         </head>
         <body>${content}</body>
@@ -133,14 +150,14 @@
     }, 100);
   }
 
-  // Reactively update iframe when email changes
+  // Reactively update iframe when email or search terms change
   // Dark mode is applied via CSS filter (invert + hue-rotate) in the iframe
   $effect(() => {
     if ($selectedEmail && iframeRef) {
       if ($selectedEmail.body_html) {
-        renderEmailBody(iframeRef, $selectedEmail.body_html, $selectedEmail.id);
+        renderEmailBody(iframeRef, $selectedEmail.body_html, $selectedEmail.id, false, searchTerms);
       } else if ($selectedEmail.body_text) {
-        renderEmailBody(iframeRef, $selectedEmail.body_text, $selectedEmail.id, true);
+        renderEmailBody(iframeRef, $selectedEmail.body_text, $selectedEmail.id, true, searchTerms);
       }
     }
   });
@@ -277,7 +294,13 @@
     </header>
 
     <div class="content">
-      <h1 class="subject">{$selectedEmail.subject || "(no subject)"}</h1>
+      <h1 class="subject">
+        {#if searchTerms.length > 0}
+          <HighlightText text={$selectedEmail.subject || "(no subject)"} {searchTerms} />
+        {:else}
+          {$selectedEmail.subject || "(no subject)"}
+        {/if}
+      </h1>
 
       <div class="meta">
         <div class="sender-info">
@@ -286,7 +309,11 @@
           </div>
           <div class="sender-details">
             <div class="sender-name">
-              {$selectedEmail.from_name || $selectedEmail.from_email}
+              {#if searchTerms.length > 0}
+                <HighlightText text={$selectedEmail.from_name || $selectedEmail.from_email} {searchTerms} />
+              {:else}
+                {$selectedEmail.from_name || $selectedEmail.from_email}
+              {/if}
             </div>
             <div class="sender-email">&lt;{$selectedEmail.from_email}&gt;</div>
           </div>

@@ -46,7 +46,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Improve search UI** - Add a prominent search bar (keyboard shortcut `/`). Show search results in main view. Support operators: `from:`, `to:`, `subject:`, `has:attachment`, `is:unread`, `is:starred`, `before:`, `after:`. Use the existing FTS5 virtual table.
 
-- [ ] **Add search highlighting** - When viewing search results, highlight matching terms in the email list and email body.
+- [x] **Add search highlighting** - When viewing search results, highlight matching terms in the email list and email body.
 
 ## AI Features
 
