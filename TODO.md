@@ -124,7 +124,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add API documentation** - Document all backend API endpoints with request/response schemas. Consider OpenAPI/Swagger spec.
 
-- [ ] **Add database migrations system** - Current schema changes are ad-hoc. Implement proper migrations with version tracking. Tools: `umzug`, `kysely`, or custom.
+- [x] **Add database migrations system** - Current schema changes are ad-hoc. Implement proper migrations with version tracking. Tools: `umzug`, `kysely`, or custom.
 
 - [ ] **Add logging and monitoring** - Structured logging for backend. Error tracking integration (Sentry). Basic analytics for performance monitoring.
 

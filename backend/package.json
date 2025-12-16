@@ -7,7 +7,11 @@
     "dev": "bun --env-file=../.env --hot run src/index.ts",
     "start": "bun --env-file=../.env run src/index.ts",
     "test": "bun test",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage",
+    "migrate": "bun run src/db/migrate.ts",
+    "migrate:status": "bun run src/db/migrate.ts status",
+    "migrate:rollback": "bun run src/db/migrate.ts rollback",
+    "migrate:create": "bun run src/db/migrate.ts create"
   },
   "devDependencies": {
     "@types/bun": "latest",

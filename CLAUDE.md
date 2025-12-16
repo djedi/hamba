@@ -61,7 +61,17 @@ Email HTML is rendered in a sandboxed iframe (`EmailView.svelte`) for CSS isolat
 
 ### Database
 
-SQLite via `bun:sqlite`. Tables: `accounts`, `emails`, `attachments`. FTS5 virtual table `emails_fts` for search.
+SQLite via `bun:sqlite`. Tables: `accounts`, `emails`, `attachments`, `drafts`, `labels`, `snippets`, `contacts`, `signatures`, etc. FTS5 virtual table `emails_fts` for search.
+
+**Migrations:**
+```bash
+cd backend && bun run migrate              # Run pending migrations
+cd backend && bun run migrate:status       # Show migration status
+cd backend && bun run migrate:rollback     # Rollback last migration
+cd backend && bun run migrate:create name  # Create new migration
+```
+
+Migration files live in `backend/src/db/migrations/`. Each migration exports `up()` and `down()` functions. The system automatically bootstraps existing databases when first run.
 
 ## Environment
 
