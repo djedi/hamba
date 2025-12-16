@@ -41,6 +41,7 @@ export const currentDraftId = writable<string | null>(null);
 // Compose state
 export const composeMode = writable<"new" | "reply" | "replyAll" | "forward">("new");
 export const replyToEmail = writable<Email | null>(null);
+export const composePrefillBody = writable<string | null>(null);
 
 // Command palette
 export const isCommandPaletteOpen = writable(false);

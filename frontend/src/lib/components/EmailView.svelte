@@ -4,6 +4,7 @@
   import { extractSearchTerms, highlightHTMLContent, getHighlightCSS } from "$lib/search";
   import { api } from "$lib/api";
   import HighlightText from "./HighlightText.svelte";
+  import SmartReplySuggestions from "./SmartReplySuggestions.svelte";
 
   // AI Summary state
   let showSummary = $state(false);
@@ -422,6 +423,10 @@
           <p class="no-content">No content</p>
         {/if}
       </div>
+
+      {#if $currentFolder !== "sent" && $currentFolder !== "drafts" && $currentFolder !== "scheduled"}
+        <SmartReplySuggestions email={$selectedEmail} />
+      {/if}
     </div>
   </div>
 {/if}

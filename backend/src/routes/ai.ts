@@ -561,4 +561,132 @@ ${emailSummaries}`;
 
       return { success: false, error: error.message || "Failed to classify emails" };
     }
+  })
+
+  // Generate smart reply suggestions for an email
+  .post("/smart-replies", async ({ body }) => {
+    const { emailId } = body as {
+      emailId: string;
+    };
+
+    if (!emailId || typeof emailId !== "string") {
+      return { success: false, error: "Email ID is required" };
+    }
+
+    try {
+      // Fetch the email
+      const email = emailQueries.getById.get(emailId) as {
+        id: string;
+        subject: string;
+        from_name: string;
+        from_email: string;
+        body_text: string;
+        body_html: string;
+      } | undefined;
+
+      if (!email) {
+        return { success: false, error: "Email not found" };
+      }
+
+      // Get the email body text
+      let bodyText = email.body_text || "";
+
+      // If no plain text, try to extract from HTML
+      if (!bodyText && email.body_html) {
+        bodyText = email.body_html
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      if (!bodyText || bodyText.length < 10) {
+        return { success: false, error: "Email is too short to generate replies" };
+      }
+
+      // Truncate very long emails
+      const maxLength = 4000;
+      if (bodyText.length > maxLength) {
+        bodyText = bodyText.substring(0, maxLength) + "...";
+      }
+
+      const client = getAnthropicClient();
+
+      const systemMessage = `You are a helpful assistant that generates smart reply suggestions for emails.
+
+Generate exactly 3 short, contextually appropriate reply options. Each reply should be:
+- Brief (1-2 sentences max)
+- Different in tone/purpose: one positive/agreeable, one neutral/informative, one that asks a follow-up question or declines
+- Natural and professional
+- Ready to send as-is (no placeholders like [name] or [date])
+
+Output ONLY a JSON array with exactly 3 strings, nothing else.
+Example: ["Sounds great, I'm in!", "Thanks for letting me know.", "Can we discuss this further next week?"]`;
+
+      const userMessage = `Generate 3 smart reply suggestions for this email:
+
+From: ${email.from_name || email.from_email}
+Subject: ${email.subject || "(no subject)"}
+
+${bodyText}`;
+
+      const response = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 256,
+        system: systemMessage,
+        messages: [
+          {
+            role: "user",
+            content: userMessage,
+          },
+        ],
+      });
+
+      const textContent = response.content.find((block) => block.type === "text");
+      if (!textContent || textContent.type !== "text") {
+        return { success: false, error: "No text content in response" };
+      }
+
+      // Parse the JSON array response
+      let replies: string[];
+      try {
+        // Extract JSON array from the response (handle markdown code blocks)
+        const jsonMatch = textContent.text.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+          throw new Error("No JSON array found in response");
+        }
+        replies = JSON.parse(jsonMatch[0]);
+
+        // Ensure we have exactly 3 strings
+        if (!Array.isArray(replies) || replies.length === 0) {
+          throw new Error("Invalid reply format");
+        }
+        replies = replies.slice(0, 3).filter(r => typeof r === "string" && r.trim());
+      } catch (parseError) {
+        console.error("Failed to parse smart replies response:", textContent.text);
+        return { success: false, error: "Failed to parse AI response" };
+      }
+
+      return {
+        success: true,
+        replies,
+      };
+    } catch (error: any) {
+      console.error("AI smart replies error:", error);
+
+      if (error.message?.includes("ANTHROPIC_API_KEY")) {
+        return { success: false, error: "AI is not configured. Please add your ANTHROPIC_API_KEY to the .env file." };
+      }
+
+      if (error.status === 401) {
+        return { success: false, error: "Invalid API key. Please check your ANTHROPIC_API_KEY." };
+      }
+
+      if (error.status === 429) {
+        return { success: false, error: "Rate limit exceeded. Please try again later." };
+      }
+
+      return { success: false, error: error.message || "Failed to generate smart replies" };
+    }
   });

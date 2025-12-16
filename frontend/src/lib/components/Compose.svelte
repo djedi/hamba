@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { api, type Email, type Draft } from "$lib/api";
-  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails, snippets, snippetActions } from "$lib/stores";
+  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails, snippets, snippetActions, composePrefillBody } from "$lib/stores";
   import EmailInput from "./EmailInput.svelte";
   import { get } from "svelte/store";
 
@@ -272,6 +272,13 @@
       } else if (mode === "forward") {
         subject = replyTo.subject.startsWith("Fwd:") ? replyTo.subject : `Fwd: ${replyTo.subject}`;
         body = buildForwardedMessage(replyTo);
+      }
+
+      // Check for smart reply prefill
+      const prefillBody = get(composePrefillBody);
+      if (prefillBody) {
+        body = prefillBody + body;
+        composePrefillBody.set(null); // Clear after use
       }
     }
 

@@ -369,6 +369,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ accountId, limit, force }),
     }),
+
+  aiSmartReplies: (emailId: string) =>
+    request<{ success: boolean; replies?: string[]; error?: string }>("/ai/smart-replies", {
+      method: "POST",
+      body: JSON.stringify({ emailId }),
+    }),
 };
 
 export interface Account {
