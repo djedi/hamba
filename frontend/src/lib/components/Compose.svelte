@@ -57,6 +57,10 @@
   let snippetQuery = $state("");
   let showSnippetSuggestions = $state(false);
   let selectedSnippetIndex = $state(0);
+  let showAiModal = $state(false);
+  let aiPrompt = $state("");
+  let aiGenerating = $state(false);
+  let aiError = $state("");
 
   let fileInput: HTMLInputElement;
   let bodyTextarea: HTMLTextAreaElement;
@@ -532,6 +536,12 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       setTimeout(() => document.querySelector<HTMLInputElement>("#bcc input")?.focus(), 0);
     }
 
+    // Cmd/Ctrl + J to open AI compose modal
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
+      e.preventDefault();
+      openAiModal();
+    }
+
     // Escape to close (unless in textarea with content or snippet suggestions shown)
     if (e.key === "Escape") {
       if (showSnippetSuggestions) {
@@ -671,6 +681,101 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     }
 
     handleSchedule(sendAt);
+  }
+
+  function openAiModal() {
+    showAiModal = true;
+    aiPrompt = "";
+    aiError = "";
+    // Focus the input after the modal renders
+    setTimeout(() => {
+      document.querySelector<HTMLInputElement>(".ai-modal-input")?.focus();
+    }, 50);
+  }
+
+  function closeAiModal() {
+    showAiModal = false;
+    aiPrompt = "";
+    aiError = "";
+    aiGenerating = false;
+  }
+
+  async function handleAiGenerate() {
+    if (!aiPrompt.trim()) {
+      aiError = "Please enter a prompt";
+      return;
+    }
+
+    aiGenerating = true;
+    aiError = "";
+
+    try {
+      // Build context for reply/forward modes
+      let context: { replyTo?: { subject: string; from: string; body: string }; mode?: "new" | "reply" | "replyAll" | "forward" } | undefined;
+
+      if (replyTo && mode !== "new") {
+        context = {
+          replyTo: {
+            subject: replyTo.subject,
+            from: replyTo.from_email,
+            body: replyTo.body_text || replyTo.body_html?.replace(/<[^>]*>/g, '') || '',
+          },
+          mode,
+        };
+      }
+
+      const result = await api.aiCompose({
+        prompt: aiPrompt.trim(),
+        context,
+      });
+
+      if (result.success && result.content) {
+        // Insert the generated content at the cursor position or at the beginning
+        if (bodyTextarea) {
+          const cursorPos = bodyTextarea.selectionStart || 0;
+          const beforeCursor = body.slice(0, cursorPos);
+          const afterCursor = body.slice(cursorPos);
+
+          // If inserting at the start or body is empty, just prepend
+          if (cursorPos === 0 || !body.trim()) {
+            body = result.content + (body.trim() ? "\n\n" + body : "");
+          } else {
+            // Insert at cursor
+            body = beforeCursor + result.content + afterCursor;
+          }
+
+          // Move cursor after inserted content
+          setTimeout(() => {
+            if (bodyTextarea) {
+              const newPos = cursorPos + result.content.length;
+              bodyTextarea.setSelectionRange(newPos, newPos);
+              bodyTextarea.focus();
+            }
+          }, 0);
+        } else {
+          body = result.content;
+        }
+
+        closeAiModal();
+      } else {
+        aiError = result.error || "Failed to generate email";
+      }
+    } catch (err) {
+      aiError = err instanceof Error ? err.message : "Failed to generate email";
+    } finally {
+      aiGenerating = false;
+    }
+  }
+
+  function handleAiKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleAiGenerate();
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeAiModal();
+    }
   }
 </script>
 
@@ -871,12 +976,52 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     <button class="attach-btn" onclick={() => fileInput?.click()}>
       📎 Attach
     </button>
+    <button class="ai-btn" onclick={openAiModal} disabled={aiGenerating}>
+      ✨ AI
+      <kbd>⌘J</kbd>
+    </button>
     <button class="discard-btn" onclick={handleClose}>Discard</button>
     {#if lastSaved}
       <span class="saved-indicator">Saved at {lastSaved}</span>
     {/if}
   </footer>
 </div>
+
+{#if showAiModal}
+  <div class="ai-modal-overlay" onclick={closeAiModal}>
+    <div class="ai-modal" onclick={(e) => e.stopPropagation()} onkeydown={handleAiKeydown}>
+      <div class="ai-modal-header">
+        <h3>✨ Write with AI</h3>
+        <button class="ai-modal-close" onclick={closeAiModal}>✕</button>
+      </div>
+      <div class="ai-modal-body">
+        <label for="ai-prompt">What would you like to write?</label>
+        <textarea
+          id="ai-prompt"
+          class="ai-modal-input"
+          bind:value={aiPrompt}
+          placeholder="e.g., &quot;Politely decline the meeting request&quot;, &quot;Ask for a follow-up meeting next week&quot;, &quot;Thank them for the opportunity&quot;"
+          rows={3}
+          disabled={aiGenerating}
+        ></textarea>
+        {#if aiError}
+          <div class="ai-modal-error">{aiError}</div>
+        {/if}
+      </div>
+      <div class="ai-modal-footer">
+        <button class="ai-modal-cancel" onclick={closeAiModal} disabled={aiGenerating}>Cancel</button>
+        <button class="ai-modal-generate primary" onclick={handleAiGenerate} disabled={aiGenerating || !aiPrompt.trim()}>
+          {#if aiGenerating}
+            Generating...
+          {:else}
+            Generate
+          {/if}
+          <kbd>↵</kbd>
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .compose {
@@ -1386,5 +1531,188 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     border: 1px solid var(--border);
     border-radius: 3px;
     margin: 0 2px;
+  }
+
+  /* AI Button */
+  .ai-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: white;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: filter 0.15s ease, transform 0.1s ease;
+  }
+
+  .ai-btn:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+
+  .ai-btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .ai-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ai-btn kbd {
+    opacity: 0.7;
+    font-size: 11px;
+    font-family: inherit;
+  }
+
+  /* AI Modal */
+  .ai-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(2px);
+  }
+
+  .ai-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    width: 100%;
+    max-width: 500px;
+    margin: 16px;
+    overflow: hidden;
+  }
+
+  .ai-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ai-modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .ai-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+  }
+
+  .ai-modal-close:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  .ai-modal-body {
+    padding: 20px;
+  }
+
+  .ai-modal-body label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .ai-modal-input {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 80px;
+  }
+
+  .ai-modal-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  }
+
+  .ai-modal-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .ai-modal-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ai-modal-error {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    color: #ef4444;
+    font-size: 13px;
+  }
+
+  .ai-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-primary);
+  }
+
+  .ai-modal-cancel {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 16px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .ai-modal-cancel:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .ai-modal-cancel:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ai-modal-generate {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ai-modal-generate kbd {
+    opacity: 0.7;
+    font-size: 11px;
+  }
+
+  .ai-modal-generate:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>

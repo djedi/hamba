@@ -70,6 +70,9 @@ Requires `.env` in root with:
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 REDIRECT_URI=http://localhost:3001/auth/callback
+
+# Optional: For AI email composition (Cmd+J in compose)
+ANTHROPIC_API_KEY=...
 ```
 
 ## Key Patterns

@@ -332,6 +332,25 @@ export const api = {
     request<{ success: boolean; error?: string }>(`/contacts/${id}`, {
       method: "DELETE",
     }),
+
+  // AI
+  getAiStatus: () => request<{ configured: boolean }>("/ai/status"),
+
+  aiCompose: (params: {
+    prompt: string;
+    context?: {
+      replyTo?: {
+        subject: string;
+        from: string;
+        body: string;
+      };
+      mode?: "new" | "reply" | "replyAll" | "forward";
+    };
+  }) =>
+    request<{ success: boolean; content?: string; error?: string }>("/ai/compose", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
 };
 
 export interface Account {

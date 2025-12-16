@@ -50,7 +50,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ## AI Features
 
-- [ ] **AI Email Composer** - Integrate with Claude/OpenAI API. Add "Write with AI" button in compose. User provides brief prompt ("decline politely", "ask for meeting next week"), AI generates full email. Keyboard shortcut `Cmd+J`.
+- [x] **AI Email Composer** - Integrate with Claude/OpenAI API. Add "Write with AI" button in compose. User provides brief prompt ("decline politely", "ask for meeting next week"), AI generates full email. Keyboard shortcut `Cmd+J`.
 
 - [ ] **AI Email Summarization** - For long emails/threads, show "Summarize" button. Use AI to generate 2-3 sentence summary. Cache summaries in database.
 
