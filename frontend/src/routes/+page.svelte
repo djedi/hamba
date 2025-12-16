@@ -34,7 +34,7 @@
   } from "$lib/stores";
   import type { Draft } from "$lib/api";
   import EmailList from "$lib/components/EmailList.svelte";
-  import EmailView from "$lib/components/EmailView.svelte";
+  import ThreadView from "$lib/components/ThreadView.svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
   import SearchBar from "$lib/components/SearchBar.svelte";
@@ -482,7 +482,7 @@
         <EmailList loading={$isLoading} onLoadMore={loadMoreEmails} folder={$currentFolder} inboxTab={$inboxTab} />
       {/if}
     {:else if $view === "email"}
-      <EmailView />
+      <ThreadView />
     {:else if $view === "compose"}
       <Compose replyTo={$replyToEmail} mode={$composeMode} draft={selectedDraft} />
     {/if}
