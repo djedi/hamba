@@ -138,7 +138,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Write CONTRIBUTING guide** - How to set up dev environment, code style, PR process, issue templates.
 
-- [ ] **Create demo video/GIF** - Show off key features: keyboard navigation, split inbox, snooze, AI compose.
+- [x] **Create demo video/GIF** - Show off key features: keyboard navigation, split inbox, snooze, AI compose. Demo script created at `docs/DEMO_SCRIPT.md`.
 
 ## Future / Nice-to-Have
 

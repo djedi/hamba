@@ -21,6 +21,11 @@
 
 **Hamba** (pronounced _hahm-bah_) is a Xhosa word meaning "go" or "move" — reflecting the app's focus on speed and efficiency. In Xhosa culture, "Hamba kahle" means "go well" or "travel safely."
 
+<!-- Demo GIF: Record following docs/DEMO_SCRIPT.md and place demo.gif in repo root -->
+<!-- <p align="center">
+  <img src="demo.gif" alt="Hamba Demo" width="800" />
+</p> -->
+
 ## Features
 
 ### Core Email Features
