@@ -1,6 +1,7 @@
 import type { EmailProvider } from "./types";
 import { GmailProvider } from "./gmail";
 import { ImapSmtpProvider } from "./imap-smtp";
+import { MicrosoftProvider } from "./microsoft";
 import { accountQueries } from "../../db";
 
 export function getProvider(accountId: string): EmailProvider {
@@ -14,6 +15,10 @@ export function getProvider(accountId: string): EmailProvider {
     return new ImapSmtpProvider(accountId);
   }
 
+  if (account.provider_type === "microsoft") {
+    return new MicrosoftProvider(accountId);
+  }
+
   // Default to Gmail
   return new GmailProvider(accountId);
 }
@@ -21,3 +26,4 @@ export function getProvider(accountId: string): EmailProvider {
 export * from "./types";
 export { GmailProvider } from "./gmail";
 export { ImapSmtpProvider } from "./imap-smtp";
+export { MicrosoftProvider } from "./microsoft";

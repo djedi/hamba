@@ -1,12 +1,16 @@
 import { Elysia, t } from "elysia";
 import { accountQueries, db } from "../db";
-import { getValidAccessToken, tokenNeedsRefresh } from "../services/token";
-import { ImapSmtpProvider } from "../services/providers";
+import { getValidAccessToken, getMicrosoftAccessToken, tokenNeedsRefresh } from "../services/token";
+import { ImapSmtpProvider, MicrosoftProvider } from "../services/providers";
 import { startIdle } from "../services/imap-idle";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
 const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:3001/auth/callback";
+
+const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || "";
+const MICROSOFT_CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET || "";
+const MICROSOFT_REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI || "http://localhost:3001/auth/microsoft/callback";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -14,6 +18,13 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.send",
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
+].join(" ");
+
+const MICROSOFT_SCOPES = [
+  "https://graph.microsoft.com/Mail.ReadWrite",
+  "https://graph.microsoft.com/Mail.Send",
+  "https://graph.microsoft.com/User.Read",
+  "offline_access",
 ].join(" ");
 
 export const authRoutes = new Elysia({ prefix: "/auth" })
@@ -84,6 +95,98 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
     // Redirect to frontend with success
     return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(user.email)}`);
+  })
+
+  // Microsoft OAuth routes
+  .get("/login/microsoft", ({ redirect }) => {
+    if (!MICROSOFT_CLIENT_ID) {
+      return { error: "Microsoft OAuth is not configured" };
+    }
+
+    const params = new URLSearchParams({
+      client_id: MICROSOFT_CLIENT_ID,
+      redirect_uri: MICROSOFT_REDIRECT_URI,
+      response_type: "code",
+      scope: MICROSOFT_SCOPES,
+      response_mode: "query",
+    });
+
+    return redirect(`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`);
+  })
+
+  .get("/microsoft/callback", async ({ query, redirect }) => {
+    const { code, error: oauthError, error_description } = query;
+
+    if (oauthError) {
+      return { error: error_description || oauthError };
+    }
+
+    if (!code) {
+      return { error: "No authorization code provided" };
+    }
+
+    // Exchange code for tokens
+    const tokenResponse = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: MICROSOFT_CLIENT_ID,
+        client_secret: MICROSOFT_CLIENT_SECRET,
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: MICROSOFT_REDIRECT_URI,
+        scope: MICROSOFT_SCOPES,
+      }),
+    });
+
+    const tokens = await tokenResponse.json() as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      error?: string;
+      error_description?: string;
+    };
+
+    if (tokens.error) {
+      return { error: tokens.error_description || tokens.error };
+    }
+
+    // Get user info from Microsoft Graph
+    const userResponse = await fetch("https://graph.microsoft.com/v1.0/me", {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+
+    const user = await userResponse.json() as {
+      mail?: string;
+      userPrincipalName?: string;
+      displayName?: string;
+    };
+
+    // Microsoft can return email in different fields
+    const email = user.mail || user.userPrincipalName || "";
+    if (!email) {
+      return { error: "Could not retrieve email address from Microsoft account" };
+    }
+
+    // Store account with microsoft provider type
+    const id = crypto.randomUUID();
+    const expiresAt = Math.floor(Date.now() / 1000) + (tokens.expires_in || 3600);
+
+    // Use raw SQL to set provider_type to microsoft
+    db.run(`
+      INSERT INTO accounts (id, email, name, provider_type, access_token, refresh_token, token_expires_at, updated_at)
+      VALUES (?, ?, ?, 'microsoft', ?, ?, ?, unixepoch())
+      ON CONFLICT(email) DO UPDATE SET
+        name = excluded.name,
+        provider_type = 'microsoft',
+        access_token = excluded.access_token,
+        refresh_token = excluded.refresh_token,
+        token_expires_at = excluded.token_expires_at,
+        updated_at = unixepoch()
+    `, [id, email, user.displayName || email.split("@")[0], tokens.access_token, tokens.refresh_token, expiresAt]);
+
+    // Redirect to frontend with success
+    return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(email)}`);
   })
 
   .get("/accounts", () => {
@@ -283,6 +386,44 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       return { error: "Account not found or no refresh token" };
     }
 
+    // Handle Microsoft accounts
+    if (account.provider_type === "microsoft") {
+      const tokenResponse = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: MICROSOFT_CLIENT_ID,
+          client_secret: MICROSOFT_CLIENT_SECRET,
+          refresh_token: account.refresh_token,
+          grant_type: "refresh_token",
+          scope: MICROSOFT_SCOPES,
+        }),
+      });
+
+      const tokens = await tokenResponse.json() as {
+        access_token?: string;
+        refresh_token?: string;
+        expires_in?: number;
+        error?: string;
+        error_description?: string;
+      };
+
+      if (tokens.error) {
+        return { error: tokens.error_description || tokens.error };
+      }
+
+      const expiresAt = Math.floor(Date.now() / 1000) + (tokens.expires_in || 3600);
+
+      db.run(`
+        UPDATE accounts
+        SET access_token = ?, refresh_token = ?, token_expires_at = ?, updated_at = unixepoch()
+        WHERE id = ?
+      `, [tokens.access_token, tokens.refresh_token || account.refresh_token, expiresAt, account.id]);
+
+      return { success: true };
+    }
+
+    // Handle Gmail accounts (default)
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },

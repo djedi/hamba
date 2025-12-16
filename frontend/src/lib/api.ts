@@ -46,6 +46,7 @@ export const api = {
     }),
   deleteAccount: (id: string) => request(`/auth/accounts/${id}`, { method: "DELETE" }),
   getLoginUrl: () => `${API_URL}/auth/login`,
+  getMicrosoftLoginUrl: () => `${API_URL}/auth/login/microsoft`,
 
   // Emails
   getEmails: (accountId: string, limit = 50, offset = 0) =>
@@ -423,7 +424,7 @@ export interface Account {
   id: string;
   email: string;
   name: string;
-  provider_type: "gmail" | "imap";
+  provider_type: "gmail" | "imap" | "microsoft";
   created_at: number;
   tokenStatus?: "valid" | "expired" | "unknown";
   unread_count?: number;

@@ -112,7 +112,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add account settings per account** - Configure sync frequency, signature, name, etc. per account. Edit/delete account.
 
-- [ ] **Support Microsoft OAuth** - Add Outlook/Office365 OAuth flow similar to Gmail. Use Microsoft Graph API for email operations.
+- [x] **Support Microsoft OAuth** - Add Outlook/Office365 OAuth flow similar to Gmail. Use Microsoft Graph API for email operations.
 
 - [ ] **Support Yahoo OAuth** - Add Yahoo OAuth flow. Many users have Yahoo accounts.
 

@@ -26,6 +26,10 @@
     window.location.href = api.getLoginUrl();
   }
 
+  function handleMicrosoft() {
+    window.location.href = api.getMicrosoftLoginUrl();
+  }
+
   async function handleImapSubmit() {
     testing = true;
     error = "";
@@ -106,6 +110,14 @@
           <div class="option-text">
             <span class="label">Gmail</span>
             <span class="desc">Connect with Google OAuth</span>
+          </div>
+        </button>
+
+        <button class="option" onclick={handleMicrosoft}>
+          <span class="icon microsoft">M</span>
+          <div class="option-text">
+            <span class="label">Microsoft</span>
+            <span class="desc">Outlook, Hotmail, Office 365</span>
           </div>
         </button>
 
@@ -306,6 +318,10 @@
     justify-content: center;
     font-size: 18px;
     font-weight: 600;
+  }
+
+  .option .icon.microsoft {
+    background: #0078d4;
   }
 
   .option-text {

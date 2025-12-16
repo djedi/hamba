@@ -80,4 +80,14 @@ export interface ImapAccount {
   password: string;
 }
 
-export type Account = GmailAccount | ImapAccount;
+export interface MicrosoftAccount {
+  id: string;
+  email: string;
+  name: string;
+  provider_type: "microsoft";
+  access_token: string;
+  refresh_token: string;
+  token_expires_at: number;
+}
+
+export type Account = GmailAccount | ImapAccount | MicrosoftAccount;
