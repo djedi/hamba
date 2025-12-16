@@ -234,6 +234,7 @@ export class GmailProvider implements EmailProvider {
         synced: 0,
         total: 0,
         error: tokenResult.error || "Not authenticated",
+        needsReauth: tokenResult.needsReauth,
       };
     }
 
@@ -251,8 +252,14 @@ export class GmailProvider implements EmailProvider {
     );
 
     if (!listResponse.ok) {
-      const err = await listResponse.json() as { error?: { message?: string } };
-      return { synced: 0, total: 0, error: err.error?.message || "Failed to fetch messages" };
+      const err = await listResponse.json() as { error?: { message?: string; code?: number } };
+      const isAuthError = listResponse.status === 401 || listResponse.status === 403;
+      return {
+        synced: 0,
+        total: 0,
+        error: err.error?.message || "Failed to fetch messages",
+        needsReauth: isAuthError,
+      };
     }
 
     const listData = await listResponse.json() as { messages?: Array<{ id: string }> };
@@ -381,6 +388,7 @@ export class GmailProvider implements EmailProvider {
         synced: 0,
         total: 0,
         error: tokenResult.error || "Not authenticated",
+        needsReauth: tokenResult.needsReauth,
       };
     }
 
@@ -394,8 +402,14 @@ export class GmailProvider implements EmailProvider {
     );
 
     if (!listResponse.ok) {
-      const err = await listResponse.json() as { error?: { message?: string } };
-      return { synced: 0, total: 0, error: err.error?.message || "Failed to fetch sent messages" };
+      const err = await listResponse.json() as { error?: { message?: string; code?: number } };
+      const isAuthError = listResponse.status === 401 || listResponse.status === 403;
+      return {
+        synced: 0,
+        total: 0,
+        error: err.error?.message || "Failed to fetch sent messages",
+        needsReauth: isAuthError,
+      };
     }
 
     const listData = await listResponse.json() as { messages?: Array<{ id: string }> };
@@ -497,6 +511,7 @@ export class GmailProvider implements EmailProvider {
         synced: 0,
         total: 0,
         error: tokenResult.error || "Not authenticated",
+        needsReauth: tokenResult.needsReauth,
       };
     }
 
@@ -510,8 +525,14 @@ export class GmailProvider implements EmailProvider {
     );
 
     if (!listResponse.ok) {
-      const err = await listResponse.json() as { error?: { message?: string } };
-      return { synced: 0, total: 0, error: err.error?.message || "Failed to fetch drafts" };
+      const err = await listResponse.json() as { error?: { message?: string; code?: number } };
+      const isAuthError = listResponse.status === 401 || listResponse.status === 403;
+      return {
+        synced: 0,
+        total: 0,
+        error: err.error?.message || "Failed to fetch drafts",
+        needsReauth: isAuthError,
+      };
     }
 
     const listData = await listResponse.json() as { drafts?: Array<{ id: string; message: { id: string } }> };

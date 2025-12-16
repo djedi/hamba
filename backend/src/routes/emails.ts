@@ -240,6 +240,11 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
       const provider = getProvider(params.accountId);
       const result = await provider.sync({ maxMessages: 100 });
 
+      // If auth error, return immediately with needsReauth flag
+      if (result.needsReauth) {
+        return result;
+      }
+
       // Classify emails for importance after sync
       if (result.synced > 0) {
         classifyAllEmails(params.accountId);

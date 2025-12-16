@@ -13,6 +13,18 @@ const FOLDER_COLORS: Record<string, string> = {
   "Archive": "#6366f1",
 };
 
+// Helper to detect if an error is an authentication error
+function isImapAuthError(error: any): boolean {
+  const errorStr = String(error).toLowerCase();
+  return errorStr.includes("authentication") ||
+    errorStr.includes("auth") ||
+    errorStr.includes("login") ||
+    errorStr.includes("credentials") ||
+    errorStr.includes("password") ||
+    error.authenticationFailed ||
+    error.code === "AUTHENTICATIONFAILED";
+}
+
 export class ImapSmtpProvider implements EmailProvider {
   private accountId: string;
   private account: any;
@@ -190,9 +202,14 @@ export class ImapSmtpProvider implements EmailProvider {
       }
 
       return { synced, total: synced };
-    } catch (error) {
+    } catch (error: any) {
       console.error("IMAP sync error:", error);
-      return { synced: 0, total: 0, error: String(error) };
+      return {
+        synced: 0,
+        total: 0,
+        error: String(error),
+        needsReauth: isImapAuthError(error),
+      };
     }
   }
 
@@ -318,9 +335,14 @@ export class ImapSmtpProvider implements EmailProvider {
 
       await client.logout();
       return { synced, total: synced };
-    } catch (error) {
+    } catch (error: any) {
       console.error("IMAP syncSent error:", error);
-      return { synced: 0, total: 0, error: String(error) };
+      return {
+        synced: 0,
+        total: 0,
+        error: String(error),
+        needsReauth: isImapAuthError(error),
+      };
     }
   }
 
@@ -402,9 +424,14 @@ export class ImapSmtpProvider implements EmailProvider {
 
       await client.logout();
       return { synced, total: synced };
-    } catch (error) {
+    } catch (error: any) {
       console.error("IMAP syncDrafts error:", error);
-      return { synced: 0, total: 0, error: String(error) };
+      return {
+        synced: 0,
+        total: 0,
+        error: String(error),
+        needsReauth: isImapAuthError(error),
+      };
     }
   }
 

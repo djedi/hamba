@@ -26,6 +26,7 @@ export interface SyncResult {
   synced: number;
   total: number;
   error?: string;
+  needsReauth?: boolean;
 }
 
 export interface Attachment {
