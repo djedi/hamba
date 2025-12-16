@@ -122,7 +122,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add TypeScript strict mode** - Enable strict TypeScript checking. Fix all type errors. Add proper types for all API responses.
 
-- [ ] **Add API documentation** - Document all backend API endpoints with request/response schemas. Consider OpenAPI/Swagger spec.
+- [x] **Add API documentation** - Document all backend API endpoints with request/response schemas. Consider OpenAPI/Swagger spec.
 
 - [ ] **Add database migrations system** - Current schema changes are ad-hoc. Implement proper migrations with version tracking. Tools: `umzug`, `kysely`, or custom.
 

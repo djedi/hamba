@@ -17,11 +17,31 @@ function getAnthropicClient(): Anthropic {
   return anthropicClient;
 }
 
-export const aiRoutes = new Elysia({ prefix: "/ai" })
+export const aiRoutes = new Elysia({ prefix: "/ai", detail: { tags: ["AI"] } })
   // Check if AI is configured
   .get("/status", () => {
     const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
     return { configured: hasApiKey };
+  }, {
+    detail: {
+      summary: "Check AI configuration status",
+      description: "Returns whether AI features are configured (ANTHROPIC_API_KEY is set)",
+      responses: {
+        200: {
+          description: "Configuration status",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  configured: { type: "boolean", description: "Whether AI is configured" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   // Generate email content from a prompt
@@ -112,6 +132,55 @@ Please write ${context.mode === "reply" || context.mode === "replyAll" ? "a repl
 
       return { success: false, error: error.message || "Failed to generate email" };
     }
+  }, {
+    detail: {
+      summary: "Generate email content with AI",
+      description: "Uses Claude AI to generate email content based on a prompt. Supports composing new emails or replying to existing ones.",
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["prompt"],
+              properties: {
+                prompt: { type: "string", description: "Instructions for the AI (e.g., 'decline politely')" },
+                context: {
+                  type: "object",
+                  properties: {
+                    replyTo: {
+                      type: "object",
+                      properties: {
+                        subject: { type: "string" },
+                        from: { type: "string" },
+                        body: { type: "string" },
+                      },
+                    },
+                    mode: { type: "string", enum: ["new", "reply", "replyAll", "forward"] },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Generated email content or error",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean" },
+                  content: { type: "string", description: "Generated email body" },
+                  error: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   // Summarize an email
@@ -238,6 +307,44 @@ ${bodyText}`;
 
       return { success: false, error: error.message || "Failed to summarize email" };
     }
+  }, {
+    detail: {
+      summary: "Summarize email content",
+      description: "Uses Claude AI to generate a 2-3 sentence summary of an email. Summaries are cached.",
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["emailId"],
+              properties: {
+                emailId: { type: "string", description: "Email UUID to summarize" },
+                regenerate: { type: "boolean", default: false, description: "Force regenerate even if cached" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Summary or error",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean" },
+                  summary: { type: "string", description: "Generated summary" },
+                  cached: { type: "boolean", description: "Whether result was cached" },
+                  generated_at: { type: "integer", description: "Timestamp when generated" },
+                  error: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   // Classify a single email's importance using AI
@@ -401,6 +508,46 @@ Preview: ${content}`;
 
       return { success: false, error: error.message || "Failed to classify email" };
     }
+  }, {
+    detail: {
+      summary: "Classify email importance",
+      description: "Uses Claude AI to classify a single email as important or not important. Results are cached.",
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["emailId"],
+              properties: {
+                emailId: { type: "string", description: "Email UUID to classify" },
+                force: { type: "boolean", default: false, description: "Force reclassification even if cached" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Classification result or error",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean" },
+                  score: { type: "number", minimum: 0, maximum: 1, description: "Importance score (0-1)" },
+                  is_important: { type: "boolean", description: "Whether score >= 0.5" },
+                  reason: { type: "string", description: "Explanation for the classification" },
+                  cached: { type: "boolean", description: "Whether result was cached" },
+                  classified_at: { type: "integer", description: "Timestamp when classified" },
+                  error: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   // Batch classify emails for an account using AI
@@ -561,6 +708,45 @@ ${emailSummaries}`;
 
       return { success: false, error: error.message || "Failed to classify emails" };
     }
+  }, {
+    detail: {
+      summary: "Batch classify emails",
+      description: "Uses Claude AI to classify multiple emails at once for an account. More efficient than individual classification.",
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["accountId"],
+              properties: {
+                accountId: { type: "string", description: "Account UUID" },
+                limit: { type: "integer", default: 20, maximum: 50, description: "Max emails to classify (capped at 50)" },
+                force: { type: "boolean", default: false, description: "Force reclassification of all emails" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Batch classification result or error",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean" },
+                  classified: { type: "integer", description: "Number of emails classified" },
+                  total: { type: "integer", description: "Total emails processed" },
+                  message: { type: "string", description: "Status message" },
+                  error: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   // Generate smart reply suggestions for an email
@@ -689,4 +875,43 @@ ${bodyText}`;
 
       return { success: false, error: error.message || "Failed to generate smart replies" };
     }
+  }, {
+    detail: {
+      summary: "Generate smart reply suggestions",
+      description: "Uses Claude AI to generate 3 contextual reply suggestions for an email (similar to Gmail smart replies)",
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["emailId"],
+              properties: {
+                emailId: { type: "string", description: "Email UUID to generate replies for" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Reply suggestions or error",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean" },
+                  replies: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Array of 3 suggested reply strings",
+                  },
+                  error: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   });

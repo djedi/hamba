@@ -39,7 +39,7 @@ const YAHOO_SCOPES = [
   "mail-w", // mail write includes read
 ].join(" ");
 
-export const authRoutes = new Elysia({ prefix: "/auth" })
+export const authRoutes = new Elysia({ prefix: "/auth", detail: { tags: ["Auth"] } })
   .get("/login", ({ redirect }) => {
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
@@ -51,6 +51,14 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
     });
 
     return redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+  }, {
+    detail: {
+      summary: "Initiate Google OAuth login",
+      description: "Redirects user to Google OAuth consent screen for Gmail account authentication",
+      responses: {
+        302: { description: "Redirect to Google OAuth" },
+      },
+    },
   })
 
   .get("/callback", async ({ query, redirect }) => {
@@ -107,6 +115,15 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
     // Redirect to frontend with success
     return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(user.email)}`);
+  }, {
+    detail: {
+      summary: "Google OAuth callback",
+      description: "Handles the OAuth callback from Google, exchanges code for tokens, and creates/updates account",
+      responses: {
+        302: { description: "Redirect to frontend with success" },
+        200: { description: "Error response", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
   })
 
   // Microsoft OAuth routes
@@ -124,6 +141,15 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
     });
 
     return redirect(`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`);
+  }, {
+    detail: {
+      summary: "Initiate Microsoft OAuth login",
+      description: "Redirects user to Microsoft OAuth consent screen for Outlook/Office365 account authentication",
+      responses: {
+        302: { description: "Redirect to Microsoft OAuth" },
+        200: { description: "Error if not configured", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
   })
 
   .get("/microsoft/callback", async ({ query, redirect }) => {
@@ -202,6 +228,15 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
     // Redirect to frontend with success
     return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(email)}`);
+  }, {
+    detail: {
+      summary: "Microsoft OAuth callback",
+      description: "Handles the OAuth callback from Microsoft, exchanges code for tokens, and creates/updates account",
+      responses: {
+        302: { description: "Redirect to frontend with success" },
+        200: { description: "Error response", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
   })
 
   // Yahoo OAuth routes
@@ -218,6 +253,15 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
     });
 
     return redirect(`https://api.login.yahoo.com/oauth2/request_auth?${params}`);
+  }, {
+    detail: {
+      summary: "Initiate Yahoo OAuth login",
+      description: "Redirects user to Yahoo OAuth consent screen for Yahoo Mail account authentication",
+      responses: {
+        302: { description: "Redirect to Yahoo OAuth" },
+        200: { description: "Error if not configured", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
   })
 
   .get("/yahoo/callback", async ({ query, redirect }) => {
@@ -301,6 +345,15 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
     // Redirect to frontend with success
     return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(email)}`);
+  }, {
+    detail: {
+      summary: "Yahoo OAuth callback",
+      description: "Handles the OAuth callback from Yahoo, exchanges code for tokens, and creates/updates account",
+      responses: {
+        302: { description: "Redirect to frontend with success" },
+        200: { description: "Error response", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
   })
 
   .get("/accounts", () => {
@@ -337,6 +390,24 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
             : "expired"
           : "unknown",
     }));
+  }, {
+    detail: {
+      summary: "List all accounts",
+      description: "Returns all configured email accounts with unread counts and token status. Sensitive credentials are excluded.",
+      responses: {
+        200: {
+          description: "List of accounts",
+          content: {
+            "application/json": {
+              schema: {
+                type: "array",
+                items: { $ref: "#/components/schemas/Account" },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   .post("/accounts/imap", async ({ body }) => {
@@ -432,6 +503,54 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
       return { error: `Failed to add account: ${error.message || error}` };
     }
+  }, {
+    detail: {
+      summary: "Add IMAP/SMTP account",
+      description: "Creates a new IMAP/SMTP email account. Validates credentials before saving.",
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["email", "password", "imapHost", "smtpHost"],
+              properties: {
+                email: { type: "string", format: "email", description: "Account email address" },
+                name: { type: "string", description: "Display name" },
+                username: { type: "string", description: "IMAP/SMTP username (defaults to email)" },
+                password: { type: "string", description: "Account password" },
+                imapHost: { type: "string", description: "IMAP server hostname" },
+                imapPort: { type: "integer", default: 993, description: "IMAP port" },
+                imapUseTls: { type: "boolean", default: true, description: "Use TLS for IMAP" },
+                smtpHost: { type: "string", description: "SMTP server hostname" },
+                smtpPort: { type: "integer", default: 587, description: "SMTP port" },
+                smtpUseTls: { type: "boolean", default: true, description: "Use TLS for SMTP" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Account created or error",
+          content: {
+            "application/json": {
+              schema: {
+                oneOf: [
+                  {
+                    type: "object",
+                    properties: {
+                      success: { type: "boolean", example: true },
+                      account: { $ref: "#/components/schemas/Account" },
+                    },
+                  },
+                  { $ref: "#/components/schemas/Error" },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   .get("/accounts/:id/status", async ({ params }) => {
@@ -441,6 +560,28 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       needsReauth: result.needsReauth || false,
       error: result.error,
     };
+  }, {
+    detail: {
+      summary: "Check account token status",
+      description: "Checks if the account's OAuth token is valid and whether re-authentication is needed",
+      responses: {
+        200: {
+          description: "Token status",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  valid: { type: "boolean", description: "Whether token is valid" },
+                  needsReauth: { type: "boolean", description: "Whether re-authentication is required" },
+                  error: { type: "string", nullable: true, description: "Error message if any" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   .get("/accounts/:id", ({ params }) => {
@@ -459,6 +600,26 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
     } = account;
 
     return safeAccount;
+  }, {
+    detail: {
+      summary: "Get account details",
+      description: "Returns account details excluding sensitive credentials",
+      responses: {
+        200: {
+          description: "Account details or error",
+          content: {
+            "application/json": {
+              schema: {
+                oneOf: [
+                  { $ref: "#/components/schemas/Account" },
+                  { $ref: "#/components/schemas/Error" },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   .put("/accounts/:id", async ({ params, body }) => {
@@ -486,11 +647,55 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
     );
 
     return { success: true };
+  }, {
+    detail: {
+      summary: "Update account settings",
+      description: "Updates account display name and sync frequency (30s-3600s range)",
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                displayName: { type: "string", description: "Custom display name for account" },
+                syncFrequencySeconds: { type: "integer", minimum: 30, maximum: 3600, description: "Email sync interval in seconds" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Success or error",
+          content: {
+            "application/json": {
+              schema: {
+                oneOf: [
+                  { $ref: "#/components/schemas/Success" },
+                  { $ref: "#/components/schemas/Error" },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   .delete("/accounts/:id", ({ params }) => {
     accountQueries.delete.run(params.id);
     return { success: true };
+  }, {
+    detail: {
+      summary: "Delete account",
+      description: "Permanently deletes an email account and all associated data",
+      responses: {
+        200: {
+          description: "Success",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Success" } } },
+        },
+      },
+    },
   })
 
   .post("/refresh/:accountId", async ({ params }) => {
@@ -609,4 +814,24 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
     );
 
     return { success: true };
+  }, {
+    detail: {
+      summary: "Refresh OAuth tokens",
+      description: "Refreshes expired OAuth tokens for Gmail, Microsoft, or Yahoo accounts",
+      responses: {
+        200: {
+          description: "Success or error",
+          content: {
+            "application/json": {
+              schema: {
+                oneOf: [
+                  { $ref: "#/components/schemas/Success" },
+                  { $ref: "#/components/schemas/Error" },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
   });

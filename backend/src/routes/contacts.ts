@@ -107,7 +107,7 @@ async function populateContactsFromEmails(accountId: string): Promise<number> {
   return count;
 }
 
-export const contactRoutes = new Elysia({ prefix: "/contacts" })
+export const contactRoutes = new Elysia({ prefix: "/contacts", detail: { tags: ["Contacts"] } })
   // Get all contacts for an account
   .get("/", ({ query }) => {
     const { accountId } = query;
@@ -120,6 +120,23 @@ export const contactRoutes = new Elysia({ prefix: "/contacts" })
     query: t.Object({
       accountId: t.String(),
     }),
+    detail: {
+      summary: "List contacts",
+      description: "Returns all contacts for the specified account, sorted by last contacted date",
+      responses: {
+        200: {
+          description: "List of contacts",
+          content: {
+            "application/json": {
+              schema: {
+                type: "array",
+                items: { $ref: "#/components/schemas/Contact" },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   // Search contacts
@@ -143,6 +160,23 @@ export const contactRoutes = new Elysia({ prefix: "/contacts" })
       q: t.Optional(t.String()),
       limit: t.Optional(t.Number()),
     }),
+    detail: {
+      summary: "Search contacts",
+      description: "Search contacts by name or email. Returns recent contacts if no query provided.",
+      responses: {
+        200: {
+          description: "List of matching contacts",
+          content: {
+            "application/json": {
+              schema: {
+                type: "array",
+                items: { $ref: "#/components/schemas/Contact" },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   // Populate contacts from existing emails
@@ -169,6 +203,27 @@ export const contactRoutes = new Elysia({ prefix: "/contacts" })
     query: t.Object({
       accountId: t.String(),
     }),
+    detail: {
+      summary: "Populate contacts from emails",
+      description: "Extracts contacts from existing emails (from, to, cc fields) and adds them to the contacts list",
+      responses: {
+        200: {
+          description: "Success or error with count of contacts added",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean" },
+                  count: { type: "integer", description: "Number of contacts added" },
+                  error: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   // Add or update a contact manually
@@ -194,6 +249,27 @@ export const contactRoutes = new Elysia({ prefix: "/contacts" })
       email: t.String(),
       name: t.Optional(t.String()),
     }),
+    detail: {
+      summary: "Add or update contact",
+      description: "Manually adds a new contact or updates an existing one (upsert by email)",
+      responses: {
+        200: {
+          description: "Success or error",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean" },
+                  id: { type: "string", description: "Contact UUID" },
+                  error: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   })
 
   // Delete a contact
@@ -207,6 +283,27 @@ export const contactRoutes = new Elysia({ prefix: "/contacts" })
       console.error("Error deleting contact:", error);
       return { success: false, error: "Failed to delete contact" };
     }
+  }, {
+    detail: {
+      summary: "Delete contact",
+      description: "Permanently deletes a contact",
+      responses: {
+        200: {
+          description: "Success or error",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean" },
+                  error: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   });
 
 // Export function to add contact when sending email

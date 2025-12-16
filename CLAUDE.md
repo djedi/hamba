@@ -119,3 +119,10 @@ Unit tests live alongside the files they test (e.g., `stores.ts` → `stores.tes
 - **Backend**: Bun's built-in test runner
 
 Run `./test --help` for all options.
+
+## API Documentation
+
+OpenAPI/Swagger documentation is available at `http://localhost:3001/docs` when the backend is running. The documentation includes:
+- All API endpoints organized by tags (Auth, Emails, Drafts, Labels, Contacts, AI, Snippets, Signatures)
+- Request/response schemas
+- Interactive "Try it out" functionality via Swagger UI

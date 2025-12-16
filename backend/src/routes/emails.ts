@@ -13,7 +13,7 @@ import {
 } from "../services/scheduled-send";
 import { addContactFromReceive } from "./contacts";
 
-export const emailRoutes = new Elysia({ prefix: "/emails" })
+export const emailRoutes = new Elysia({ prefix: "/emails", detail: { tags: ["Emails"] } })
   .get("/", async ({ query }) => {
     const { accountId, limit = "50", offset = "0" } = query;
 
