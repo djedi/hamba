@@ -2,6 +2,19 @@
   import { onMount } from "svelte";
   import { accounts, selectedAccountId, isSettingsOpen, showToast } from "$lib/stores";
   import { api } from "$lib/api";
+  import {
+    type ShortcutAction,
+    getShortcutsByCategory,
+    setBinding,
+    resetBinding,
+    resetAllBindings,
+    hasCustomBindings,
+    formatKeyForDisplay,
+    parseKeyEvent,
+    defaultShortcuts,
+    customBindings,
+  } from "$lib/keyboardShortcuts";
+  import { refreshKeyMaps } from "$lib/keyboard";
 
   interface Props {
     onClose: () => void;
@@ -42,56 +55,98 @@
   // Account being deleted
   let deletingAccountId = $state<string | null>(null);
 
-  // Keyboard shortcuts data
-  const shortcuts = [
-    { category: "Navigation", items: [
-      { keys: ["j", "k"], description: "Navigate up/down" },
-      { keys: ["o", "Enter"], description: "Open email" },
-      { keys: ["u", "Escape"], description: "Back to list" },
-      { keys: ["Space"], description: "Scroll down" },
-      { keys: ["Shift+Space"], description: "Scroll up" },
-    ]},
-    { category: "Go to", items: [
-      { keys: ["gi"], description: "Go to Inbox" },
-      { keys: ["gs"], description: "Go to Starred" },
-      { keys: ["gt"], description: "Go to Sent" },
-      { keys: ["gd"], description: "Go to Drafts" },
-      { keys: ["gx"], description: "Go to Trash" },
-      { keys: ["ga"], description: "Go to Archive" },
-      { keys: ["gh"], description: "Go to Snoozed" },
-      { keys: ["gr"], description: "Go to Reminders" },
-      { keys: ["gl"], description: "Go to Scheduled" },
-    ]},
-    { category: "Actions", items: [
-      { keys: ["e", "y"], description: "Archive" },
-      { keys: ["#", "Backspace"], description: "Trash" },
-      { keys: ["s"], description: "Star/Unstar" },
-      { keys: ["!"], description: "Toggle important" },
-      { keys: ["Shift+I"], description: "Toggle read/unread" },
-      { keys: ["h"], description: "Snooze" },
-      { keys: ["Shift+H"], description: "Set reminder" },
-    ]},
-    { category: "Compose", items: [
-      { keys: ["c"], description: "New email" },
-      { keys: ["r"], description: "Reply" },
-      { keys: ["a"], description: "Reply all" },
-      { keys: ["f"], description: "Forward" },
-      { keys: ["Cmd+Enter"], description: "Send" },
-      { keys: ["Cmd+J"], description: "AI compose" },
-    ]},
-    { category: "Inbox Tabs", items: [
-      { keys: ["1"], description: "Important" },
-      { keys: ["2"], description: "Other" },
-      { keys: ["3"], description: "All" },
-    ]},
-    { category: "Other", items: [
-      { keys: ["Cmd+K"], description: "Command palette" },
-      { keys: ["Cmd+,"], description: "Settings" },
-      { keys: ["/"], description: "Search" },
-      { keys: ["?"], description: "Keyboard shortcuts" },
-      { keys: ["Shift+R"], description: "Sync" },
-    ]},
-  ];
+  // Keyboard shortcut customization state
+  let shortcutGroups = $state(getShortcutsByCategory());
+  let recordingAction = $state<ShortcutAction | null>(null);
+  let recordedKey = $state<string>("");
+  let conflictAction = $state<ShortcutAction | null>(null);
+  let hasCustom = $state(hasCustomBindings());
+
+  // Subscribe to customBindings changes
+  $effect(() => {
+    const unsubscribe = customBindings.subscribe(() => {
+      shortcutGroups = getShortcutsByCategory();
+      hasCustom = hasCustomBindings();
+    });
+    return unsubscribe;
+  });
+
+  function startRecording(action: ShortcutAction) {
+    recordingAction = action;
+    recordedKey = "";
+    conflictAction = null;
+  }
+
+  function stopRecording() {
+    recordingAction = null;
+    recordedKey = "";
+    conflictAction = null;
+  }
+
+  function handleRecordKey(event: KeyboardEvent) {
+    if (!recordingAction) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Allow Escape to cancel
+    if (event.key === "Escape") {
+      stopRecording();
+      return;
+    }
+
+    const key = parseKeyEvent(event);
+    if (!key) return; // Ignore standalone modifier keys
+
+    recordedKey = key;
+
+    // Try to set the binding
+    const result = setBinding(recordingAction, key);
+    if (result.success) {
+      refreshKeyMaps();
+      showToast("Shortcut updated", "success");
+      stopRecording();
+    } else if (result.conflict) {
+      conflictAction = result.conflict;
+    }
+  }
+
+  function forceSetBinding() {
+    if (!recordingAction || !recordedKey) return;
+
+    // First clear the conflicting binding
+    if (conflictAction) {
+      resetBinding(conflictAction);
+    }
+
+    // Then set the new binding
+    const result = setBinding(recordingAction, recordedKey);
+    if (result.success) {
+      refreshKeyMaps();
+      showToast("Shortcut updated", "success");
+    }
+    stopRecording();
+  }
+
+  function handleResetShortcut(action: ShortcutAction) {
+    resetBinding(action);
+    refreshKeyMaps();
+    showToast("Shortcut reset to default", "success");
+  }
+
+  function handleResetAll() {
+    if (!confirm("Reset all keyboard shortcuts to their defaults?")) {
+      return;
+    }
+    resetAllBindings();
+    refreshKeyMaps();
+    showToast("All shortcuts reset to defaults", "success");
+  }
+
+  function getActionDescription(action: ShortcutAction): string {
+    const def = defaultShortcuts.find((s) => s.action === action);
+    return def?.description || action;
+  }
 
   onMount(async () => {
     // Load saved preferences from localStorage
@@ -171,6 +226,12 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
+    // If recording a shortcut, handle it separately
+    if (recordingAction) {
+      handleRecordKey(e);
+      return;
+    }
+
     if (e.key === "Escape") {
       onClose();
     }
@@ -332,22 +393,48 @@
           </div>
         {:else if activeTab === "keyboard"}
           <div class="section shortcuts-section">
-            <p class="help-text">
-              Hamba uses Vim-style keyboard shortcuts for fast navigation. Press <kbd>?</kbd> anytime to see this list.
-            </p>
-            <div class="shortcuts-grid">
-              {#each shortcuts as group}
+            <div class="shortcuts-header">
+              <p class="help-text">
+                Click on a shortcut to rebind it. Press <kbd>?</kbd> anytime to see shortcuts.
+              </p>
+              {#if hasCustom}
+                <button class="reset-all-btn" onclick={handleResetAll}>
+                  Reset All
+                </button>
+              {/if}
+            </div>
+            <div class="shortcuts-list">
+              {#each shortcutGroups as group}
                 <div class="shortcut-group">
                   <h4>{group.category}</h4>
-                  {#each group.items as shortcut}
-                    <div class="shortcut-item">
-                      <span class="shortcut-keys">
-                        {#each shortcut.keys as key, i}
-                          <kbd>{key}</kbd>{#if i < shortcut.keys.length - 1}<span class="key-separator">/</span>{/if}
-                        {/each}
-                      </span>
-                      <span class="shortcut-desc">{shortcut.description}</span>
-                    </div>
+                  {#each group.shortcuts as shortcut}
+                    {#if !shortcut.isAlias}
+                      <div class="shortcut-row" class:is-custom={shortcut.isCustom}>
+                        <span class="shortcut-desc">{shortcut.description}</span>
+                        <div class="shortcut-actions">
+                          <button
+                            class="shortcut-key-btn"
+                            class:recording={recordingAction === shortcut.action}
+                            onclick={() => startRecording(shortcut.action)}
+                          >
+                            {#if recordingAction === shortcut.action}
+                              {recordedKey ? formatKeyForDisplay(recordedKey) : "Press a key..."}
+                            {:else}
+                              <kbd>{formatKeyForDisplay(shortcut.key)}</kbd>
+                            {/if}
+                          </button>
+                          {#if shortcut.isCustom}
+                            <button
+                              class="reset-btn"
+                              title="Reset to default"
+                              onclick={() => handleResetShortcut(shortcut.action)}
+                            >
+                              Reset
+                            </button>
+                          {/if}
+                        </div>
+                      </div>
+                    {/if}
                   {/each}
                 </div>
               {/each}
@@ -432,6 +519,25 @@
     </div>
   </div>
 </div>
+
+<!-- Conflict resolution modal -->
+{#if conflictAction}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="conflict-modal-backdrop" onclick={stopRecording} role="presentation" tabindex="-1">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="conflict-modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
+      <h3>Shortcut Conflict</h3>
+      <p>
+        <kbd>{formatKeyForDisplay(recordedKey)}</kbd> is already assigned to
+        <strong>{getActionDescription(conflictAction)}</strong>.
+      </p>
+      <div class="conflict-actions">
+        <button class="cancel-btn" onclick={stopRecording}>Cancel</button>
+        <button class="replace-btn" onclick={forceSetBinding}>Replace</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .modal-backdrop {
@@ -574,7 +680,7 @@
   .help-text {
     font-size: 13px;
     color: var(--text-muted);
-    margin: 12px 0 0;
+    margin: 0;
   }
 
   .accounts-list {
@@ -661,13 +767,36 @@
     padding: 20px;
   }
 
+  /* Keyboard shortcuts styles */
   .shortcuts-section .help-text {
-    margin: 0 0 16px;
+    margin: 0;
   }
 
-  .shortcuts-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+  .shortcuts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .reset-all-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .reset-all-btn:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+  }
+
+  .shortcuts-list {
+    display: flex;
+    flex-direction: column;
     gap: 20px;
   }
 
@@ -679,27 +808,68 @@
     letter-spacing: 0.5px;
   }
 
-  .shortcut-item {
+  .shortcut-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 4px 0;
+    padding: 6px 0;
     font-size: 13px;
   }
 
-  .shortcut-keys {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .key-separator {
-    color: var(--text-muted);
-    font-size: 11px;
+  .shortcut-row.is-custom .shortcut-desc {
+    color: var(--accent);
   }
 
   .shortcut-desc {
     color: var(--text-secondary);
+  }
+
+  .shortcut-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .shortcut-key-btn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    min-width: 60px;
+    text-align: center;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .shortcut-key-btn:hover {
+    border-color: var(--accent);
+  }
+
+  .shortcut-key-btn.recording {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--accent);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .reset-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 6px;
+  }
+
+  .reset-btn:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
   }
 
   kbd {
@@ -855,5 +1025,70 @@
     font-size: 18px;
     color: var(--text-muted);
     pointer-events: none;
+  }
+
+  /* Conflict modal */
+  .conflict-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+  }
+
+  .conflict-modal {
+    background: var(--bg-primary);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 400px;
+    text-align: center;
+  }
+
+  .conflict-modal h3 {
+    margin: 0 0 12px;
+    font-size: 16px;
+  }
+
+  .conflict-modal p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0 0 20px;
+  }
+
+  .conflict-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  .cancel-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .cancel-btn:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+  }
+
+  .replace-btn {
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .replace-btn:hover {
+    background: var(--accent-hover);
   }
 </style>

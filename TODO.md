@@ -102,7 +102,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add notification preferences** - Desktop notifications for new email (using Notification API). Configurable: all emails, important only, none. Sound on/off.
 
-- [ ] **Add keyboard shortcut customization** - Allow rebinding keyboard shortcuts. Store custom bindings. Reset to defaults option.
+- [x] **Add keyboard shortcut customization** - Allow rebinding keyboard shortcuts. Store custom bindings. Reset to defaults option.
 
 - [ ] **Add signature management** - Create/edit email signatures per account. Option for plain text or rich HTML. Auto-append to new emails and replies.
 

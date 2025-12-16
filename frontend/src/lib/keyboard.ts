@@ -16,8 +16,11 @@ import {
   currentFolder,
   inboxTab,
 } from "./stores";
-
-type KeyHandler = () => void | Promise<void>;
+import {
+  type ShortcutAction,
+  loadCustomBindings,
+  buildKeyMaps,
+} from "./keyboardShortcuts";
 
 // Sync callback - registered by the main page
 let syncCallback: (() => void) | null = null;
@@ -49,371 +52,8 @@ function updateUrlWithEmail(emailId: string | null) {
   window.history.pushState({}, "", url);
 }
 
-// Go to inbox view
-function goToInbox() {
-  currentFolder.set("inbox");
-  view.set("inbox");
-  updateUrlWithEmail(null);
-}
-
-// Go to starred view
-function goToStarred() {
-  currentFolder.set("starred");
-  view.set("inbox");
-  updateUrlWithEmail(null);
-}
-
-// Go to sent view
-function goToSent() {
-  currentFolder.set("sent");
-  view.set("inbox");
-  updateUrlWithEmail(null);
-}
-
-// Go to drafts view
-function goToDrafts() {
-  currentFolder.set("drafts");
-  view.set("inbox");
-  updateUrlWithEmail(null);
-}
-
-// Go to trash view
-function goToTrash() {
-  currentFolder.set("trash");
-  view.set("inbox");
-  updateUrlWithEmail(null);
-}
-
-// Go to archive view
-function goToArchive() {
-  currentFolder.set("archive");
-  view.set("inbox");
-  updateUrlWithEmail(null);
-}
-
-// Go to snoozed view
-function goToSnoozed() {
-  currentFolder.set("snoozed");
-  view.set("inbox");
-  updateUrlWithEmail(null);
-}
-
-// Go to reminders view
-function goToReminders() {
-  currentFolder.set("reminders");
-  view.set("inbox");
-  updateUrlWithEmail(null);
-}
-
-// Go to scheduled view
-function goToScheduled() {
-  currentFolder.set("scheduled");
-  view.set("inbox");
-  updateUrlWithEmail(null);
-}
-
-// Two-key sequence handlers (e.g., "gi" = go to inbox, "gs" = go to starred, "gt" = go to sent, "gd" = go to drafts, "gx" = go to trash, "ga" = go to archive, "gh" = go to snoozed, "gr" = go to reminders, "gl" = go to scheduled)
-const sequenceHandlers: Record<string, KeyHandler> = {
-  "gi": goToInbox,
-  "gs": goToStarred,
-  "gt": goToSent,
-  "gd": goToDrafts,
-  "gx": goToTrash,
-  "ga": goToArchive,
-  "gh": goToSnoozed,
-  "gr": goToReminders,
-  "gl": goToScheduled,
-};
-
-const handlers: Record<string, KeyHandler> = {
-  // Navigation
-  j: () => {
-    const $emails = get(emails);
-    const $index = get(selectedIndex);
-    const $view = get(view);
-    if ($index < $emails.length - 1) {
-      const newIndex = $index + 1;
-      const newEmailId = $emails[newIndex].id;
-      selectedIndex.set(newIndex);
-      selectedEmailId.set(newEmailId);
-      // Update URL if viewing email
-      if ($view === "email") {
-        updateUrlWithEmail(newEmailId);
-        emailActions.markRead(newEmailId);
-      }
-      // Prefetch adjacent emails for instant opening
-      prefetchAdjacentEmails(newIndex);
-    }
-  },
-
-  k: () => {
-    const $index = get(selectedIndex);
-    const $view = get(view);
-    if ($index > 0) {
-      const newIndex = $index - 1;
-      const $emails = get(emails);
-      const newEmailId = $emails[newIndex].id;
-      selectedIndex.set(newIndex);
-      selectedEmailId.set(newEmailId);
-      // Update URL if viewing email
-      if ($view === "email") {
-        updateUrlWithEmail(newEmailId);
-        emailActions.markRead(newEmailId);
-      }
-      // Prefetch adjacent emails
-      prefetchAdjacentEmails(newIndex);
-    }
-  },
-
-  // Open email
-  Enter: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      view.set("email");
-      emailActions.markRead($selectedEmailId);
-      updateUrlWithEmail($selectedEmailId);
-    }
-  },
-
-  o: () => handlers.Enter(),
-
-  // Back to inbox
-  Escape: () => {
-    const $view = get(view);
-    const $isCommandPaletteOpen = get(isCommandPaletteOpen);
-
-    if ($isCommandPaletteOpen) {
-      isCommandPaletteOpen.set(false);
-    } else if ($view === "email") {
-      view.set("inbox");
-      updateUrlWithEmail(null);
-    }
-  },
-
-  u: () => {
-    view.set("inbox");
-    updateUrlWithEmail(null);
-  },
-
-  // Scroll email content (95% of viewport)
-  " ": () => {
-    const $view = get(view);
-    if ($view === "email") {
-      scrollEmailContent(window.innerHeight * 0.95);
-    }
-  },
-
-  "Shift+ ": () => {
-    const $view = get(view);
-    if ($view === "email") {
-      scrollEmailContent(window.innerHeight * -0.95);
-    }
-  },
-
-  // Email actions - all optimistic (instant UI update)
-  // Both `e` and `y` archive (Superhuman style + Gmail muscle memory)
-  e: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.archive($selectedEmailId);
-      selectNextEmail();
-    }
-  },
-
-  y: () => {
-    // Gmail-style archive shortcut
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.archive($selectedEmailId);
-      selectNextEmail();
-    }
-  },
-
-  "#": () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.trash($selectedEmailId);
-      selectNextEmail();
-    }
-  },
-
-  Backspace: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.trash($selectedEmailId);
-      selectNextEmail();
-    }
-  },
-
-  Delete: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.trash($selectedEmailId);
-      selectNextEmail();
-    }
-  },
-
-  s: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.toggleStar($selectedEmailId);
-    }
-  },
-
-  // Mark read/unread
-  "Shift+i": () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.toggleRead($selectedEmailId);
-    }
-  },
-
-  // Toggle importance (! key)
-  "!": () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.toggleImportant($selectedEmailId);
-    }
-  },
-
-  // Snooze (h key)
-  h: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      isSnoozeModalOpen.set(true);
-    }
-  },
-
-  // Reminder (Shift+H key)
-  "Shift+h": () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      isReminderModalOpen.set(true);
-    }
-  },
-
-  // Switch inbox tabs (1 = Important, 2 = Other, 3 = All)
-  "1": () => {
-    const $folder = get(currentFolder);
-    if ($folder === "inbox") {
-      inboxTab.set("important");
-    }
-  },
-
-  "2": () => {
-    const $folder = get(currentFolder);
-    if ($folder === "inbox") {
-      inboxTab.set("other");
-    }
-  },
-
-  "3": () => {
-    const $folder = get(currentFolder);
-    if ($folder === "inbox") {
-      inboxTab.set("all");
-    }
-  },
-
-  // Command palette
-  "Cmd+k": () => {
-    isCommandPaletteOpen.update((v) => !v);
-  },
-
-  // Settings
-  "Cmd+,": () => {
-    isSettingsOpen.update((v) => !v);
-  },
-
-  // Keyboard shortcut overlay
-  "?": () => {
-    isShortcutOverlayOpen.update((v) => !v);
-  },
-
-  // Sync/Refresh - triggers a sync callback if registered
-  "Shift+r": () => {
-    if (syncCallback) {
-      syncCallback();
-    }
-  },
-
-  // Search focus (handled in component)
-  "/": () => {
-    // Will be handled by the search component
-  },
-
-  // Compose new email
-  c: () => {
-    composeMode.set("new");
-    replyToEmail.set(null);
-    view.set("compose");
-  },
-
-  // Reply
-  r: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if (!$selectedEmailId) return;
-
-    const $emails = get(emails);
-    const email = $emails.find((e) => e.id === $selectedEmailId);
-    if (email) {
-      composeMode.set("reply");
-      replyToEmail.set(email);
-      view.set("compose");
-    }
-  },
-
-  // Reply all
-  a: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if (!$selectedEmailId) return;
-
-    const $emails = get(emails);
-    const email = $emails.find((e) => e.id === $selectedEmailId);
-    if (email) {
-      composeMode.set("replyAll");
-      replyToEmail.set(email);
-      view.set("compose");
-    }
-  },
-
-  // Forward
-  f: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if (!$selectedEmailId) return;
-
-    const $emails = get(emails);
-    const email = $emails.find((e) => e.id === $selectedEmailId);
-    if (email) {
-      composeMode.set("forward");
-      replyToEmail.set(email);
-      view.set("compose");
-    }
-  },
-
-  // Go to bottom (Shift+G)
-  "Shift+g": () => {
-    const $emails = get(emails);
-    if ($emails.length > 0) {
-      selectedIndex.set($emails.length - 1);
-      selectedEmailId.set($emails[$emails.length - 1].id);
-    }
-  },
-
-  // g starts a sequence (gi = inbox, gg = top)
-  g: () => {
-    // This is handled specially in handleKeydown for sequences
-    // If we get here, it means no sequence was completed, so go to top
-    selectedIndex.set(0);
-    const $emails = get(emails);
-    if ($emails.length > 0) {
-      selectedEmailId.set($emails[0].id);
-    }
-  },
-};
-
 // Scroll email content (for spacebar scrolling)
 function scrollEmailContent(amount: number) {
-  // Try to scroll the email content container
   const contentEl = document.querySelector('.email-view .content');
   if (contentEl) {
     contentEl.scrollBy({ top: amount, behavior: 'smooth' });
@@ -435,6 +75,321 @@ function selectNextEmail() {
 
   view.set("inbox");
   updateUrlWithEmail(null);
+}
+
+// Action handlers - map ShortcutAction to actual functions
+const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
+  // Navigation
+  navigate_down: () => {
+    const $emails = get(emails);
+    const $index = get(selectedIndex);
+    const $view = get(view);
+    if ($index < $emails.length - 1) {
+      const newIndex = $index + 1;
+      const newEmailId = $emails[newIndex].id;
+      selectedIndex.set(newIndex);
+      selectedEmailId.set(newEmailId);
+      if ($view === "email") {
+        updateUrlWithEmail(newEmailId);
+        emailActions.markRead(newEmailId);
+      }
+      prefetchAdjacentEmails(newIndex);
+    }
+  },
+
+  navigate_up: () => {
+    const $index = get(selectedIndex);
+    const $view = get(view);
+    if ($index > 0) {
+      const newIndex = $index - 1;
+      const $emails = get(emails);
+      const newEmailId = $emails[newIndex].id;
+      selectedIndex.set(newIndex);
+      selectedEmailId.set(newEmailId);
+      if ($view === "email") {
+        updateUrlWithEmail(newEmailId);
+        emailActions.markRead(newEmailId);
+      }
+      prefetchAdjacentEmails(newIndex);
+    }
+  },
+
+  open_email: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      view.set("email");
+      emailActions.markRead($selectedEmailId);
+      updateUrlWithEmail($selectedEmailId);
+    }
+  },
+
+  back_to_list: () => {
+    const $view = get(view);
+    const $isCommandPaletteOpen = get(isCommandPaletteOpen);
+
+    if ($isCommandPaletteOpen) {
+      isCommandPaletteOpen.set(false);
+    } else if ($view === "email") {
+      view.set("inbox");
+      updateUrlWithEmail(null);
+    }
+  },
+
+  scroll_down: () => {
+    const $view = get(view);
+    if ($view === "email") {
+      scrollEmailContent(window.innerHeight * 0.95);
+    }
+  },
+
+  scroll_up: () => {
+    const $view = get(view);
+    if ($view === "email") {
+      scrollEmailContent(window.innerHeight * -0.95);
+    }
+  },
+
+  go_to_top: () => {
+    selectedIndex.set(0);
+    const $emails = get(emails);
+    if ($emails.length > 0) {
+      selectedEmailId.set($emails[0].id);
+    }
+  },
+
+  go_to_bottom: () => {
+    const $emails = get(emails);
+    if ($emails.length > 0) {
+      selectedIndex.set($emails.length - 1);
+      selectedEmailId.set($emails[$emails.length - 1].id);
+    }
+  },
+
+  // Go to folder
+  go_inbox: () => {
+    currentFolder.set("inbox");
+    view.set("inbox");
+    updateUrlWithEmail(null);
+  },
+
+  go_starred: () => {
+    currentFolder.set("starred");
+    view.set("inbox");
+    updateUrlWithEmail(null);
+  },
+
+  go_sent: () => {
+    currentFolder.set("sent");
+    view.set("inbox");
+    updateUrlWithEmail(null);
+  },
+
+  go_drafts: () => {
+    currentFolder.set("drafts");
+    view.set("inbox");
+    updateUrlWithEmail(null);
+  },
+
+  go_trash: () => {
+    currentFolder.set("trash");
+    view.set("inbox");
+    updateUrlWithEmail(null);
+  },
+
+  go_archive: () => {
+    currentFolder.set("archive");
+    view.set("inbox");
+    updateUrlWithEmail(null);
+  },
+
+  go_snoozed: () => {
+    currentFolder.set("snoozed");
+    view.set("inbox");
+    updateUrlWithEmail(null);
+  },
+
+  go_reminders: () => {
+    currentFolder.set("reminders");
+    view.set("inbox");
+    updateUrlWithEmail(null);
+  },
+
+  go_scheduled: () => {
+    currentFolder.set("scheduled");
+    view.set("inbox");
+    updateUrlWithEmail(null);
+  },
+
+  // Email actions
+  archive: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      emailActions.archive($selectedEmailId);
+      selectNextEmail();
+    }
+  },
+
+  archive_alt: () => {
+    actionHandlers.archive();
+  },
+
+  trash: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      emailActions.trash($selectedEmailId);
+      selectNextEmail();
+    }
+  },
+
+  trash_backspace: () => {
+    actionHandlers.trash();
+  },
+
+  trash_delete: () => {
+    actionHandlers.trash();
+  },
+
+  toggle_star: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      emailActions.toggleStar($selectedEmailId);
+    }
+  },
+
+  toggle_important: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      emailActions.toggleImportant($selectedEmailId);
+    }
+  },
+
+  toggle_read: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      emailActions.toggleRead($selectedEmailId);
+    }
+  },
+
+  snooze: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      isSnoozeModalOpen.set(true);
+    }
+  },
+
+  set_reminder: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      isReminderModalOpen.set(true);
+    }
+  },
+
+  // Inbox tabs
+  tab_important: () => {
+    const $folder = get(currentFolder);
+    if ($folder === "inbox") {
+      inboxTab.set("important");
+    }
+  },
+
+  tab_other: () => {
+    const $folder = get(currentFolder);
+    if ($folder === "inbox") {
+      inboxTab.set("other");
+    }
+  },
+
+  tab_all: () => {
+    const $folder = get(currentFolder);
+    if ($folder === "inbox") {
+      inboxTab.set("all");
+    }
+  },
+
+  // Compose
+  compose_new: () => {
+    composeMode.set("new");
+    replyToEmail.set(null);
+    view.set("compose");
+  },
+
+  reply: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if (!$selectedEmailId) return;
+
+    const $emails = get(emails);
+    const email = $emails.find((e) => e.id === $selectedEmailId);
+    if (email) {
+      composeMode.set("reply");
+      replyToEmail.set(email);
+      view.set("compose");
+    }
+  },
+
+  reply_all: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if (!$selectedEmailId) return;
+
+    const $emails = get(emails);
+    const email = $emails.find((e) => e.id === $selectedEmailId);
+    if (email) {
+      composeMode.set("replyAll");
+      replyToEmail.set(email);
+      view.set("compose");
+    }
+  },
+
+  forward: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if (!$selectedEmailId) return;
+
+    const $emails = get(emails);
+    const email = $emails.find((e) => e.id === $selectedEmailId);
+    if (email) {
+      composeMode.set("forward");
+      replyToEmail.set(email);
+      view.set("compose");
+    }
+  },
+
+  // Other
+  command_palette: () => {
+    isCommandPaletteOpen.update((v) => !v);
+  },
+
+  settings: () => {
+    isSettingsOpen.update((v) => !v);
+  },
+
+  search: () => {
+    // Will be handled by the search component
+  },
+
+  show_shortcuts: () => {
+    isShortcutOverlayOpen.update((v) => !v);
+  },
+
+  sync: () => {
+    if (syncCallback) {
+      syncCallback();
+    }
+  },
+};
+
+// Cache for key maps (rebuilt when shortcuts change)
+let keyMapsCache: ReturnType<typeof buildKeyMaps> | null = null;
+
+// Rebuild the key maps (call this when shortcuts are updated)
+export function refreshKeyMaps() {
+  keyMapsCache = buildKeyMaps();
+}
+
+// Get current key maps (lazy initialization)
+function getKeyMaps() {
+  if (!keyMapsCache) {
+    keyMapsCache = buildKeyMaps();
+  }
+  return keyMapsCache;
 }
 
 export function handleKeydown(event: KeyboardEvent) {
@@ -462,49 +417,56 @@ export function handleKeydown(event: KeyboardEvent) {
     key = `Cmd+${key.toLowerCase()}`;
   }
 
+  const { handlers, sequences } = getKeyMaps();
+
   // Check for two-key sequences (e.g., "gi" for go to inbox)
   if (pendingKey) {
     const sequence = pendingKey + key;
     clearPendingKey();
 
-    const seqHandler = sequenceHandlers[sequence];
-    if (seqHandler) {
+    const action = sequences[sequence];
+    if (action) {
       event.preventDefault();
-      seqHandler();
+      actionHandlers[action]();
       return;
     }
     // No sequence matched, try the pending key's handler then current key
-    const pendingHandler = handlers[pendingKey];
-    if (pendingHandler) {
-      pendingHandler();
+    const pendingAction = handlers[pendingKey];
+    if (pendingAction) {
+      actionHandlers[pendingAction]();
     }
   }
 
   // Check if this key starts a sequence
-  const startsSequence = Object.keys(sequenceHandlers).some(seq => seq.startsWith(key));
+  const startsSequence = Object.keys(sequences).some(seq => seq.startsWith(key));
   if (startsSequence && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
     event.preventDefault();
     pendingKey = key;
     // Clear pending key after 500ms if no follow-up
     pendingKeyTimeout = setTimeout(() => {
       if (pendingKey) {
-        const handler = handlers[pendingKey];
-        if (handler) handler();
+        const action = handlers[pendingKey];
+        if (action) actionHandlers[action]();
         clearPendingKey();
       }
     }, 500);
     return;
   }
 
-  const handler = handlers[key];
-  if (handler) {
+  const action = handlers[key];
+  if (action) {
     event.preventDefault();
-    handler();
+    actionHandlers[action]();
   }
 }
 
 export function initKeyboardNavigation() {
   if (typeof window !== "undefined") {
+    // Load custom bindings from localStorage
+    loadCustomBindings();
+    // Build initial key maps
+    refreshKeyMaps();
+
     window.addEventListener("keydown", handleKeydown);
     return () => window.removeEventListener("keydown", handleKeydown);
   }
