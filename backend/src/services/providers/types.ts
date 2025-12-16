@@ -90,4 +90,14 @@ export interface MicrosoftAccount {
   token_expires_at: number;
 }
 
-export type Account = GmailAccount | ImapAccount | MicrosoftAccount;
+export interface YahooAccount {
+  id: string;
+  email: string;
+  name: string;
+  provider_type: "yahoo";
+  access_token: string;
+  refresh_token: string;
+  token_expires_at: number;
+}
+
+export type Account = GmailAccount | ImapAccount | MicrosoftAccount | YahooAccount;

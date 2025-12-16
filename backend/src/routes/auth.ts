@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { accountQueries, db } from "../db";
-import { getValidAccessToken, getMicrosoftAccessToken, tokenNeedsRefresh } from "../services/token";
+import { getValidAccessToken, getMicrosoftAccessToken, getYahooAccessToken, tokenNeedsRefresh } from "../services/token";
 import { ImapSmtpProvider, MicrosoftProvider } from "../services/providers";
 import { startIdle } from "../services/imap-idle";
 
@@ -11,6 +11,10 @@ const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:3001/auth/cal
 const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || "";
 const MICROSOFT_CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET || "";
 const MICROSOFT_REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI || "http://localhost:3001/auth/microsoft/callback";
+
+const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID || "";
+const YAHOO_CLIENT_SECRET = process.env.YAHOO_CLIENT_SECRET || "";
+const YAHOO_REDIRECT_URI = process.env.YAHOO_REDIRECT_URI || "http://localhost:3001/auth/yahoo/callback";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -25,6 +29,14 @@ const MICROSOFT_SCOPES = [
   "https://graph.microsoft.com/Mail.Send",
   "https://graph.microsoft.com/User.Read",
   "offline_access",
+].join(" ");
+
+// Yahoo requires openid for user info endpoint, mail-w for read/write access
+const YAHOO_SCOPES = [
+  "openid",
+  "email",
+  "profile",
+  "mail-w", // mail write includes read
 ].join(" ");
 
 export const authRoutes = new Elysia({ prefix: "/auth" })
@@ -184,6 +196,102 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         token_expires_at = excluded.token_expires_at,
         updated_at = unixepoch()
     `, [id, email, user.displayName || email.split("@")[0], tokens.access_token, tokens.refresh_token, expiresAt]);
+
+    // Redirect to frontend with success
+    return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(email)}`);
+  })
+
+  // Yahoo OAuth routes
+  .get("/login/yahoo", ({ redirect }) => {
+    if (!YAHOO_CLIENT_ID) {
+      return { error: "Yahoo OAuth is not configured" };
+    }
+
+    const params = new URLSearchParams({
+      client_id: YAHOO_CLIENT_ID,
+      redirect_uri: YAHOO_REDIRECT_URI,
+      response_type: "code",
+      scope: YAHOO_SCOPES,
+    });
+
+    return redirect(`https://api.login.yahoo.com/oauth2/request_auth?${params}`);
+  })
+
+  .get("/yahoo/callback", async ({ query, redirect }) => {
+    const { code, error: oauthError, error_description } = query;
+
+    if (oauthError) {
+      return { error: error_description || oauthError };
+    }
+
+    if (!code) {
+      return { error: "No authorization code provided" };
+    }
+
+    // Exchange code for tokens
+    const tokenResponse = await fetch("https://api.login.yahoo.com/oauth2/get_token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Basic ${Buffer.from(`${YAHOO_CLIENT_ID}:${YAHOO_CLIENT_SECRET}`).toString("base64")}`,
+      },
+      body: new URLSearchParams({
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: YAHOO_REDIRECT_URI,
+      }),
+    });
+
+    const tokens = await tokenResponse.json() as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      xoauth_yahoo_guid?: string;
+      error?: string;
+      error_description?: string;
+    };
+
+    if (tokens.error) {
+      return { error: tokens.error_description || tokens.error };
+    }
+
+    // Get user info from Yahoo OpenID Connect userinfo endpoint
+    const userResponse = await fetch("https://api.login.yahoo.com/openid/v1/userinfo", {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+
+    const user = await userResponse.json() as {
+      sub?: string;
+      email?: string;
+      name?: string;
+      given_name?: string;
+      family_name?: string;
+      preferred_username?: string;
+    };
+
+    const email = user.email || "";
+    if (!email) {
+      return { error: "Could not retrieve email address from Yahoo account" };
+    }
+
+    const displayName = user.name || user.given_name || user.preferred_username || email.split("@")[0];
+
+    // Store account with yahoo provider type
+    const id = crypto.randomUUID();
+    const expiresAt = Math.floor(Date.now() / 1000) + (tokens.expires_in || 3600);
+
+    // Use raw SQL to set provider_type to yahoo
+    db.run(`
+      INSERT INTO accounts (id, email, name, provider_type, access_token, refresh_token, token_expires_at, updated_at)
+      VALUES (?, ?, ?, 'yahoo', ?, ?, ?, unixepoch())
+      ON CONFLICT(email) DO UPDATE SET
+        name = excluded.name,
+        provider_type = 'yahoo',
+        access_token = excluded.access_token,
+        refresh_token = excluded.refresh_token,
+        token_expires_at = excluded.token_expires_at,
+        updated_at = unixepoch()
+    `, [id, email, displayName, tokens.access_token, tokens.refresh_token, expiresAt]);
 
     // Redirect to frontend with success
     return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(email)}`);
@@ -397,6 +505,43 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
           refresh_token: account.refresh_token,
           grant_type: "refresh_token",
           scope: MICROSOFT_SCOPES,
+        }),
+      });
+
+      const tokens = await tokenResponse.json() as {
+        access_token?: string;
+        refresh_token?: string;
+        expires_in?: number;
+        error?: string;
+        error_description?: string;
+      };
+
+      if (tokens.error) {
+        return { error: tokens.error_description || tokens.error };
+      }
+
+      const expiresAt = Math.floor(Date.now() / 1000) + (tokens.expires_in || 3600);
+
+      db.run(`
+        UPDATE accounts
+        SET access_token = ?, refresh_token = ?, token_expires_at = ?, updated_at = unixepoch()
+        WHERE id = ?
+      `, [tokens.access_token, tokens.refresh_token || account.refresh_token, expiresAt, account.id]);
+
+      return { success: true };
+    }
+
+    // Handle Yahoo accounts
+    if (account.provider_type === "yahoo") {
+      const tokenResponse = await fetch("https://api.login.yahoo.com/oauth2/get_token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Authorization": `Basic ${Buffer.from(`${YAHOO_CLIENT_ID}:${YAHOO_CLIENT_SECRET}`).toString("base64")}`,
+        },
+        body: new URLSearchParams({
+          refresh_token: account.refresh_token,
+          grant_type: "refresh_token",
         }),
       });
 

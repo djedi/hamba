@@ -114,7 +114,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Support Microsoft OAuth** - Add Outlook/Office365 OAuth flow similar to Gmail. Use Microsoft Graph API for email operations.
 
-- [ ] **Support Yahoo OAuth** - Add Yahoo OAuth flow. Many users have Yahoo accounts.
+- [x] **Support Yahoo OAuth** - Add Yahoo OAuth flow. Many users have Yahoo accounts.
 
 ## Infrastructure & Code Quality
 

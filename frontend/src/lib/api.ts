@@ -47,6 +47,7 @@ export const api = {
   deleteAccount: (id: string) => request(`/auth/accounts/${id}`, { method: "DELETE" }),
   getLoginUrl: () => `${API_URL}/auth/login`,
   getMicrosoftLoginUrl: () => `${API_URL}/auth/login/microsoft`,
+  getYahooLoginUrl: () => `${API_URL}/auth/login/yahoo`,
 
   // Emails
   getEmails: (accountId: string, limit = 50, offset = 0) =>
@@ -424,7 +425,7 @@ export interface Account {
   id: string;
   email: string;
   name: string;
-  provider_type: "gmail" | "imap" | "microsoft";
+  provider_type: "gmail" | "imap" | "microsoft" | "yahoo";
   created_at: number;
   tokenStatus?: "valid" | "expired" | "unknown";
   unread_count?: number;

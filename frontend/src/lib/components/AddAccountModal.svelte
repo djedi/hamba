@@ -30,6 +30,10 @@
     window.location.href = api.getMicrosoftLoginUrl();
   }
 
+  function handleYahoo() {
+    window.location.href = api.getYahooLoginUrl();
+  }
+
   async function handleImapSubmit() {
     testing = true;
     error = "";
@@ -118,6 +122,14 @@
           <div class="option-text">
             <span class="label">Microsoft</span>
             <span class="desc">Outlook, Hotmail, Office 365</span>
+          </div>
+        </button>
+
+        <button class="option" onclick={handleYahoo}>
+          <span class="icon yahoo">Y</span>
+          <div class="option-text">
+            <span class="label">Yahoo</span>
+            <span class="desc">Yahoo Mail, AOL</span>
           </div>
         </button>
 
@@ -322,6 +334,10 @@
 
   .option .icon.microsoft {
     background: #0078d4;
+  }
+
+  .option .icon.yahoo {
+    background: #720e9e;
   }
 
   .option-text {
