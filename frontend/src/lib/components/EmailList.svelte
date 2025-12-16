@@ -2,6 +2,8 @@
   import { emails, selectedEmailId, selectedIndex, searchQuery } from "$lib/stores";
   import { extractSearchTerms } from "$lib/search";
   import EmailRow from "./EmailRow.svelte";
+  import VirtualList from "./VirtualList.svelte";
+  import type { Email } from "$lib/api";
 
   interface Props {
     loading?: boolean;
@@ -11,6 +13,29 @@
 
   // Extract search terms from the current search query
   const searchTerms = $derived(extractSearchTerms($searchQuery));
+
+  // Row height: 12px padding top + 12px padding bottom + ~21px content + 1px border = ~46px
+  // Measured more precisely: the rows are approximately 46px tall
+  const ROW_HEIGHT = 46;
+
+  // Reference to virtual list for scrolling
+  let virtualList: ReturnType<typeof VirtualList<Email>> | null = $state(null);
+
+  // Track previous selected index to detect changes from keyboard navigation
+  let prevSelectedIndex = $state(-1);
+
+  // When selectedIndex changes (from keyboard navigation), scroll to that index
+  $effect(() => {
+    const idx = $selectedIndex;
+    if (virtualList && idx !== prevSelectedIndex && idx >= 0) {
+      virtualList.scrollToIndex(idx);
+      prevSelectedIndex = idx;
+    }
+  });
+
+  function getEmailKey(email: Email): string {
+    return email.id;
+  }
 </script>
 
 <div class="email-list">
@@ -26,24 +51,31 @@
       <p>Your inbox is empty. Click Sync to fetch new emails.</p>
     </div>
   {:else}
-    <div class="list">
-      {#each $emails as email, index (email.id)}
+    <VirtualList
+      bind:this={virtualList}
+      items={$emails}
+      itemHeight={ROW_HEIGHT}
+      getKey={getEmailKey}
+      overscan={5}
+    >
+      {#snippet children({ item: email, index })}
         <EmailRow
           {email}
           selected={email.id === $selectedEmailId}
           {index}
           {searchTerms}
         />
-      {/each}
-    </div>
+      {/snippet}
+    </VirtualList>
   {/if}
 </div>
 
 <style>
   .email-list {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .loading,
@@ -84,10 +116,5 @@
   .empty p {
     color: var(--text-muted);
     margin: 0;
-  }
-
-  .list {
-    display: flex;
-    flex-direction: column;
   }
 </style>

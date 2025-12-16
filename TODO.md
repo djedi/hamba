@@ -62,7 +62,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ### Speed Optimizations
 
-- [ ] **Implement virtual scrolling for email list** - Current implementation renders all emails. For large inboxes, implement virtual scrolling that only renders visible rows. Use a library like `svelte-virtual-list` or build custom.
+- [x] **Implement virtual scrolling for email list** - Current implementation renders all emails. For large inboxes, implement virtual scrolling that only renders visible rows. Use a library like `svelte-virtual-list` or build custom.
 
 - [ ] **Add email list pagination/infinite scroll** - Currently loads fixed number of emails. Implement infinite scroll that loads more as user scrolls down. Add `offset` parameter to email fetch.
 
