@@ -79,8 +79,8 @@ export const api = {
 
   getThread: (threadId: string) => request<Email[]>(`/emails/thread/${threadId}`),
 
-  searchEmails: (query: string, limit = 50) =>
-    request<Email[]>(`/emails/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+  searchEmails: (query: string, limit = 50, accountId?: string) =>
+    request<Email[]>(`/emails/search?q=${encodeURIComponent(query)}&limit=${limit}${accountId ? `&accountId=${accountId}` : ''}`),
 
   syncEmails: (accountId: string) =>
     request<{ synced: number; total: number }>(`/emails/sync/${accountId}`, { method: "POST" }),

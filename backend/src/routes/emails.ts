@@ -39,13 +39,116 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
   })
 
   .get("/search", ({ query }) => {
-    const { q, limit = "50" } = query;
+    const { q, limit = "50", accountId } = query;
 
     if (!q) {
       return { error: "Search query required" };
     }
 
-    return emailQueries.search.all(q, parseInt(limit as string));
+    // Parse search operators from query string
+    // Supported: from:, to:, subject:, has:attachment, is:unread, is:starred, before:, after:
+    const operators: {
+      query?: string;
+      from?: string;
+      to?: string;
+      subject?: string;
+      hasAttachment?: boolean;
+      isUnread?: boolean;
+      isStarred?: boolean;
+      before?: number;
+      after?: number;
+      accountId?: string;
+      limit?: number;
+    } = {
+      limit: parseInt(limit as string),
+      accountId: accountId as string | undefined,
+    };
+
+    let remainingQuery = q as string;
+
+    // Extract from: operator
+    const fromMatch = remainingQuery.match(/from:(\S+)/i);
+    if (fromMatch) {
+      operators.from = fromMatch[1];
+      remainingQuery = remainingQuery.replace(fromMatch[0], "").trim();
+    }
+
+    // Extract to: operator
+    const toMatch = remainingQuery.match(/to:(\S+)/i);
+    if (toMatch) {
+      operators.to = toMatch[1];
+      remainingQuery = remainingQuery.replace(toMatch[0], "").trim();
+    }
+
+    // Extract subject: operator (supports quotes for multi-word)
+    const subjectMatch = remainingQuery.match(/subject:(?:"([^"]+)"|(\S+))/i);
+    if (subjectMatch) {
+      operators.subject = subjectMatch[1] || subjectMatch[2];
+      remainingQuery = remainingQuery.replace(subjectMatch[0], "").trim();
+    }
+
+    // Extract has:attachment operator
+    const hasAttachmentMatch = remainingQuery.match(/has:attachment/i);
+    if (hasAttachmentMatch) {
+      operators.hasAttachment = true;
+      remainingQuery = remainingQuery.replace(hasAttachmentMatch[0], "").trim();
+    }
+
+    // Extract is:unread operator
+    const isUnreadMatch = remainingQuery.match(/is:unread/i);
+    if (isUnreadMatch) {
+      operators.isUnread = true;
+      remainingQuery = remainingQuery.replace(isUnreadMatch[0], "").trim();
+    }
+
+    // Extract is:read operator
+    const isReadMatch = remainingQuery.match(/is:read/i);
+    if (isReadMatch) {
+      operators.isUnread = false;
+      remainingQuery = remainingQuery.replace(isReadMatch[0], "").trim();
+    }
+
+    // Extract is:starred operator
+    const isStarredMatch = remainingQuery.match(/is:starred/i);
+    if (isStarredMatch) {
+      operators.isStarred = true;
+      remainingQuery = remainingQuery.replace(isStarredMatch[0], "").trim();
+    }
+
+    // Extract before: operator (YYYY-MM-DD)
+    const beforeMatch = remainingQuery.match(/before:(\d{4}-\d{2}-\d{2})/i);
+    if (beforeMatch) {
+      const date = new Date(beforeMatch[1]);
+      date.setHours(23, 59, 59, 999); // End of day
+      operators.before = Math.floor(date.getTime() / 1000);
+      remainingQuery = remainingQuery.replace(beforeMatch[0], "").trim();
+    }
+
+    // Extract after: operator (YYYY-MM-DD)
+    const afterMatch = remainingQuery.match(/after:(\d{4}-\d{2}-\d{2})/i);
+    if (afterMatch) {
+      const date = new Date(afterMatch[1]);
+      date.setHours(0, 0, 0, 0); // Start of day
+      operators.after = Math.floor(date.getTime() / 1000);
+      remainingQuery = remainingQuery.replace(afterMatch[0], "").trim();
+    }
+
+    // If there's remaining text, use it as FTS query
+    if (remainingQuery.trim()) {
+      operators.query = remainingQuery.trim();
+    }
+
+    // If we have any operators, use advanced search
+    const hasOperators = operators.from || operators.to || operators.subject ||
+      operators.hasAttachment || operators.isUnread !== undefined ||
+      operators.isStarred !== undefined || operators.before || operators.after;
+
+    if (hasOperators || !operators.query) {
+      return emailQueries.advancedSearch(operators);
+    }
+
+    // Fall back to simple FTS search for plain queries
+    return emailQueries.search.all(operators.query, parseInt(limit as string));
   })
 
   .get("/starred", ({ query }) => {

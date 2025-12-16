@@ -234,6 +234,102 @@ export const emailQueries = {
     LIMIT ?
   `),
 
+  // Advanced search with operators - executed dynamically
+  advancedSearch: (params: {
+    query?: string;
+    from?: string;
+    to?: string;
+    subject?: string;
+    hasAttachment?: boolean;
+    isUnread?: boolean;
+    isStarred?: boolean;
+    before?: number;
+    after?: number;
+    accountId?: string;
+    limit?: number;
+  }) => {
+    const conditions: string[] = [];
+    const values: any[] = [];
+
+    // FTS query for general text search
+    if (params.query) {
+      conditions.push(`emails.rowid IN (
+        SELECT rowid FROM emails_fts WHERE emails_fts MATCH ?
+      )`);
+      values.push(params.query);
+    }
+
+    // From filter (email or name)
+    if (params.from) {
+      conditions.push(`(emails.from_email LIKE ? OR emails.from_name LIKE ?)`);
+      const fromPattern = `%${params.from}%`;
+      values.push(fromPattern, fromPattern);
+    }
+
+    // To filter
+    if (params.to) {
+      conditions.push(`emails.to_addresses LIKE ?`);
+      values.push(`%${params.to}%`);
+    }
+
+    // Subject filter
+    if (params.subject) {
+      conditions.push(`emails.subject LIKE ?`);
+      values.push(`%${params.subject}%`);
+    }
+
+    // Has attachment filter (requires subquery to attachments table)
+    if (params.hasAttachment) {
+      conditions.push(`emails.id IN (SELECT DISTINCT email_id FROM attachments)`);
+    }
+
+    // Unread filter
+    if (params.isUnread !== undefined) {
+      conditions.push(`emails.is_read = ?`);
+      values.push(params.isUnread ? 0 : 1);
+    }
+
+    // Starred filter
+    if (params.isStarred !== undefined) {
+      conditions.push(`emails.is_starred = ?`);
+      values.push(params.isStarred ? 1 : 0);
+    }
+
+    // Date filters
+    if (params.before) {
+      conditions.push(`emails.received_at < ?`);
+      values.push(params.before);
+    }
+
+    if (params.after) {
+      conditions.push(`emails.received_at > ?`);
+      values.push(params.after);
+    }
+
+    // Account filter
+    if (params.accountId) {
+      conditions.push(`emails.account_id = ?`);
+      values.push(params.accountId);
+    }
+
+    // Always exclude trashed emails from search results
+    conditions.push(`emails.is_trashed = 0`);
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = params.limit || 50;
+
+    const sql = `
+      SELECT * FROM emails
+      ${whereClause}
+      ORDER BY received_at DESC
+      LIMIT ?
+    `;
+
+    values.push(limit);
+
+    return db.prepare(sql).all(...values);
+  },
+
   upsert: db.prepare(`
     INSERT INTO emails (
       id, account_id, thread_id, message_id, subject, snippet,
