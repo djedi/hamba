@@ -78,7 +78,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add empty states** - Design empty states for: empty inbox ("Inbox Zero!"), no search results, no starred emails, etc. Add illustrations or icons.
 
-- [ ] **Add keyboard shortcut overlay** - Press `?` to show a modal with all keyboard shortcuts organized by category. Similar to GitHub's shortcut help.
+- [x] **Add keyboard shortcut overlay** - Press `?` to show a modal with all keyboard shortcuts organized by category. Similar to GitHub's shortcut help.
 
 - [ ] **Implement Command Palette search** - The `Cmd+K` palette exists but needs full implementation. Add fuzzy search over: commands, recent emails, contacts, labels. Arrow keys to navigate, Enter to select.
 

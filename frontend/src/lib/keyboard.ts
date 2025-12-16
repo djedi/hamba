@@ -7,6 +7,7 @@ import {
   isCommandPaletteOpen,
   isSnoozeModalOpen,
   isReminderModalOpen,
+  isShortcutOverlayOpen,
   composeMode,
   replyToEmail,
   emailActions,
@@ -315,6 +316,11 @@ const handlers: Record<string, KeyHandler> = {
   // Command palette
   "Cmd+k": () => {
     isCommandPaletteOpen.update((v) => !v);
+  },
+
+  // Keyboard shortcut overlay
+  "?": () => {
+    isShortcutOverlayOpen.update((v) => !v);
   },
 
   // Sync/Refresh - triggers a sync callback if registered

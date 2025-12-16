@@ -14,6 +14,7 @@
     isCommandPaletteOpen,
     isSnoozeModalOpen,
     isReminderModalOpen,
+    isShortcutOverlayOpen,
     composeMode,
     replyToEmail,
     toasts,
@@ -47,6 +48,7 @@
   import SnoozeModal from "$lib/components/SnoozeModal.svelte";
   import ReminderModal from "$lib/components/ReminderModal.svelte";
   import ScheduledList from "$lib/components/ScheduledList.svelte";
+  import KeyboardShortcutOverlay from "$lib/components/KeyboardShortcutOverlay.svelte";
 
   let needsReauth = $state(false);
   let errorMessage = $state("");
@@ -508,6 +510,10 @@
 
   {#if $isReminderModalOpen && $selectedEmailId}
     <ReminderModal emailId={$selectedEmailId} onClose={() => isReminderModalOpen.set(false)} />
+  {/if}
+
+  {#if $isShortcutOverlayOpen}
+    <KeyboardShortcutOverlay onClose={() => isShortcutOverlayOpen.set(false)} />
   {/if}
 
   <Toasts />
