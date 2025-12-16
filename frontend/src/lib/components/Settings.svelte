@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { accounts, selectedAccountId, isSettingsOpen, showToast } from "$lib/stores";
-  import { api } from "$lib/api";
+  import { api, type Signature } from "$lib/api";
   import {
     type ShortcutAction,
     getShortcutsByCategory,
@@ -23,7 +23,7 @@
   let { onClose }: Props = $props();
 
   // Settings tabs
-  type SettingsTab = "account" | "appearance" | "keyboard" | "notifications" | "ai";
+  type SettingsTab = "account" | "appearance" | "keyboard" | "notifications" | "ai" | "signatures";
   let activeTab = $state<SettingsTab>("account");
 
   // Appearance settings (stored in localStorage)
@@ -61,6 +61,18 @@
   let recordedKey = $state<string>("");
   let conflictAction = $state<ShortcutAction | null>(null);
   let hasCustom = $state(hasCustomBindings());
+
+  // Signature management state
+  let signatures = $state<Signature[]>([]);
+  let signaturesLoading = $state(true);
+  let editingSignature = $state<Signature | null>(null);
+  let isCreatingSignature = $state(false);
+  let signatureName = $state("");
+  let signatureContent = $state("");
+  let signatureIsHtml = $state(false);
+  let signatureIsDefault = $state(false);
+  let signatureSaving = $state(false);
+  let deletingSignatureId = $state<string | null>(null);
 
   // Subscribe to customBindings changes
   $effect(() => {
@@ -279,6 +291,143 @@
       deletingAccountId = null;
     }
   }
+
+  // Signature management functions
+  async function loadSignatures() {
+    if (!$selectedAccountId) return;
+    signaturesLoading = true;
+    try {
+      signatures = await api.getSignatures($selectedAccountId);
+    } catch (e) {
+      console.error("Failed to load signatures:", e);
+      signatures = [];
+    } finally {
+      signaturesLoading = false;
+    }
+  }
+
+  function startCreateSignature() {
+    editingSignature = null;
+    isCreatingSignature = true;
+    signatureName = "";
+    signatureContent = "";
+    signatureIsHtml = false;
+    signatureIsDefault = signatures.length === 0; // Default to true if first signature
+  }
+
+  function startEditSignature(sig: Signature) {
+    isCreatingSignature = false;
+    editingSignature = sig;
+    signatureName = sig.name;
+    signatureContent = sig.content;
+    signatureIsHtml = sig.is_html === 1;
+    signatureIsDefault = sig.is_default === 1;
+  }
+
+  function cancelSignatureEdit() {
+    editingSignature = null;
+    isCreatingSignature = false;
+    signatureName = "";
+    signatureContent = "";
+    signatureIsHtml = false;
+    signatureIsDefault = false;
+  }
+
+  async function saveSignature() {
+    if (!$selectedAccountId) return;
+    if (!signatureName.trim()) {
+      showToast("Please enter a signature name", "error");
+      return;
+    }
+
+    signatureSaving = true;
+    try {
+      if (isCreatingSignature) {
+        const result = await api.createSignature({
+          accountId: $selectedAccountId,
+          name: signatureName.trim(),
+          content: signatureContent,
+          isHtml: signatureIsHtml,
+          isDefault: signatureIsDefault,
+        });
+        if (result.success) {
+          showToast("Signature created", "success");
+          await loadSignatures();
+          cancelSignatureEdit();
+        } else {
+          showToast(result.error || "Failed to create signature", "error");
+        }
+      } else if (editingSignature) {
+        const result = await api.updateSignature(editingSignature.id, {
+          name: signatureName.trim(),
+          content: signatureContent,
+          isHtml: signatureIsHtml,
+        });
+        if (result.success) {
+          // Handle default change separately
+          if (signatureIsDefault && editingSignature.is_default !== 1) {
+            await api.setDefaultSignature(editingSignature.id);
+          } else if (!signatureIsDefault && editingSignature.is_default === 1) {
+            await api.clearDefaultSignature(editingSignature.id);
+          }
+          showToast("Signature updated", "success");
+          await loadSignatures();
+          cancelSignatureEdit();
+        } else {
+          showToast(result.error || "Failed to update signature", "error");
+        }
+      }
+    } catch (e) {
+      showToast("Failed to save signature", "error");
+    } finally {
+      signatureSaving = false;
+    }
+  }
+
+  async function deleteSignature(id: string) {
+    if (!confirm("Are you sure you want to delete this signature?")) {
+      return;
+    }
+
+    deletingSignatureId = id;
+    try {
+      const result = await api.deleteSignature(id);
+      if (result.success) {
+        showToast("Signature deleted", "success");
+        await loadSignatures();
+        if (editingSignature?.id === id) {
+          cancelSignatureEdit();
+        }
+      } else {
+        showToast(result.error || "Failed to delete signature", "error");
+      }
+    } catch (e) {
+      showToast("Failed to delete signature", "error");
+    } finally {
+      deletingSignatureId = null;
+    }
+  }
+
+  async function setAsDefault(id: string) {
+    try {
+      const result = await api.setDefaultSignature(id);
+      if (result.success) {
+        showToast("Default signature updated", "success");
+        await loadSignatures();
+      } else {
+        showToast(result.error || "Failed to set default", "error");
+      }
+    } catch (e) {
+      showToast("Failed to set default", "error");
+    }
+  }
+
+  // Load signatures when switching to the signatures tab
+  $effect(() => {
+    if (activeTab === "signatures" && $selectedAccountId) {
+      loadSignatures();
+    }
+  });
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -308,6 +457,9 @@
         </button>
         <button class="tab" class:active={activeTab === "ai"} onclick={() => (activeTab = "ai")}>
           AI
+        </button>
+        <button class="tab" class:active={activeTab === "signatures"} onclick={() => (activeTab = "signatures")}>
+          Signatures
         </button>
       </nav>
 
@@ -513,6 +665,128 @@
                 </div>
               </div>
             {/if}
+          </div>
+        {:else if activeTab === "signatures"}
+          <div class="section">
+            <div class="signatures-header">
+              <h3>Email Signatures</h3>
+              {#if !isCreatingSignature && !editingSignature}
+                <button class="primary small" onclick={startCreateSignature}>
+                  New Signature
+                </button>
+              {/if}
+            </div>
+
+            {#if signaturesLoading}
+              <p class="loading">Loading signatures...</p>
+            {:else if isCreatingSignature || editingSignature}
+              <div class="signature-editor">
+                <div class="signature-form">
+                  <div class="form-row">
+                    <label for="sig-name">Name</label>
+                    <input
+                      id="sig-name"
+                      type="text"
+                      bind:value={signatureName}
+                      placeholder="e.g., Work, Personal"
+                    />
+                  </div>
+                  <div class="form-row">
+                    <label for="sig-content">Signature Content</label>
+                    <textarea
+                      id="sig-content"
+                      bind:value={signatureContent}
+                      placeholder="Enter your signature text here..."
+                      rows={6}
+                    ></textarea>
+                  </div>
+                  <div class="form-row checkbox-row">
+                    <input
+                      type="checkbox"
+                      id="sig-html"
+                      bind:checked={signatureIsHtml}
+                    />
+                    <label for="sig-html">Use HTML formatting</label>
+                  </div>
+                  <div class="form-row checkbox-row">
+                    <input
+                      type="checkbox"
+                      id="sig-default"
+                      bind:checked={signatureIsDefault}
+                    />
+                    <label for="sig-default">Set as default signature</label>
+                  </div>
+                  <div class="signature-preview">
+                    <h4>Preview</h4>
+                    <div class="preview-content">
+                      {#if signatureIsHtml}
+                        {@html signatureContent || '<span class="placeholder">Your signature will appear here</span>'}
+                      {:else}
+                        <pre>{signatureContent || 'Your signature will appear here'}</pre>
+                      {/if}
+                    </div>
+                  </div>
+                  <div class="form-actions">
+                    <button class="cancel-btn" onclick={cancelSignatureEdit} disabled={signatureSaving}>
+                      Cancel
+                    </button>
+                    <button class="primary" onclick={saveSignature} disabled={signatureSaving}>
+                      {signatureSaving ? "Saving..." : isCreatingSignature ? "Create Signature" : "Save Changes"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            {:else if signatures.length === 0}
+              <div class="empty-signatures">
+                <p>No signatures yet. Create a signature to automatically add it to your emails.</p>
+              </div>
+            {:else}
+              <div class="signatures-list">
+                {#each signatures as sig (sig.id)}
+                  <div class="signature-item" class:is-default={sig.is_default === 1}>
+                    <div class="signature-info">
+                      <span class="signature-name">
+                        {sig.name}
+                        {#if sig.is_default === 1}
+                          <span class="default-badge">Default</span>
+                        {/if}
+                      </span>
+                      <span class="signature-type">
+                        {sig.is_html === 1 ? "HTML" : "Plain text"}
+                      </span>
+                    </div>
+                    <div class="signature-actions">
+                      {#if sig.is_default !== 1}
+                        <button
+                          class="action-btn"
+                          onclick={() => setAsDefault(sig.id)}
+                          title="Set as default"
+                        >
+                          Set Default
+                        </button>
+                      {/if}
+                      <button
+                        class="action-btn"
+                        onclick={() => startEditSignature(sig)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        class="action-btn danger"
+                        onclick={() => deleteSignature(sig.id)}
+                        disabled={deletingSignatureId === sig.id}
+                      >
+                        {deletingSignatureId === sig.id ? "..." : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+
+            <p class="help-text signatures-help">
+              Your default signature will be automatically appended to new emails and replies.
+            </p>
           </div>
         {/if}
       </div>
@@ -1090,5 +1364,235 @@
 
   .replace-btn:hover {
     background: var(--accent-hover);
+  }
+
+  /* Signature styles */
+  .signatures-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .signatures-header h3 {
+    margin: 0;
+  }
+
+  .signatures-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .signature-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .signature-item.is-default {
+    border-color: var(--accent);
+  }
+
+  .signature-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .signature-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .default-badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 6px;
+    background: var(--accent);
+    color: white;
+    border-radius: 4px;
+  }
+
+  .signature-type {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .signature-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .action-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .action-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .action-btn.danger {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+
+  .action-btn.danger:hover {
+    background: var(--danger);
+    color: white;
+  }
+
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .empty-signatures {
+    text-align: center;
+    padding: 32px 16px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px dashed var(--border);
+  }
+
+  .empty-signatures p {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin: 0;
+  }
+
+  .signature-editor {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid var(--border);
+  }
+
+  .signature-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-row label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .form-row input[type="text"],
+  .form-row textarea {
+    padding: 10px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+  }
+
+  .form-row input[type="text"]:focus,
+  .form-row textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .form-row textarea {
+    resize: vertical;
+    min-height: 100px;
+  }
+
+  .form-row.checkbox-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .form-row.checkbox-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+  }
+
+  .form-row.checkbox-row label {
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+
+  .signature-preview {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .signature-preview h4 {
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .preview-content {
+    padding: 12px;
+    font-size: 14px;
+    color: var(--text-primary);
+    min-height: 60px;
+    max-height: 150px;
+    overflow-y: auto;
+  }
+
+  .preview-content pre {
+    margin: 0;
+    font-family: inherit;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .preview-content .placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .form-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .signatures-help {
+    margin-top: 16px;
   }
 </style>

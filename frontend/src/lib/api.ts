@@ -375,6 +375,42 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ emailId }),
     }),
+
+  // Signatures
+  getSignatures: (accountId: string) =>
+    request<Signature[]>(`/signatures?accountId=${accountId}`),
+
+  getSignature: (id: string) => request<Signature>(`/signatures/${id}`),
+
+  getDefaultSignature: (accountId: string) =>
+    request<Signature | null>(`/signatures/default/${accountId}`),
+
+  createSignature: (params: { accountId: string; name: string; content: string; isHtml?: boolean; isDefault?: boolean }) =>
+    request<{ success: boolean; id?: string; error?: string }>("/signatures", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  updateSignature: (id: string, params: { name?: string; content?: string; isHtml?: boolean }) =>
+    request<{ success: boolean; error?: string }>(`/signatures/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(params),
+    }),
+
+  setDefaultSignature: (id: string) =>
+    request<{ success: boolean; error?: string }>(`/signatures/${id}/default`, {
+      method: "POST",
+    }),
+
+  clearDefaultSignature: (id: string) =>
+    request<{ success: boolean; error?: string }>(`/signatures/${id}/default`, {
+      method: "DELETE",
+    }),
+
+  deleteSignature: (id: string) =>
+    request<{ success: boolean; error?: string }>(`/signatures/${id}`, {
+      method: "DELETE",
+    }),
 };
 
 export interface Account {
@@ -491,4 +527,15 @@ export interface Contact {
   last_contacted: number;
   contact_count: number;
   created_at: number;
+}
+
+export interface Signature {
+  id: string;
+  account_id: string;
+  name: string;
+  content: string;
+  is_html: number;
+  is_default: number;
+  created_at: number;
+  updated_at: number;
 }

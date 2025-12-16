@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { api, type Email, type Draft } from "$lib/api";
+  import { api, type Email, type Draft, type Signature } from "$lib/api";
   import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails, snippets, snippetActions, composePrefillBody } from "$lib/stores";
   import EmailInput from "./EmailInput.svelte";
   import { get } from "svelte/store";
@@ -235,7 +235,31 @@
     }
   }
 
-  onMount(() => {
+  onMount(async () => {
+    const accountId = get(selectedAccountId);
+
+    // Load default signature for appending to new compositions
+    let defaultSignature: Signature | null = null;
+    if (accountId) {
+      try {
+        defaultSignature = await api.getDefaultSignature(accountId);
+      } catch (e) {
+        // Ignore errors loading signature
+      }
+    }
+
+    // Helper to append signature to body
+    const appendSignature = (currentBody: string): string => {
+      if (!defaultSignature) return currentBody;
+
+      const separator = "\n\n--\n";
+      const sigContent = defaultSignature.is_html === 1
+        ? defaultSignature.content
+        : defaultSignature.content.replace(/\n/g, "<br>");
+
+      return currentBody + separator + sigContent;
+    };
+
     // Load from existing draft if provided
     if (draft) {
       to = draft.to_addresses || "";
@@ -253,7 +277,7 @@
       if (mode === "reply") {
         to = replyTo.from_email;
         subject = replyTo.subject.startsWith("Re:") ? replyTo.subject : `Re: ${replyTo.subject}`;
-        body = buildQuotedReply(replyTo);
+        body = appendSignature("") + buildQuotedReply(replyTo);
       } else if (mode === "replyAll") {
         to = replyTo.from_email;
         // Add original To recipients (excluding self) to CC
@@ -268,10 +292,10 @@
         }
         if (cc) showCc = true;
         subject = replyTo.subject.startsWith("Re:") ? replyTo.subject : `Re: ${replyTo.subject}`;
-        body = buildQuotedReply(replyTo);
+        body = appendSignature("") + buildQuotedReply(replyTo);
       } else if (mode === "forward") {
         subject = replyTo.subject.startsWith("Fwd:") ? replyTo.subject : `Fwd: ${replyTo.subject}`;
-        body = buildForwardedMessage(replyTo);
+        body = appendSignature("") + buildForwardedMessage(replyTo);
       }
 
       // Check for smart reply prefill
@@ -280,13 +304,15 @@
         body = prefillBody + body;
         composePrefillBody.set(null); // Clear after use
       }
+    } else if (mode === "new") {
+      // For new emails, just append signature
+      body = appendSignature("");
     }
 
     // Start auto-save timer
     autoSaveTimer = setInterval(autoSave, 5000);
 
     // Load snippets for the current account
-    const accountId = get(selectedAccountId);
     if (accountId) {
       snippetActions.loadSnippets(accountId);
     }

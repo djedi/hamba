@@ -725,6 +725,62 @@ db.run(`CREATE INDEX IF NOT EXISTS idx_contacts_account_id ON contacts(account_i
 db.run(`CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email)`);
 db.run(`CREATE INDEX IF NOT EXISTS idx_contacts_last_contacted ON contacts(last_contacted DESC)`);
 
+// Signatures table for email signatures
+db.run(`
+  CREATE TABLE IF NOT EXISTS signatures (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    is_html INTEGER DEFAULT 0,
+    is_default INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_signatures_account_id ON signatures(account_id)`);
+
+// Signature operations
+export const signatureQueries = {
+  getByAccount: db.prepare(`
+    SELECT * FROM signatures
+    WHERE account_id = ?
+    ORDER BY is_default DESC, name ASC
+  `),
+
+  getById: db.prepare("SELECT * FROM signatures WHERE id = ?"),
+
+  getDefault: db.prepare(`
+    SELECT * FROM signatures
+    WHERE account_id = ? AND is_default = 1
+    LIMIT 1
+  `),
+
+  insert: db.prepare(`
+    INSERT INTO signatures (id, account_id, name, content, is_html, is_default)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `),
+
+  update: db.prepare(`
+    UPDATE signatures SET name = ?, content = ?, is_html = ?, updated_at = unixepoch() WHERE id = ?
+  `),
+
+  setDefault: db.prepare(`
+    UPDATE signatures SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END
+    WHERE account_id = ?
+  `),
+
+  clearDefault: db.prepare(`
+    UPDATE signatures SET is_default = 0 WHERE account_id = ?
+  `),
+
+  delete: db.prepare("DELETE FROM signatures WHERE id = ?"),
+
+  deleteByAccount: db.prepare("DELETE FROM signatures WHERE account_id = ?"),
+};
+
 // Contact operations
 export const contactQueries = {
   getByAccount: db.prepare(`

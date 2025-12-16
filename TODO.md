@@ -104,7 +104,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add keyboard shortcut customization** - Allow rebinding keyboard shortcuts. Store custom bindings. Reset to defaults option.
 
-- [ ] **Add signature management** - Create/edit email signatures per account. Option for plain text or rich HTML. Auto-append to new emails and replies.
+- [x] **Add signature management** - Create/edit email signatures per account. Option for plain text or rich HTML. Auto-append to new emails and replies.
 
 ## Account Management
 
