@@ -2,6 +2,7 @@
   import { drafts } from "$lib/stores";
   import type { Draft } from "$lib/api";
   import DraftRowSkeleton from "./DraftRowSkeleton.svelte";
+  import EmptyState from "./EmptyState.svelte";
 
   interface Props {
     loading?: boolean;
@@ -36,11 +37,11 @@
       {/each}
     </div>
   {:else if $drafts.length === 0}
-    <div class="empty">
-      <span class="empty-icon">📝</span>
-      <h3>No drafts</h3>
-      <p>Drafts you compose will appear here.</p>
-    </div>
+    <EmptyState
+      icon="📝"
+      title="No drafts"
+      description="Drafts you compose will appear here. Press 'c' to start composing."
+    />
   {:else}
     <div class="list">
       {#each $drafts as draft (draft.id)}
@@ -77,30 +78,6 @@
   .skeleton-list {
     flex: 1;
     overflow: hidden;
-  }
-
-  .empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 12px;
-    color: var(--text-secondary);
-  }
-
-  .empty-icon {
-    font-size: 48px;
-  }
-
-  .empty h3 {
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .empty p {
-    color: var(--text-muted);
-    margin: 0;
   }
 
   .list {

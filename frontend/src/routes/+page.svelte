@@ -477,7 +477,7 @@
         {#if $currentFolder === "inbox"}
           <InboxTabs />
         {/if}
-        <EmailList loading={$isLoading} onLoadMore={loadMoreEmails} />
+        <EmailList loading={$isLoading} onLoadMore={loadMoreEmails} folder={$currentFolder} inboxTab={$inboxTab} />
       {/if}
     {:else if $view === "email"}
       <EmailView />

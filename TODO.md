@@ -76,7 +76,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add loading skeletons** - Replace loading spinners with skeleton loaders that match the shape of content (email rows, email body). Feels faster and more polished.
 
-- [ ] **Add empty states** - Design empty states for: empty inbox ("Inbox Zero!"), no search results, no starred emails, etc. Add illustrations or icons.
+- [x] **Add empty states** - Design empty states for: empty inbox ("Inbox Zero!"), no search results, no starred emails, etc. Add illustrations or icons.
 
 - [ ] **Add keyboard shortcut overlay** - Press `?` to show a modal with all keyboard shortcuts organized by category. Similar to GitHub's shortcut help.
 

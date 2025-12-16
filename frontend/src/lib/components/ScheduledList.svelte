@@ -1,6 +1,7 @@
 <script lang="ts">
   import { scheduledEmails, scheduledEmailActions } from "$lib/stores";
   import DraftRowSkeleton from "./DraftRowSkeleton.svelte";
+  import EmptyState from "./EmptyState.svelte";
 
   interface Props {
     loading?: boolean;
@@ -48,11 +49,11 @@
       {/each}
     </div>
   {:else if $scheduledEmails.length === 0}
-    <div class="empty">
-      <span class="empty-icon">📅</span>
-      <h3>No scheduled emails</h3>
-      <p>Emails you schedule for later will appear here.</p>
-    </div>
+    <EmptyState
+      icon="📅"
+      title="No scheduled emails"
+      description="Emails you schedule for later will appear here. Use the schedule button in compose."
+    />
   {:else}
     <div class="list">
       {#each $scheduledEmails as scheduled (scheduled.id)}
@@ -94,30 +95,6 @@
   .skeleton-list {
     flex: 1;
     overflow: hidden;
-  }
-
-  .empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 12px;
-    color: var(--text-secondary);
-  }
-
-  .empty-icon {
-    font-size: 48px;
-  }
-
-  .empty h3 {
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .empty p {
-    color: var(--text-muted);
-    margin: 0;
   }
 
   .list {

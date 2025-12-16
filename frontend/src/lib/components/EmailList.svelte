@@ -1,17 +1,128 @@
 <script lang="ts">
-  import { emails, selectedEmailId, selectedIndex, searchQuery, isLoadingMore, hasMoreEmails } from "$lib/stores";
+  import { emails, selectedEmailId, selectedIndex, searchQuery, isLoadingMore, hasMoreEmails, selectedLabel } from "$lib/stores";
+  import type { Folder, InboxTab } from "$lib/stores";
   import { extractSearchTerms } from "$lib/search";
   import EmailRow from "./EmailRow.svelte";
   import EmailRowSkeleton from "./EmailRowSkeleton.svelte";
+  import EmptyState from "./EmptyState.svelte";
   import VirtualList from "./VirtualList.svelte";
   import type { Email } from "$lib/api";
 
   interface Props {
     loading?: boolean;
     onLoadMore?: () => void;
+    folder?: Folder;
+    inboxTab?: InboxTab;
   }
 
-  let { loading = false, onLoadMore }: Props = $props();
+  let { loading = false, onLoadMore, folder = "inbox", inboxTab = "important" }: Props = $props();
+
+  // Determine the appropriate empty state based on context
+  const emptyState = $derived.by(() => {
+    // Search results have highest priority
+    if ($searchQuery.length >= 2) {
+      return {
+        icon: "🔍",
+        title: "No results found",
+        description: `No emails match "${$searchQuery}". Try different keywords or search operators.`,
+        variant: "default" as const,
+      };
+    }
+
+    // Folder-specific empty states
+    switch (folder) {
+      case "inbox":
+        // Different states for inbox tabs
+        if (inboxTab === "important") {
+          return {
+            icon: "✨",
+            title: "All caught up!",
+            description: "No important emails right now. Check back later or view Other emails.",
+            variant: "success" as const,
+          };
+        } else if (inboxTab === "other") {
+          return {
+            icon: "📬",
+            title: "No other emails",
+            description: "Newsletters and automated emails will appear here.",
+            variant: "default" as const,
+          };
+        } else {
+          // "all" tab - inbox zero!
+          return {
+            icon: "🎉",
+            title: "Inbox Zero!",
+            description: "You've processed all your emails. Enjoy the moment!",
+            variant: "success" as const,
+          };
+        }
+
+      case "starred":
+        return {
+          icon: "⭐",
+          title: "No starred emails",
+          description: "Star important emails to find them here later. Press 's' to star an email.",
+          variant: "default" as const,
+        };
+
+      case "sent":
+        return {
+          icon: "📤",
+          title: "No sent emails",
+          description: "Emails you send will appear here.",
+          variant: "default" as const,
+        };
+
+      case "trash":
+        return {
+          icon: "🗑️",
+          title: "Trash is empty",
+          description: "Deleted emails will appear here for 30 days before being permanently removed.",
+          variant: "default" as const,
+        };
+
+      case "archive":
+        return {
+          icon: "📦",
+          title: "No archived emails",
+          description: "Archived emails are stored here. Press 'e' to archive an email.",
+          variant: "default" as const,
+        };
+
+      case "snoozed":
+        return {
+          icon: "💤",
+          title: "No snoozed emails",
+          description: "Snoozed emails will reappear when their snooze time ends. Press 'h' to snooze.",
+          variant: "default" as const,
+        };
+
+      case "reminders":
+        return {
+          icon: "🔔",
+          title: "No reminders",
+          description: "Set reminders to follow up on sent emails. Press 'Shift+H' to set a reminder.",
+          variant: "default" as const,
+        };
+
+      case "label":
+        const labelName = $selectedLabel?.name || "this label";
+        return {
+          icon: "🏷️",
+          title: `No emails in ${labelName}`,
+          description: "Emails you add to this label will appear here.",
+          variant: "default" as const,
+        };
+
+      default:
+        return {
+          icon: "📭",
+          title: "No emails",
+          description: "Your inbox is empty. Click Sync to fetch new emails.",
+          variant: "default" as const,
+        };
+    }
+  });
 
   // Extract search terms from the current search query
   const searchTerms = $derived(extractSearchTerms($searchQuery));
@@ -48,11 +159,12 @@
       {/each}
     </div>
   {:else if $emails.length === 0}
-    <div class="empty">
-      <span class="empty-icon">📭</span>
-      <h3>No emails</h3>
-      <p>Your inbox is empty. Click Sync to fetch new emails.</p>
-    </div>
+    <EmptyState
+      icon={emptyState.icon}
+      title={emptyState.title}
+      description={emptyState.description}
+      variant={emptyState.variant}
+    />
   {:else}
     <VirtualList
       bind:this={virtualList}
@@ -87,29 +199,5 @@
   .skeleton-list {
     flex: 1;
     overflow: hidden;
-  }
-
-  .empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 12px;
-    color: var(--text-secondary);
-  }
-
-  .empty-icon {
-    font-size: 48px;
-  }
-
-  .empty h3 {
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .empty p {
-    color: var(--text-muted);
-    margin: 0;
   }
 </style>
