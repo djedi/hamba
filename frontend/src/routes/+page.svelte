@@ -62,9 +62,7 @@
   let lastLoadedAccountId: string | null = null;
   let unsubscribeRealtime: (() => void) | null = null;
   let selectedDraft = $state<Draft | null>(null);
-
-  // Auto-sync every 60 seconds (fallback for Gmail accounts without push)
-  const AUTO_SYNC_INTERVAL = 60 * 1000;
+  let currentSyncFrequency = 60; // Default sync frequency in seconds
 
   // Pagination constants
   const PAGE_SIZE = 50;
@@ -86,6 +84,36 @@
       // Also load labels and snippets for the new account
       labelActions.loadLabels(accountId);
       snippetActions.loadSnippets(accountId);
+
+      // Update sync interval for the new account
+      const account = $accounts.find(a => a.id === accountId);
+      if (account) {
+        const newFrequency = account.sync_frequency_seconds ?? 60;
+        if (newFrequency !== currentSyncFrequency) {
+          currentSyncFrequency = newFrequency;
+          if (autoSyncInterval) {
+            clearInterval(autoSyncInterval);
+          }
+          autoSyncInterval = setInterval(syncEmails, currentSyncFrequency * 1000);
+        }
+      }
+    }
+  });
+
+  // Update sync interval when accounts are updated (e.g., settings changed)
+  $effect(() => {
+    const accts = $accounts;
+    const accountId = $selectedAccountId;
+    if (accountId && accts.length > 0) {
+      const account = accts.find(a => a.id === accountId);
+      if (account) {
+        const newFrequency = account.sync_frequency_seconds ?? 60;
+        if (newFrequency !== currentSyncFrequency && autoSyncInterval) {
+          currentSyncFrequency = newFrequency;
+          clearInterval(autoSyncInterval);
+          autoSyncInterval = setInterval(syncEmails, currentSyncFrequency * 1000);
+        }
+      }
     }
   });
 
@@ -160,7 +188,9 @@
         await loadEmails(firstAccountId, emailIdFromUrl);
 
         // Start auto-sync as fallback (for Gmail without push)
-        autoSyncInterval = setInterval(syncEmails, AUTO_SYNC_INTERVAL);
+        // Use the account's configured sync frequency
+        currentSyncFrequency = accts[0].sync_frequency_seconds ?? 60;
+        autoSyncInterval = setInterval(syncEmails, currentSyncFrequency * 1000);
       }
     } catch (err) {
       handleError(err);

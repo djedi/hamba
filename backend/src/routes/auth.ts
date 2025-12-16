@@ -108,6 +108,9 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       ...account
     }) => ({
       ...account,
+      // Include account settings with defaults
+      display_name: account.display_name || null,
+      sync_frequency_seconds: account.sync_frequency_seconds ?? 60,
       unread_count: unreadMap.get(account.id) || 0,
       tokenStatus: account.provider_type === "imap"
         ? "valid" // IMAP accounts don't expire like OAuth
@@ -221,6 +224,51 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       needsReauth: result.needsReauth || false,
       error: result.error,
     };
+  })
+
+  .get("/accounts/:id", ({ params }) => {
+    const account = accountQueries.getById.get(params.id) as any;
+    if (!account) {
+      return { error: "Account not found" };
+    }
+
+    // Don't expose sensitive fields
+    const {
+      access_token,
+      refresh_token,
+      token_expires_at,
+      password,
+      ...safeAccount
+    } = account;
+
+    return safeAccount;
+  })
+
+  .put("/accounts/:id", async ({ params, body }) => {
+    const { displayName, syncFrequencySeconds } = body as {
+      displayName?: string;
+      syncFrequencySeconds?: number;
+    };
+
+    const account = accountQueries.getById.get(params.id) as any;
+    if (!account) {
+      return { error: "Account not found" };
+    }
+
+    // Validate sync frequency (minimum 30 seconds, max 1 hour)
+    let syncFreq = syncFrequencySeconds;
+    if (syncFreq !== undefined) {
+      if (syncFreq < 30) syncFreq = 30;
+      if (syncFreq > 3600) syncFreq = 3600;
+    }
+
+    accountQueries.updateSettings.run(
+      displayName ?? account.display_name ?? null,
+      syncFreq ?? account.sync_frequency_seconds ?? 60,
+      params.id
+    );
+
+    return { success: true };
   })
 
   .delete("/accounts/:id", ({ params }) => {

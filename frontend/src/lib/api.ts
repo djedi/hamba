@@ -37,7 +37,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   // Auth
   getAccounts: () => request<Account[]>("/auth/accounts"),
+  getAccount: (id: string) => request<Account>(`/auth/accounts/${id}`),
   getAccountStatus: (id: string) => request<AccountStatus>(`/auth/accounts/${id}/status`),
+  updateAccount: (id: string, params: { displayName?: string; syncFrequencySeconds?: number }) =>
+    request<{ success: boolean; error?: string }>(`/auth/accounts/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(params),
+    }),
   deleteAccount: (id: string) => request(`/auth/accounts/${id}`, { method: "DELETE" }),
   getLoginUrl: () => `${API_URL}/auth/login`,
 
@@ -421,6 +427,9 @@ export interface Account {
   created_at: number;
   tokenStatus?: "valid" | "expired" | "unknown";
   unread_count?: number;
+  // Account settings
+  display_name?: string | null;
+  sync_frequency_seconds?: number;
 }
 
 export interface ImapAccountParams {

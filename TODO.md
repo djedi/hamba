@@ -110,7 +110,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Improve account switcher** - Show unread count per account in sidebar. Keyboard shortcut to switch accounts (`Cmd+1`, `Cmd+2`, etc). Show which account is active more prominently.
 
-- [ ] **Add account settings per account** - Configure sync frequency, signature, name, etc. per account. Edit/delete account.
+- [x] **Add account settings per account** - Configure sync frequency, signature, name, etc. per account. Edit/delete account.
 
 - [ ] **Support Microsoft OAuth** - Add Outlook/Office365 OAuth flow similar to Gmail. Use Microsoft Graph API for email operations.
 

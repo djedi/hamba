@@ -55,6 +55,10 @@ try {
 // Add username field for IMAP accounts (defaults to email if not specified)
 addColumnIfNotExists("accounts", "username", "TEXT");
 
+// Add account settings columns
+addColumnIfNotExists("accounts", "display_name", "TEXT"); // Custom display name separate from email name
+addColumnIfNotExists("accounts", "sync_frequency_seconds", "INTEGER DEFAULT 60"); // Sync interval in seconds
+
 // Add folder column to emails for tracking inbox vs sent vs other folders
 addColumnIfNotExists("emails", "folder", "TEXT DEFAULT 'inbox'");
 
@@ -214,6 +218,14 @@ export const accountQueries = {
       refresh_token = excluded.refresh_token,
       token_expires_at = excluded.token_expires_at,
       updated_at = unixepoch()
+  `),
+
+  updateSettings: db.prepare(`
+    UPDATE accounts
+    SET display_name = ?,
+        sync_frequency_seconds = ?,
+        updated_at = unixepoch()
+    WHERE id = ?
   `),
 
   delete: db.prepare("DELETE FROM accounts WHERE id = ?"),

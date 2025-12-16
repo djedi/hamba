@@ -55,6 +55,23 @@
   // Account being deleted
   let deletingAccountId = $state<string | null>(null);
 
+  // Account settings editing
+  let editingAccountId = $state<string | null>(null);
+  let editDisplayName = $state("");
+  let editSyncFrequency = $state(60);
+  let savingAccountSettings = $state(false);
+
+  // Sync frequency options
+  const syncFrequencyOptions = [
+    { label: "30 seconds", value: 30 },
+    { label: "1 minute", value: 60 },
+    { label: "2 minutes", value: 120 },
+    { label: "5 minutes", value: 300 },
+    { label: "10 minutes", value: 600 },
+    { label: "30 minutes", value: 1800 },
+    { label: "1 hour", value: 3600 },
+  ];
+
   // Keyboard shortcut customization state
   let shortcutGroups = $state(getShortcutsByCategory());
   let recordingAction = $state<ShortcutAction | null>(null);
@@ -292,6 +309,58 @@
     }
   }
 
+  function startEditAccount(account: typeof $accounts[0]) {
+    editingAccountId = account.id;
+    editDisplayName = account.display_name || "";
+    editSyncFrequency = account.sync_frequency_seconds ?? 60;
+  }
+
+  function cancelEditAccount() {
+    editingAccountId = null;
+    editDisplayName = "";
+    editSyncFrequency = 60;
+  }
+
+  async function saveAccountSettings() {
+    if (!editingAccountId) return;
+
+    savingAccountSettings = true;
+    try {
+      const result = await api.updateAccount(editingAccountId, {
+        displayName: editDisplayName.trim() || undefined,
+        syncFrequencySeconds: editSyncFrequency,
+      });
+
+      if (result.success) {
+        // Update local accounts store
+        accounts.update(($accounts) =>
+          $accounts.map((a) =>
+            a.id === editingAccountId
+              ? {
+                  ...a,
+                  display_name: editDisplayName.trim() || null,
+                  sync_frequency_seconds: editSyncFrequency,
+                }
+              : a
+          )
+        );
+        showToast("Account settings saved", "success");
+        cancelEditAccount();
+      } else {
+        showToast(result.error || "Failed to save settings", "error");
+      }
+    } catch (e) {
+      showToast("Failed to save settings", "error");
+    } finally {
+      savingAccountSettings = false;
+    }
+  }
+
+  function formatSyncFrequency(seconds: number): string {
+    const option = syncFrequencyOptions.find((o) => o.value === seconds);
+    return option?.label || `${seconds}s`;
+  }
+
   // Signature management functions
   async function loadSignatures() {
     if (!$selectedAccountId) return;
@@ -469,24 +538,91 @@
             <h3>Connected Accounts</h3>
             <div class="accounts-list">
               {#each $accounts as account (account.id)}
-                <div class="account-item">
-                  <div class="account-info">
-                    <span class="account-avatar" class:gmail={account.provider_type === "gmail"} class:imap={account.provider_type === "imap"}>
-                      {account.provider_type === "gmail" ? "G" : "@"}
-                    </span>
-                    <div class="account-details">
-                      <span class="account-email">{account.email}</span>
-                      <span class="account-type">{account.provider_type === "gmail" ? "Gmail" : "IMAP"}</span>
+                {#if editingAccountId === account.id}
+                  <div class="account-item account-editing">
+                    <div class="account-edit-form">
+                      <div class="account-edit-header">
+                        <span class="account-avatar" class:gmail={account.provider_type === "gmail"} class:imap={account.provider_type === "imap"}>
+                          {account.provider_type === "gmail" ? "G" : "@"}
+                        </span>
+                        <div class="account-details">
+                          <span class="account-email">{account.email}</span>
+                          <span class="account-type">{account.provider_type === "gmail" ? "Gmail" : "IMAP"}</span>
+                        </div>
+                      </div>
+
+                      <div class="form-row">
+                        <label for="display-name">Display Name</label>
+                        <input
+                          id="display-name"
+                          type="text"
+                          bind:value={editDisplayName}
+                          placeholder={account.name || account.email.split("@")[0]}
+                        />
+                        <span class="field-help">Custom name shown in the interface (leave empty to use account name)</span>
+                      </div>
+
+                      <div class="form-row">
+                        <label for="sync-frequency">Sync Frequency</label>
+                        <select id="sync-frequency" bind:value={editSyncFrequency}>
+                          {#each syncFrequencyOptions as option}
+                            <option value={option.value}>{option.label}</option>
+                          {/each}
+                        </select>
+                        <span class="field-help">How often to check for new emails (Gmail uses real-time notifications when available)</span>
+                      </div>
+
+                      <div class="form-actions">
+                        <button class="cancel-btn" onclick={cancelEditAccount} disabled={savingAccountSettings}>
+                          Cancel
+                        </button>
+                        <button class="primary" onclick={saveAccountSettings} disabled={savingAccountSettings}>
+                          {savingAccountSettings ? "Saving..." : "Save Changes"}
+                        </button>
+                      </div>
+
+                      <div class="danger-zone">
+                        <h4>Danger Zone</h4>
+                        <div class="danger-action">
+                          <div class="danger-info">
+                            <span class="danger-title">Remove Account</span>
+                            <span class="danger-desc">Emails will be deleted from this app but not from the server</span>
+                          </div>
+                          <button
+                            class="remove-btn"
+                            onclick={() => deleteAccount(account.id)}
+                            disabled={deletingAccountId === account.id}
+                          >
+                            {deletingAccountId === account.id ? "Removing..." : "Remove"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <button
-                    class="remove-btn"
-                    onclick={() => deleteAccount(account.id)}
-                    disabled={deletingAccountId === account.id}
-                  >
-                    {deletingAccountId === account.id ? "Removing..." : "Remove"}
-                  </button>
-                </div>
+                {:else}
+                  <div class="account-item">
+                    <div class="account-info">
+                      <span class="account-avatar" class:gmail={account.provider_type === "gmail"} class:imap={account.provider_type === "imap"}>
+                        {account.provider_type === "gmail" ? "G" : "@"}
+                      </span>
+                      <div class="account-details">
+                        <span class="account-email">
+                          {account.display_name || account.name || account.email}
+                          {#if account.display_name && account.display_name !== account.email}
+                            <span class="account-email-secondary">({account.email})</span>
+                          {/if}
+                        </span>
+                        <span class="account-type">
+                          {account.provider_type === "gmail" ? "Gmail" : "IMAP"}
+                          <span class="sync-info">· Syncs every {formatSyncFrequency(account.sync_frequency_seconds ?? 60)}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <button class="edit-btn" onclick={() => startEditAccount(account)}>
+                      Edit
+                    </button>
+                  </div>
+                {/if}
               {/each}
 
               {#if $accounts.length === 0}
@@ -1033,6 +1169,125 @@
   .remove-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .edit-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .edit-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+  }
+
+  .account-editing {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .account-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .account-edit-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .account-edit-form .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .account-edit-form .form-row label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .account-edit-form .form-row input,
+  .account-edit-form .form-row select {
+    padding: 10px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  .account-edit-form .form-row input:focus,
+  .account-edit-form .form-row select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .field-help {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .account-email-secondary {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: 4px;
+  }
+
+  .sync-info {
+    color: var(--text-muted);
+  }
+
+  .danger-zone {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .danger-zone h4 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--danger);
+    margin: 0 0 12px;
+  }
+
+  .danger-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+  }
+
+  .danger-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .danger-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .danger-desc {
+    font-size: 12px;
+    color: var(--text-muted);
   }
 
   .empty {
