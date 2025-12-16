@@ -80,7 +80,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add keyboard shortcut overlay** - Press `?` to show a modal with all keyboard shortcuts organized by category. Similar to GitHub's shortcut help.
 
-- [ ] **Implement Command Palette search** - The `Cmd+K` palette exists but needs full implementation. Add fuzzy search over: commands, recent emails, contacts, labels. Arrow keys to navigate, Enter to select.
+- [x] **Implement Command Palette search** - The `Cmd+K` palette exists but needs full implementation. Add fuzzy search over: commands, recent emails, contacts, labels. Arrow keys to navigate, Enter to select.
 
 - [ ] **Add email conversation/thread view** - Group emails by thread_id. Show conversation view with all messages in thread expanded or collapsed. Reply at bottom of thread.
 
