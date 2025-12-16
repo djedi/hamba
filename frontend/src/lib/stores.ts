@@ -481,11 +481,15 @@ export function prefetchEmail(emailId: string) {
 export function prefetchAdjacentEmails(currentIndex: number) {
   const $emails = get(emails);
 
-  // Prefetch next 2 and previous 1
+  // Prefetch next 5 and previous 2 for instant navigation
   const indicesToPrefetch = [
+    currentIndex - 2,
     currentIndex - 1,
     currentIndex + 1,
     currentIndex + 2,
+    currentIndex + 3,
+    currentIndex + 4,
+    currentIndex + 5,
   ].filter((i) => i >= 0 && i < $emails.length);
 
   indicesToPrefetch.forEach((i) => {
