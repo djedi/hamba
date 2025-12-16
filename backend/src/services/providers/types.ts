@@ -20,6 +20,10 @@ export interface EmailProvider {
 export interface SyncOptions {
   maxMessages?: number;
   folder?: string;
+  /** If true, sync continues in background until all messages are fetched */
+  syncAll?: boolean;
+  /** Callback for progress updates */
+  onProgress?: (synced: number, total: number) => void;
 }
 
 export interface SyncResult {
@@ -27,6 +31,10 @@ export interface SyncResult {
   total: number;
   error?: string;
   needsReauth?: boolean;
+  /** Total messages available on the server */
+  serverTotal?: number;
+  /** Whether more messages are available to sync */
+  hasMore?: boolean;
 }
 
 export interface Attachment {

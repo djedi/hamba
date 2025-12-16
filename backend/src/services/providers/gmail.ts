@@ -262,8 +262,10 @@ export class GmailProvider implements EmailProvider {
       };
     }
 
-    const listData = await listResponse.json() as { messages?: Array<{ id: string }> };
+    const listData = await listResponse.json() as { messages?: Array<{ id: string }>; nextPageToken?: string; resultSizeEstimate?: number };
     const messages = listData.messages || [];
+    const hasMore = !!listData.nextPageToken;
+    const serverTotal = listData.resultSizeEstimate;
 
     // Fetch full message details in batches
     let synced = 0;
@@ -361,7 +363,12 @@ export class GmailProvider implements EmailProvider {
       console.log(`[Gmail] Reconciled ${archived} archived emails for account ${this.accountId}`);
     }
 
-    return { synced, total: messages.length };
+    // Report progress if callback provided
+    if (options?.onProgress && serverTotal) {
+      options.onProgress(synced, serverTotal);
+    }
+
+    return { synced, total: messages.length, hasMore, serverTotal };
   }
 
   private reconcileArchivedEmails(seenEmailIds: Set<string>): number {

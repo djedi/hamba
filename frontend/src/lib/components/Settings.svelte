@@ -59,6 +59,8 @@
   let editingAccountId = $state<string | null>(null);
   let editDisplayName = $state("");
   let editSyncFrequency = $state(60);
+  let editInitialSyncLimit = $state(100);
+  let editSyncAllMail = $state(false);
   let savingAccountSettings = $state(false);
 
   // Sync frequency options
@@ -70,6 +72,16 @@
     { label: "10 minutes", value: 600 },
     { label: "30 minutes", value: 1800 },
     { label: "1 hour", value: 3600 },
+  ];
+
+  // Initial sync limit options
+  const initialSyncLimitOptions = [
+    { label: "25 emails", value: 25 },
+    { label: "50 emails", value: 50 },
+    { label: "100 emails", value: 100 },
+    { label: "200 emails", value: 200 },
+    { label: "500 emails", value: 500 },
+    { label: "1000 emails", value: 1000 },
   ];
 
   // Keyboard shortcut customization state
@@ -313,12 +325,16 @@
     editingAccountId = account.id;
     editDisplayName = account.display_name || "";
     editSyncFrequency = account.sync_frequency_seconds ?? 60;
+    editInitialSyncLimit = account.initial_sync_limit ?? 100;
+    editSyncAllMail = account.sync_all_mail === 1;
   }
 
   function cancelEditAccount() {
     editingAccountId = null;
     editDisplayName = "";
     editSyncFrequency = 60;
+    editInitialSyncLimit = 100;
+    editSyncAllMail = false;
   }
 
   async function saveAccountSettings() {
@@ -329,6 +345,8 @@
       const result = await api.updateAccount(editingAccountId, {
         displayName: editDisplayName.trim() || undefined,
         syncFrequencySeconds: editSyncFrequency,
+        initialSyncLimit: editInitialSyncLimit,
+        syncAllMail: editSyncAllMail,
       });
 
       if (result.success) {
@@ -340,6 +358,8 @@
                   ...a,
                   display_name: editDisplayName.trim() || null,
                   sync_frequency_seconds: editSyncFrequency,
+                  initial_sync_limit: editInitialSyncLimit,
+                  sync_all_mail: editSyncAllMail ? 1 : 0,
                 }
               : a
           )
@@ -359,6 +379,11 @@
   function formatSyncFrequency(seconds: number): string {
     const option = syncFrequencyOptions.find((o) => o.value === seconds);
     return option?.label || `${seconds}s`;
+  }
+
+  function formatInitialSyncLimit(limit: number): string {
+    const option = initialSyncLimitOptions.find((o) => o.value === limit);
+    return option?.label || `${limit} emails`;
   }
 
   // Signature management functions
@@ -571,6 +596,41 @@
                         </select>
                         <span class="field-help">How often to check for new emails (Gmail uses real-time notifications when available)</span>
                       </div>
+
+                      <div class="form-row">
+                        <label for="initial-sync-limit">Initial Sync Limit</label>
+                        <select id="initial-sync-limit" bind:value={editInitialSyncLimit}>
+                          {#each initialSyncLimitOptions as option}
+                            <option value={option.value}>{option.label}</option>
+                          {/each}
+                        </select>
+                        <span class="field-help">Number of recent emails to fetch when first syncing (faster startup with fewer)</span>
+                      </div>
+
+                      <div class="form-row checkbox-row">
+                        <input
+                          type="checkbox"
+                          id="sync-all-mail"
+                          bind:checked={editSyncAllMail}
+                        />
+                        <label for="sync-all-mail">Sync all mail in background</label>
+                        <span class="field-help checkbox-help">When enabled, continues syncing all older emails in the background after initial sync</span>
+                      </div>
+
+                      {#if account.sync_progress_total && account.sync_progress_synced != null}
+                        {@const synced = account.sync_progress_synced ?? 0}
+                        {@const total = account.sync_progress_total ?? 1}
+                        <div class="sync-progress-info">
+                          <span class="progress-label">Sync Progress:</span>
+                          <div class="progress-bar">
+                            <div class="progress-fill" style="width: {Math.min(100, (synced / total) * 100)}%"></div>
+                          </div>
+                          <span class="progress-text">{synced} / {total} emails</span>
+                          {#if account.last_full_sync_at}
+                            <span class="sync-complete-text">Full sync completed {new Date(account.last_full_sync_at * 1000).toLocaleDateString()}</span>
+                          {/if}
+                        </div>
+                      {/if}
 
                       <div class="form-actions">
                         <button class="cancel-btn" onclick={cancelEditAccount} disabled={savingAccountSettings}>
@@ -1845,6 +1905,51 @@
   .form-actions button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* Sync progress styles */
+  .sync-progress-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .progress-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .progress-bar {
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .progress-text {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .sync-complete-text {
+    font-size: 12px;
+    color: var(--success);
+  }
+
+  .checkbox-help {
+    margin-left: 24px;
   }
 
   .signatures-help {

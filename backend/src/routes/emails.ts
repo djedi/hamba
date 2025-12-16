@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { emailQueries, accountQueries, attachmentQueries, scheduledEmailQueries, contactQueries, db } from "../db";
 import { getProvider } from "../services/providers";
-import { notifySyncComplete } from "../services/realtime";
+import { notifySyncComplete, notifyBackgroundSyncProgress } from "../services/realtime";
 import { queueSend, cancelSend, UNDO_WINDOW_SECONDS } from "../services/pending-send";
 import {
   scheduleEmail,
@@ -11,6 +11,75 @@ import {
   getScheduledEmail,
 } from "../services/scheduled-send";
 import { addContactFromReceive } from "./contacts";
+
+// Track active background syncs to prevent duplicates
+const activeBackgroundSyncs = new Set<string>();
+
+/**
+ * Background sync function that continues syncing until all messages are fetched.
+ * This runs after the initial sync completes if syncAllMail is enabled.
+ */
+async function backgroundSync(accountId: string, batchSize: number): Promise<void> {
+  // Prevent duplicate background syncs for the same account
+  if (activeBackgroundSyncs.has(accountId)) {
+    console.log(`[BackgroundSync] Already syncing account ${accountId}, skipping`);
+    return;
+  }
+
+  activeBackgroundSyncs.add(accountId);
+  console.log(`[BackgroundSync] Starting background sync for account ${accountId}`);
+
+  try {
+    const provider = getProvider(accountId);
+    let totalSynced = 0;
+    let hasMore = true;
+    let iterationCount = 0;
+    const maxIterations = 100; // Safety limit to prevent infinite loops
+
+    while (hasMore && iterationCount < maxIterations) {
+      iterationCount++;
+
+      const result = await provider.sync({
+        maxMessages: batchSize,
+        onProgress: (synced, total) => {
+          accountQueries.updateSyncProgress.run(total, totalSynced + synced, accountId);
+          // Notify frontend of progress
+          notifyBackgroundSyncProgress(accountId, totalSynced + synced, total);
+        }
+      });
+
+      if (result.error || result.needsReauth) {
+        console.error(`[BackgroundSync] Error for account ${accountId}:`, result.error);
+        break;
+      }
+
+      totalSynced += result.synced;
+      hasMore = result.hasMore ?? false;
+
+      console.log(`[BackgroundSync] Account ${accountId}: synced ${result.synced} messages (total: ${totalSynced}, hasMore: ${hasMore})`);
+
+      // Small delay between batches to avoid overwhelming the server
+      if (hasMore) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    // Mark full sync as complete
+    if (!hasMore) {
+      accountQueries.markFullSyncComplete.run(accountId);
+      console.log(`[BackgroundSync] Full sync complete for account ${accountId}, total: ${totalSynced} messages`);
+    }
+
+    // Notify frontend that background sync is complete
+    if (totalSynced > 0) {
+      notifySyncComplete(accountId, totalSynced);
+    }
+  } catch (error) {
+    console.error(`[BackgroundSync] Error for account ${accountId}:`, error);
+  } finally {
+    activeBackgroundSyncs.delete(accountId);
+  }
+}
 
 export const emailRoutes = new Elysia({ prefix: "/emails", detail: { tags: ["Emails"] } })
   .get("/", async ({ query }) => {
@@ -208,8 +277,20 @@ export const emailRoutes = new Elysia({ prefix: "/emails", detail: { tags: ["Ema
 
   .post("/sync/:accountId", async ({ params }) => {
     try {
+      // Get account sync settings
+      const account = accountQueries.getById.get(params.accountId) as any;
+      const maxMessages = account?.initial_sync_limit ?? 100;
+      const syncAll = account?.sync_all_mail === 1;
+
       const provider = getProvider(params.accountId);
-      const result = await provider.sync({ maxMessages: 100 });
+      const result = await provider.sync({
+        maxMessages,
+        syncAll,
+        onProgress: (synced, total) => {
+          // Update sync progress in database
+          accountQueries.updateSyncProgress.run(total, synced, params.accountId);
+        }
+      });
 
       // If auth error, return immediately with needsReauth flag
       if (result.needsReauth) {
@@ -240,9 +321,20 @@ export const emailRoutes = new Elysia({ prefix: "/emails", detail: { tags: ["Ema
         }
       }
 
+      // Mark full sync complete if all messages were synced
+      if (!result.hasMore && result.synced > 0) {
+        accountQueries.markFullSyncComplete.run(params.accountId);
+      }
+
       // Notify connected clients of sync completion
       if (result.synced > 0) {
         notifySyncComplete(params.accountId, result.synced);
+      }
+
+      // If syncAll is enabled and there are more messages, trigger background sync
+      if (syncAll && result.hasMore) {
+        // Schedule background sync (non-blocking)
+        backgroundSync(params.accountId, maxMessages).catch(console.error);
       }
 
       return result;
@@ -253,8 +345,11 @@ export const emailRoutes = new Elysia({ prefix: "/emails", detail: { tags: ["Ema
 
   .post("/sync-sent/:accountId", async ({ params }) => {
     try {
+      const account = accountQueries.getById.get(params.accountId) as any;
+      const maxMessages = account?.initial_sync_limit ?? 100;
+
       const provider = getProvider(params.accountId);
-      const result = await provider.syncSent({ maxMessages: 100 });
+      const result = await provider.syncSent({ maxMessages });
       return result;
     } catch (error) {
       return { error: String(error), synced: 0, total: 0 };

@@ -381,6 +381,11 @@ export const authRoutes = new Elysia({ prefix: "/auth", detail: { tags: ["Auth"]
       // Include account settings with defaults
       display_name: account.display_name || null,
       sync_frequency_seconds: account.sync_frequency_seconds ?? 60,
+      initial_sync_limit: account.initial_sync_limit ?? 100,
+      sync_all_mail: account.sync_all_mail ?? 0,
+      sync_progress_total: account.sync_progress_total ?? null,
+      sync_progress_synced: account.sync_progress_synced ?? null,
+      last_full_sync_at: account.last_full_sync_at ?? null,
       unread_count: unreadMap.get(account.id) || 0,
       tokenStatus: account.provider_type === "imap"
         ? "valid" // IMAP accounts don't expire like OAuth
@@ -623,9 +628,11 @@ export const authRoutes = new Elysia({ prefix: "/auth", detail: { tags: ["Auth"]
   })
 
   .put("/accounts/:id", async ({ params, body }) => {
-    const { displayName, syncFrequencySeconds } = body as {
+    const { displayName, syncFrequencySeconds, initialSyncLimit, syncAllMail } = body as {
       displayName?: string;
       syncFrequencySeconds?: number;
+      initialSyncLimit?: number;
+      syncAllMail?: boolean;
     };
 
     const account = accountQueries.getById.get(params.id) as any;
@@ -640,17 +647,34 @@ export const authRoutes = new Elysia({ prefix: "/auth", detail: { tags: ["Auth"]
       if (syncFreq > 3600) syncFreq = 3600;
     }
 
+    // Validate initial sync limit (minimum 10, max 1000)
+    let syncLimit = initialSyncLimit;
+    if (syncLimit !== undefined) {
+      if (syncLimit < 10) syncLimit = 10;
+      if (syncLimit > 1000) syncLimit = 1000;
+    }
+
+    // Update display name and sync frequency
     accountQueries.updateSettings.run(
       displayName ?? account.display_name ?? null,
       syncFreq ?? account.sync_frequency_seconds ?? 60,
       params.id
     );
 
+    // Update sync settings if provided
+    if (syncLimit !== undefined || syncAllMail !== undefined) {
+      accountQueries.updateSyncSettings.run(
+        syncLimit ?? account.initial_sync_limit ?? 100,
+        (syncAllMail ?? account.sync_all_mail) ? 1 : 0,
+        params.id
+      );
+    }
+
     return { success: true };
   }, {
     detail: {
       summary: "Update account settings",
-      description: "Updates account display name and sync frequency (30s-3600s range)",
+      description: "Updates account display name, sync frequency (30s-3600s range), and sync settings",
       requestBody: {
         content: {
           "application/json": {
@@ -659,6 +683,8 @@ export const authRoutes = new Elysia({ prefix: "/auth", detail: { tags: ["Auth"]
               properties: {
                 displayName: { type: "string", description: "Custom display name for account" },
                 syncFrequencySeconds: { type: "integer", minimum: 30, maximum: 3600, description: "Email sync interval in seconds" },
+                initialSyncLimit: { type: "integer", minimum: 10, maximum: 1000, description: "Number of messages for initial sync (default 100)" },
+                syncAllMail: { type: "boolean", description: "Whether to continue syncing all mail in background after initial sync" },
               },
             },
           },

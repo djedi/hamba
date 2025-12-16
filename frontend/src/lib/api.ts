@@ -39,7 +39,7 @@ export const api = {
   getAccounts: () => request<Account[]>("/auth/accounts"),
   getAccount: (id: string) => request<Account>(`/auth/accounts/${id}`),
   getAccountStatus: (id: string) => request<AccountStatus>(`/auth/accounts/${id}/status`),
-  updateAccount: (id: string, params: { displayName?: string; syncFrequencySeconds?: number }) =>
+  updateAccount: (id: string, params: { displayName?: string; syncFrequencySeconds?: number; initialSyncLimit?: number; syncAllMail?: boolean }) =>
     request<{ success: boolean; error?: string }>(`/auth/accounts/${id}`, {
       method: "PUT",
       body: JSON.stringify(params),
@@ -457,6 +457,12 @@ export interface Account {
   // Account settings
   display_name?: string | null;
   sync_frequency_seconds?: number;
+  // Sync settings
+  initial_sync_limit?: number;
+  sync_all_mail?: number;
+  sync_progress_total?: number | null;
+  sync_progress_synced?: number | null;
+  last_full_sync_at?: number | null;
 }
 
 export interface ImapAccountParams {

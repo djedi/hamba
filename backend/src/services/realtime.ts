@@ -68,6 +68,27 @@ export function notifySyncComplete(accountId: string, count: number) {
   }
 }
 
+// Notify clients of background sync progress
+export function notifyBackgroundSyncProgress(accountId: string, synced: number, total: number) {
+  const message = JSON.stringify({
+    type: "background_sync_progress",
+    accountId,
+    synced,
+    total,
+    percentage: total > 0 ? Math.round((synced / total) * 100) : 0,
+  });
+
+  for (const client of clients) {
+    if (client.data.accountIds.has(accountId) || client.data.accountIds.size === 0) {
+      try {
+        client.send(message);
+      } catch (e) {
+        clients.delete(client);
+      }
+    }
+  }
+}
+
 export function getClientCount(): number {
   return clients.size;
 }

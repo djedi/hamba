@@ -102,6 +102,8 @@ export class ImapSmtpProvider implements EmailProvider {
 
     const client = this.createImapClient();
     let synced = 0;
+    let serverTotal = 0;
+    let hasMore = false;
     // Track seen message_ids (RFC Message-ID header) instead of UIDs
     // Message-ID is stable across folder moves, unlike UIDs which change
     const seenMessageIds = new Set<string>();
@@ -117,16 +119,17 @@ export class ImapSmtpProvider implements EmailProvider {
 
         // Get total message count
         const mailbox = client.mailbox;
-        const total = mailbox && typeof mailbox === "object" ? mailbox.exists : 0;
+        serverTotal = mailbox && typeof mailbox === "object" ? mailbox.exists : 0;
 
-        if (total === 0) {
+        if (serverTotal === 0) {
           // Empty INBOX - mark all local inbox emails as archived
           this.reconcileArchivedEmails(seenMessageIds);
-          return { synced: 0, total: 0 };
+          return { synced: 0, total: 0, serverTotal: 0, hasMore: false };
         }
 
         // Fetch last N messages (most recent)
-        const start = Math.max(1, total - maxMessages + 1);
+        const start = Math.max(1, serverTotal - maxMessages + 1);
+        hasMore = start > 1; // There are more messages if we didn't start from 1
         const range = `${start}:*`;
 
         for await (const msg of client.fetch(range, {
@@ -208,7 +211,12 @@ export class ImapSmtpProvider implements EmailProvider {
         console.log(`[IMAP] Reconciled ${archived} archived emails for account ${this.accountId}`);
       }
 
-      return { synced, total: synced };
+      // Report progress if callback provided
+      if (options?.onProgress) {
+        options.onProgress(synced, serverTotal);
+      }
+
+      return { synced, total: synced, serverTotal, hasMore };
     } catch (error: any) {
       console.error("IMAP sync error:", error);
       return {

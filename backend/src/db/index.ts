@@ -90,6 +90,29 @@ export const accountQueries = {
     WHERE id = ?
   `),
 
+  updateSyncSettings: db.prepare(`
+    UPDATE accounts
+    SET initial_sync_limit = ?,
+        sync_all_mail = ?,
+        updated_at = unixepoch()
+    WHERE id = ?
+  `),
+
+  updateSyncProgress: db.prepare(`
+    UPDATE accounts
+    SET sync_progress_total = ?,
+        sync_progress_synced = ?,
+        updated_at = unixepoch()
+    WHERE id = ?
+  `),
+
+  markFullSyncComplete: db.prepare(`
+    UPDATE accounts
+    SET last_full_sync_at = unixepoch(),
+        updated_at = unixepoch()
+    WHERE id = ?
+  `),
+
   delete: db.prepare("DELETE FROM accounts WHERE id = ?"),
 };
 
