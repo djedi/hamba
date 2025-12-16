@@ -69,6 +69,8 @@ const mockEmail = (id: string, overrides = {}) => ({
 	snoozed_until: null,
 	remind_at: null,
 	received_at: Date.now(),
+	summary: null,
+	summary_generated_at: null,
 	...overrides
 });
 

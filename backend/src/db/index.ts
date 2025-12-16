@@ -67,6 +67,10 @@ addColumnIfNotExists("emails", "snoozed_until", "INTEGER");
 // Add remind_at column for follow-up reminders
 addColumnIfNotExists("emails", "remind_at", "INTEGER");
 
+// Add summary columns for AI summarization
+addColumnIfNotExists("emails", "summary", "TEXT");
+addColumnIfNotExists("emails", "summary_generated_at", "INTEGER");
+
 db.run(`
   CREATE TABLE IF NOT EXISTS emails (
     id TEXT PRIMARY KEY,
@@ -412,6 +416,10 @@ export const emailQueries = {
 
   markImportant: db.prepare("UPDATE emails SET is_important = 1 WHERE id = ?"),
   markNotImportant: db.prepare("UPDATE emails SET is_important = 0 WHERE id = ?"),
+
+  // Summary operations
+  setSummary: db.prepare("UPDATE emails SET summary = ?, summary_generated_at = unixepoch() WHERE id = ?"),
+  clearSummary: db.prepare("UPDATE emails SET summary = NULL, summary_generated_at = NULL WHERE id = ?"),
 
   // Snooze operations
   snooze: db.prepare("UPDATE emails SET snoozed_until = ? WHERE id = ?"),

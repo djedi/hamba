@@ -351,6 +351,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(params),
     }),
+
+  aiSummarize: (emailId: string, regenerate?: boolean) =>
+    request<{ success: boolean; summary?: string; cached?: boolean; generated_at?: number; error?: string }>("/ai/summarize", {
+      method: "POST",
+      body: JSON.stringify({ emailId, regenerate }),
+    }),
 };
 
 export interface Account {
@@ -404,6 +410,8 @@ export interface Email {
   snoozed_until: number | null;
   remind_at: number | null;
   received_at: number;
+  summary: string | null;
+  summary_generated_at: number | null;
 }
 
 export interface Draft {

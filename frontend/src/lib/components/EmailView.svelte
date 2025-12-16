@@ -2,7 +2,64 @@
   import { selectedEmail, view, emails, composeMode, replyToEmail, emailActions, selectedIndex, selectedEmailId, currentFolder, searchQuery } from "$lib/stores";
   import { get } from "svelte/store";
   import { extractSearchTerms, highlightHTMLContent, getHighlightCSS } from "$lib/search";
+  import { api } from "$lib/api";
   import HighlightText from "./HighlightText.svelte";
+
+  // AI Summary state
+  let showSummary = $state(false);
+  let summaryText = $state<string | null>(null);
+  let summaryLoading = $state(false);
+  let summaryError = $state<string | null>(null);
+  let summaryCached = $state(false);
+
+  // Reset summary state when email changes
+  $effect(() => {
+    if ($selectedEmail) {
+      // If the email has a cached summary, show it
+      if ($selectedEmail.summary) {
+        summaryText = $selectedEmail.summary;
+        summaryCached = true;
+        showSummary = true;
+      } else {
+        summaryText = null;
+        summaryCached = false;
+        showSummary = false;
+      }
+      summaryLoading = false;
+      summaryError = null;
+    }
+  });
+
+  async function handleSummarize(regenerate = false) {
+    if (!$selectedEmail) return;
+
+    summaryLoading = true;
+    summaryError = null;
+
+    try {
+      const response = await api.aiSummarize($selectedEmail.id, regenerate);
+
+      if (response.success && response.summary) {
+        summaryText = response.summary;
+        summaryCached = response.cached || false;
+        showSummary = true;
+      } else {
+        summaryError = response.error || "Failed to generate summary";
+      }
+    } catch (err: any) {
+      summaryError = err.message || "Failed to generate summary";
+    } finally {
+      summaryLoading = false;
+    }
+  }
+
+  function toggleSummary() {
+    if (!showSummary && !summaryText) {
+      handleSummarize();
+    } else {
+      showSummary = !showSummary;
+    }
+  }
 
   let iframeRef: HTMLIFrameElement;
 
@@ -290,6 +347,9 @@
           <button onclick={handleReplyAll} title="Reply All (a)">↩️ Reply All</button>
           <button onclick={handleForward} title="Forward (f)">↪️ Forward</button>
         {/if}
+        <button onclick={toggleSummary} title="AI Summarize" class="summarize-btn" class:active={showSummary}>
+          {summaryLoading ? "..." : "AI Summary"}
+        </button>
       </div>
     </header>
 
@@ -329,6 +389,26 @@
           <span class="value">{$selectedEmail.cc_addresses}</span>
         {/if}
       </div>
+
+      {#if showSummary || summaryLoading || summaryError}
+        <div class="summary-section">
+          <div class="summary-header">
+            <span class="summary-title">AI Summary</span>
+            {#if summaryText && !summaryLoading}
+              <button class="regenerate-btn" onclick={() => handleSummarize(true)} title="Regenerate summary">
+                Regenerate
+              </button>
+            {/if}
+          </div>
+          {#if summaryLoading}
+            <div class="summary-loading">Generating summary...</div>
+          {:else if summaryError}
+            <div class="summary-error">{summaryError}</div>
+          {:else if summaryText}
+            <div class="summary-content">{summaryText}</div>
+          {/if}
+        </div>
+      {/if}
 
       <div class="body">
         {#if $selectedEmail.body_html || $selectedEmail.body_text}
@@ -480,5 +560,71 @@
   .no-content {
     color: var(--text-muted);
     font-style: italic;
+  }
+
+  .summarize-btn {
+    background: var(--bg-secondary);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .summarize-btn:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .summarize-btn.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  .summary-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+  }
+
+  .summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .summary-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--accent);
+  }
+
+  .regenerate-btn {
+    font-size: 12px;
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .regenerate-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .summary-content {
+    line-height: 1.6;
+    color: var(--text-primary);
+  }
+
+  .summary-loading {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .summary-error {
+    color: var(--danger, #ef4444);
+    font-size: 13px;
   }
 </style>
