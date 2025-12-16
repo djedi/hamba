@@ -110,7 +110,7 @@
 
 <aside class="sidebar">
   <div class="logo">
-    <span class="logo-icon">⚡</span>
+    <img src="/favicon-16x16.png" alt="Hamba" class="logo-icon" width="16" height="16" />
     <span class="logo-text">Hamba</span>
   </div>
 
@@ -302,7 +302,9 @@
   }
 
   .logo-icon {
-    font-size: 24px;
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
   }
 
   .logo-text {

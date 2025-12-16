@@ -146,6 +146,6 @@ A task list for building a viable open source Superhuman/Gmail clone. Each task 
 
 - [x] Make side bar scrollable. If I have a lot of labels I can't see them all. I can't scroll the sidebar to see the accounts or keyboard shortcuts.
 
-- [ ] Use one of the favicon sizes to add an icon next to the Hamba title in the upper left.
+- [x] Use one of the favicon sizes to add an icon next to the Hamba title in the upper left.
 
 - [ ] **Make email sync limits configurable per account** - Currently syncs 100 messages by default (hardcoded in `gmail.ts:242` and `imap-smtp.ts:114`). Add per-account settings for: initial sync limit, background sync behavior (sync all vs limit), and sync frequency. Allow "full sync" option that fetches 100 messages initially for fast startup, then continues syncing remaining messages in the background until all mail is downloaded. Store sync progress and resume from where it left off.
