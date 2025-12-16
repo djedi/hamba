@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Email } from "$lib/api";
   import { selectedEmailId, selectedIndex, view, emailActions, prefetchEmail, emailLabelsCache, labelActions } from "$lib/stores";
+  import { formatRelativeDate, formatDateTooltip } from "$lib/dateUtils";
   import { onMount } from "svelte";
   import HighlightText from "./HighlightText.svelte";
 
@@ -20,31 +21,6 @@
   onMount(() => {
     labelActions.loadLabelsForEmail(email.id);
   });
-
-  function formatDate(timestamp: number): string {
-    const date = new Date(timestamp * 1000);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-
-    if (isToday) {
-      return date.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
-    }
-
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (date.toDateString() === yesterday.toDateString()) {
-      return "Yesterday";
-    }
-
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
-  }
 
   function handleClick() {
     selectedEmailId.set(email.id);
@@ -127,7 +103,7 @@
     </span>
   </div>
 
-  <div class="date">{formatDate(email.received_at)}</div>
+  <div class="date" title={formatDateTooltip(email.received_at)}>{formatRelativeDate(email.received_at)}</div>
 </div>
 
 <style>

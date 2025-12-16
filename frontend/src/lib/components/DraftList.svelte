@@ -1,6 +1,7 @@
 <script lang="ts">
   import { drafts } from "$lib/stores";
   import type { Draft } from "$lib/api";
+  import { formatRelativeDate, formatDateTooltip } from "$lib/dateUtils";
   import DraftRowSkeleton from "./DraftRowSkeleton.svelte";
   import EmptyState from "./EmptyState.svelte";
 
@@ -10,17 +11,6 @@
   }
 
   let { loading = false, onOpenDraft }: Props = $props();
-
-  function formatDate(timestamp: number): string {
-    const date = new Date(timestamp * 1000);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-
-    if (isToday) {
-      return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    }
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  }
 
   function getSnippet(draft: Draft): string {
     // Strip HTML tags for preview
@@ -54,7 +44,7 @@
                 (No recipient)
               {/if}
             </span>
-            <span class="draft-date">{formatDate(draft.updated_at)}</span>
+            <span class="draft-date" title={formatDateTooltip(draft.updated_at)}>{formatRelativeDate(draft.updated_at)}</span>
           </div>
           <div class="draft-subject">
             {draft.subject || '(No subject)'}

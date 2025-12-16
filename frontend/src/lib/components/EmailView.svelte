@@ -2,6 +2,7 @@
   import { selectedEmail, view, emails, composeMode, replyToEmail, emailActions, selectedIndex, selectedEmailId, currentFolder, searchQuery } from "$lib/stores";
   import { get } from "svelte/store";
   import { extractSearchTerms, highlightHTMLContent, getHighlightCSS } from "$lib/search";
+  import { formatDateFull } from "$lib/dateUtils";
   import { api } from "$lib/api";
   import HighlightText from "./HighlightText.svelte";
   import SmartReplySuggestions from "./SmartReplySuggestions.svelte";
@@ -220,17 +221,6 @@
     }
   });
 
-  function formatDate(timestamp: number): string {
-    return new Date(timestamp * 1000).toLocaleString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
   function handleBack() {
     view.set("inbox");
     // Clear URL param
@@ -379,7 +369,7 @@
             <div class="sender-email">&lt;{$selectedEmail.from_email}&gt;</div>
           </div>
         </div>
-        <div class="date">{formatDate($selectedEmail.received_at)}</div>
+        <div class="date">{formatDateFull($selectedEmail.received_at)}</div>
       </div>
 
       <div class="recipients">

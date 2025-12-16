@@ -84,7 +84,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add email conversation/thread view** - Group emails by thread_id. Show conversation view with all messages in thread expanded or collapsed. Reply at bottom of thread.
 
-- [ ] **Improve date formatting** - Show relative dates in email list: "2m ago", "1h ago", "Yesterday", "Dec 10". Show full date on hover. Match Superhuman's format.
+- [x] **Improve date formatting** - Show relative dates in email list: "2m ago", "1h ago", "Yesterday", "Dec 10". Show full date on hover. Match Superhuman's format.
 
 ### Error Handling
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Email } from "$lib/api";
   import { highlightHTMLContent, getHighlightCSS } from "$lib/search";
+  import { formatRelativeDate, formatDateMedium, formatDateTooltip } from "$lib/dateUtils";
   import HighlightText from "./HighlightText.svelte";
 
   interface Props {
@@ -161,34 +162,6 @@
     }
   });
 
-  function formatDate(timestamp: number): string {
-    return new Date(timestamp * 1000).toLocaleString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
-  function formatDateShort(timestamp: number): string {
-    const date = new Date(timestamp * 1000);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-
-    if (isToday) {
-      return date.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
-    }
-
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
-  }
 </script>
 
 <div class="thread-message" class:expanded class:first={isFirst} class:last={isLast}>
@@ -217,7 +190,7 @@
       </div>
     </div>
     <div class="header-right">
-      <span class="date">{expanded ? formatDate(email.received_at) : formatDateShort(email.received_at)}</span>
+      <span class="date" title={formatDateTooltip(email.received_at)}>{expanded ? formatDateMedium(email.received_at) : formatRelativeDate(email.received_at)}</span>
       <span class="expand-icon">{expanded ? "▼" : "▶"}</span>
     </div>
   </button>
