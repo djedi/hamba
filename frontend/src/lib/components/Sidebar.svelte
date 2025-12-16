@@ -1,5 +1,6 @@
 <script lang="ts">
   import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions, scheduledEmails } from "$lib/stores";
+  import { isOnline, pendingActionsCount, syncNow } from "$lib/offline";
 
   interface Props {
     onSync: () => void;
@@ -204,7 +205,21 @@
   </div>
 
   <div class="sidebar-footer">
-    <button class="sync-btn" onclick={onSync} disabled={$isLoading}>
+    {#if !$isOnline}
+      <div class="offline-status">
+        <span class="offline-icon">📡</span>
+        <span>Offline</span>
+        {#if $pendingActionsCount > 0}
+          <span class="pending-badge">{$pendingActionsCount} pending</span>
+        {/if}
+      </div>
+    {:else if $pendingActionsCount > 0}
+      <button class="sync-pending-btn" onclick={() => syncNow()}>
+        <span class="pending-icon">⏳</span>
+        <span>Sync {$pendingActionsCount} pending</span>
+      </button>
+    {/if}
+    <button class="sync-btn" onclick={onSync} disabled={$isLoading || !$isOnline}>
       {#if $isLoading}
         <span class="spinner"></span> Syncing...
       {:else}
@@ -477,6 +492,57 @@
     margin-top: auto;
     padding-top: 16px;
     border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .offline-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .offline-icon {
+    font-size: 14px;
+  }
+
+  .pending-badge {
+    margin-left: auto;
+    background: var(--accent);
+    color: white;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+
+  .sync-pending-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .sync-pending-btn:hover {
+    background: var(--bg-hover);
+  }
+
+  .pending-icon {
+    font-size: 14px;
   }
 
   .sync-btn {
@@ -485,6 +551,11 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
+  }
+
+  .sync-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .spinner {

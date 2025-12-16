@@ -68,7 +68,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Optimize email prefetching** - Currently prefetches adjacent emails. Expand to prefetch next 5 emails in background when viewing an email, so navigation is instant.
 
-- [ ] **Add service worker for offline support** - Cache emails locally using service worker. Allow reading cached emails offline. Queue actions (archive, reply) to sync when back online.
+- [x] **Add service worker for offline support** - Cache emails locally using service worker. Allow reading cached emails offline. Queue actions (archive, reply) to sync when back online.
 
 ### UI Polish
 

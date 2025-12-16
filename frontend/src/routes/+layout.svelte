@@ -2,11 +2,21 @@
   import "../app.css";
   import { onMount } from "svelte";
   import { initKeyboardNavigation } from "$lib/keyboard";
+  import { registerServiceWorker, initOnlineListener } from "$lib/offline";
 
   let { children } = $props();
 
   onMount(() => {
-    return initKeyboardNavigation();
+    const cleanupKeyboard = initKeyboardNavigation();
+    const cleanupOnline = initOnlineListener();
+
+    // Register service worker for offline support
+    registerServiceWorker();
+
+    return () => {
+      cleanupKeyboard?.();
+      cleanupOnline();
+    };
   });
 </script>
 
