@@ -1,0 +1,63 @@
+#!/bin/bash
+# do-tasks: Automatically complete tasks from TODO.md using Claude Code
+
+set -e
+
+TODO_FILE="TODO.md"
+
+# Count uncompleted tasks
+count_tasks() {
+  grep -c '^\- \[ \]' "$TODO_FILE" 2>/dev/null || echo 0
+}
+
+# Main loop
+main() {
+  local total_tasks=$(count_tasks)
+
+  if [[ "$total_tasks" -eq 0 ]]; then
+    echo "✅ No uncompleted tasks found in $TODO_FILE"
+    exit 0
+  fi
+
+  echo "📋 Found $total_tasks uncompleted tasks"
+  echo ""
+
+  local completed=0
+
+  while true; do
+    local remaining=$(count_tasks)
+
+    if [[ "$remaining" -eq 0 ]]; then
+      echo ""
+      echo "🎉 All tasks completed!"
+      break
+    fi
+
+    completed=$((total_tasks - remaining))
+    echo "🚀 === Task $((completed + 1)) of $total_tasks (${remaining} remaining) ==="
+    echo ""
+
+    # Run claude with /do-task command
+    # The command itself will check usage and exit if > 80%
+    claude --dangerously-skip-permissions -p "/do-task"
+
+    # Check exit code
+    if [[ $? -ne 0 ]]; then
+      echo ""
+      echo "❌ Claude exited with error. Stopping."
+      exit 1
+    fi
+
+    echo ""
+    echo "✅ --- Task completed, moving to next ---"
+    echo ""
+
+    # Small delay between tasks
+    sleep 2
+  done
+
+  echo ""
+  echo "🏁 Summary: Completed $total_tasks tasks"
+}
+
+main "$@"

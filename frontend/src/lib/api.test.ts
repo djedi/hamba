@@ -42,7 +42,7 @@ describe('api', () => {
 
 			expect(accounts).toEqual(mockAccounts);
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/auth/accounts',
+				'http://localhost:8877/auth/accounts',
 				expect.objectContaining({
 					credentials: 'include',
 					headers: { 'Content-Type': 'application/json' }
@@ -81,7 +81,7 @@ describe('api', () => {
 
 			expect(emails).toEqual(mockEmails);
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails?accountId=account-1&limit=50&offset=0',
+				'http://localhost:8877/emails?accountId=account-1&limit=50&offset=0',
 				expect.any(Object)
 			);
 		});
@@ -95,7 +95,7 @@ describe('api', () => {
 			await api.getEmails('account-1', 25, 10);
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails?accountId=account-1&limit=25&offset=10',
+				'http://localhost:8877/emails?accountId=account-1&limit=25&offset=10',
 				expect.any(Object)
 			);
 		});
@@ -113,7 +113,7 @@ describe('api', () => {
 
 			expect(emails).toEqual(mockEmails);
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/starred?accountId=account-1&limit=50&offset=0',
+				'http://localhost:8877/emails/starred?accountId=account-1&limit=50&offset=0',
 				expect.any(Object)
 			);
 		});
@@ -127,7 +127,7 @@ describe('api', () => {
 			await api.getStarredEmails('account-1', 25, 10);
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/starred?accountId=account-1&limit=25&offset=10',
+				'http://localhost:8877/emails/starred?accountId=account-1&limit=25&offset=10',
 				expect.any(Object)
 			);
 		});
@@ -145,7 +145,7 @@ describe('api', () => {
 
 			expect(emails).toEqual(mockEmails);
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/sent?accountId=account-1&limit=50&offset=0',
+				'http://localhost:8877/emails/sent?accountId=account-1&limit=50&offset=0',
 				expect.any(Object)
 			);
 		});
@@ -159,7 +159,7 @@ describe('api', () => {
 			await api.getSentEmails('account-1', 25, 10);
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/sent?accountId=account-1&limit=25&offset=10',
+				'http://localhost:8877/emails/sent?accountId=account-1&limit=25&offset=10',
 				expect.any(Object)
 			);
 		});
@@ -177,7 +177,7 @@ describe('api', () => {
 
 			expect(emails).toEqual(mockEmails);
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/trashed?accountId=account-1&limit=50&offset=0',
+				'http://localhost:8877/emails/trashed?accountId=account-1&limit=50&offset=0',
 				expect.any(Object)
 			);
 		});
@@ -191,7 +191,7 @@ describe('api', () => {
 			await api.getTrashedEmails('account-1', 25, 10);
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/trashed?accountId=account-1&limit=25&offset=10',
+				'http://localhost:8877/emails/trashed?accountId=account-1&limit=25&offset=10',
 				expect.any(Object)
 			);
 		});
@@ -207,7 +207,7 @@ describe('api', () => {
 			await api.searchEmails('test query');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/search?q=test%20query&limit=50',
+				'http://localhost:8877/emails/search?q=test%20query&limit=50',
 				expect.any(Object)
 			);
 		});
@@ -221,7 +221,7 @@ describe('api', () => {
 			await api.searchEmails('from:test@example.com');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/search?q=from%3Atest%40example.com&limit=50',
+				'http://localhost:8877/emails/search?q=from%3Atest%40example.com&limit=50',
 				expect.any(Object)
 			);
 		});
@@ -238,7 +238,7 @@ describe('api', () => {
 
 			expect(result).toEqual({ synced: 10, total: 100 });
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/sync/account-1',
+				'http://localhost:8877/emails/sync/account-1',
 				expect.objectContaining({ method: 'POST' })
 			);
 		});
@@ -255,7 +255,7 @@ describe('api', () => {
 
 			expect(result).toEqual({ synced: 5, total: 50 });
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/sync-sent/account-1',
+				'http://localhost:8877/emails/sync-sent/account-1',
 				expect.objectContaining({ method: 'POST' })
 			);
 		});
@@ -271,7 +271,7 @@ describe('api', () => {
 			await api.markRead('email-1');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/email-1/read',
+				'http://localhost:8877/emails/email-1/read',
 				expect.objectContaining({ method: 'POST' })
 			);
 		});
@@ -285,7 +285,7 @@ describe('api', () => {
 			await api.markUnread('email-1');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/email-1/unread',
+				'http://localhost:8877/emails/email-1/unread',
 				expect.objectContaining({ method: 'POST' })
 			);
 		});
@@ -299,7 +299,7 @@ describe('api', () => {
 			await api.star('email-1');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/email-1/star',
+				'http://localhost:8877/emails/email-1/star',
 				expect.objectContaining({ method: 'POST' })
 			);
 		});
@@ -313,7 +313,7 @@ describe('api', () => {
 			await api.unstar('email-1');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/email-1/unstar',
+				'http://localhost:8877/emails/email-1/unstar',
 				expect.objectContaining({ method: 'POST' })
 			);
 		});
@@ -327,7 +327,7 @@ describe('api', () => {
 			await api.archive('email-1');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/email-1/archive',
+				'http://localhost:8877/emails/email-1/archive',
 				expect.objectContaining({ method: 'POST' })
 			);
 		});
@@ -341,7 +341,7 @@ describe('api', () => {
 			await api.trash('email-1');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/email-1/trash',
+				'http://localhost:8877/emails/email-1/trash',
 				expect.objectContaining({ method: 'POST' })
 			);
 		});
@@ -355,7 +355,7 @@ describe('api', () => {
 			await api.untrash('email-1');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/email-1/untrash',
+				'http://localhost:8877/emails/email-1/untrash',
 				expect.objectContaining({ method: 'POST' })
 			);
 		});
@@ -369,7 +369,7 @@ describe('api', () => {
 			await api.permanentDelete('email-1');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/email-1/permanent',
+				'http://localhost:8877/emails/email-1/permanent',
 				expect.objectContaining({ method: 'DELETE' })
 			);
 		});
@@ -393,7 +393,7 @@ describe('api', () => {
 
 			expect(result).toEqual({ success: true, messageId: 'msg-123' });
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/emails/send',
+				'http://localhost:8877/emails/send',
 				expect.objectContaining({
 					method: 'POST',
 					body: JSON.stringify(params)
@@ -404,7 +404,7 @@ describe('api', () => {
 
 	describe('api.getLoginUrl', () => {
 		it('returns correct login URL', () => {
-			expect(api.getLoginUrl()).toBe('http://localhost:3001/auth/login');
+			expect(api.getLoginUrl()).toBe('http://localhost:8877/auth/login');
 		});
 	});
 
@@ -418,7 +418,7 @@ describe('api', () => {
 			await api.deleteAccount('acc-1');
 
 			expect(mockFetch).toHaveBeenCalledWith(
-				'http://localhost:3001/auth/accounts/acc-1',
+				'http://localhost:8877/auth/accounts/acc-1',
 				expect.objectContaining({ method: 'DELETE' })
 			);
 		});

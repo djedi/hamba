@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8877";
 
 export class AuthError extends Error {
   needsReauth: boolean;
@@ -65,23 +65,11 @@ export const api = {
   getArchivedEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails/archived?accountId=${accountId}&limit=${limit}&offset=${offset}`),
 
-  getImportantEmails: (accountId: string, limit = 50, offset = 0) =>
-    request<Email[]>(`/emails/important?accountId=${accountId}&limit=${limit}&offset=${offset}`),
-
-  getOtherEmails: (accountId: string, limit = 50, offset = 0) =>
-    request<Email[]>(`/emails/other?accountId=${accountId}&limit=${limit}&offset=${offset}`),
-
   getSnoozedEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails/snoozed?accountId=${accountId}&limit=${limit}&offset=${offset}`),
 
   getReminderEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails/reminders?accountId=${accountId}&limit=${limit}&offset=${offset}`),
-
-  classifyEmails: (accountId: string) =>
-    request<{ success: boolean; classified: number }>(`/emails/classify/${accountId}`, { method: "POST" }),
-
-  markImportant: (id: string) => request(`/emails/${id}/important`, { method: "POST" }),
-  markNotImportant: (id: string) => request(`/emails/${id}/not-important`, { method: "POST" }),
 
   getEmail: (id: string) => request<Email>(`/emails/${id}`),
 
@@ -105,6 +93,43 @@ export const api = {
   trash: (id: string) => request(`/emails/${id}/trash`, { method: "POST" }),
   untrash: (id: string) => request(`/emails/${id}/untrash`, { method: "POST" }),
   permanentDelete: (id: string) => request(`/emails/${id}/permanent`, { method: "DELETE" }),
+
+  // Batch operations for multi-select
+  batchArchive: (emailIds: string[]) =>
+    request<{ success: boolean; count: number; failed: string[]; errors: string[] }>("/emails/batch/archive", {
+      method: "POST",
+      body: JSON.stringify({ emailIds }),
+    }),
+
+  batchTrash: (emailIds: string[]) =>
+    request<{ success: boolean; count: number; failed: string[]; errors: string[] }>("/emails/batch/trash", {
+      method: "POST",
+      body: JSON.stringify({ emailIds }),
+    }),
+
+  batchStar: (emailIds: string[]) =>
+    request<{ success: boolean; count: number; failed: string[]; errors: string[] }>("/emails/batch/star", {
+      method: "POST",
+      body: JSON.stringify({ emailIds }),
+    }),
+
+  batchUnstar: (emailIds: string[]) =>
+    request<{ success: boolean; count: number; failed: string[]; errors: string[] }>("/emails/batch/unstar", {
+      method: "POST",
+      body: JSON.stringify({ emailIds }),
+    }),
+
+  batchMarkRead: (emailIds: string[]) =>
+    request<{ success: boolean; count: number; failed: string[]; errors: string[] }>("/emails/batch/read", {
+      method: "POST",
+      body: JSON.stringify({ emailIds }),
+    }),
+
+  batchMarkUnread: (emailIds: string[]) =>
+    request<{ success: boolean; count: number; failed: string[]; errors: string[] }>("/emails/batch/unread", {
+      method: "POST",
+      body: JSON.stringify({ emailIds }),
+    }),
 
   snooze: (id: string, snoozedUntil: number) =>
     request(`/emails/${id}/snooze`, {

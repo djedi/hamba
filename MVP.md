@@ -138,5 +138,5 @@ cd /Users/dustin/sd/src/fastemail
 bun run dev
 ```
 
-Backend: http://localhost:3001
-Frontend: http://localhost:5173
+Backend: http://localhost:8877
+Frontend: http://localhost:8878

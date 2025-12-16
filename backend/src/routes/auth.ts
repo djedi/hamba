@@ -6,15 +6,15 @@ import { startIdle } from "../services/imap-idle";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
-const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:3001/auth/callback";
+const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:8877/auth/callback";
 
 const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || "";
 const MICROSOFT_CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET || "";
-const MICROSOFT_REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI || "http://localhost:3001/auth/microsoft/callback";
+const MICROSOFT_REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI || "http://localhost:8877/auth/microsoft/callback";
 
 const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID || "";
 const YAHOO_CLIENT_SECRET = process.env.YAHOO_CLIENT_SECRET || "";
-const YAHOO_REDIRECT_URI = process.env.YAHOO_REDIRECT_URI || "http://localhost:3001/auth/yahoo/callback";
+const YAHOO_REDIRECT_URI = process.env.YAHOO_REDIRECT_URI || "http://localhost:8877/auth/yahoo/callback";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -114,7 +114,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", detail: { tags: ["Auth"]
     );
 
     // Redirect to frontend with success
-    return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(user.email)}`);
+    return redirect(`http://localhost:8878/?auth=success&email=${encodeURIComponent(user.email)}`);
   }, {
     detail: {
       summary: "Google OAuth callback",
@@ -227,7 +227,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", detail: { tags: ["Auth"]
     `, [id, email, user.displayName ?? email.split("@")[0] ?? email, accessToken, refreshToken, expiresAt]);
 
     // Redirect to frontend with success
-    return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(email)}`);
+    return redirect(`http://localhost:8878/?auth=success&email=${encodeURIComponent(email)}`);
   }, {
     detail: {
       summary: "Microsoft OAuth callback",
@@ -344,7 +344,7 @@ export const authRoutes = new Elysia({ prefix: "/auth", detail: { tags: ["Auth"]
     `, [id, email, displayName, accessToken, refreshToken, expiresAt]);
 
     // Redirect to frontend with success
-    return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(email)}`);
+    return redirect(`http://localhost:8878/?auth=success&email=${encodeURIComponent(email)}`);
   }, {
     detail: {
       summary: "Yahoo OAuth callback",

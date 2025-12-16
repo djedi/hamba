@@ -2,7 +2,6 @@ import { Elysia } from "elysia";
 import { emailQueries, accountQueries, attachmentQueries, scheduledEmailQueries, contactQueries, db } from "../db";
 import { getProvider } from "../services/providers";
 import { notifySyncComplete } from "../services/realtime";
-import { classifyAndUpdateEmail, classifyAllEmails } from "../services/importance";
 import { queueSend, cancelSend, UNDO_WINDOW_SECONDS } from "../services/pending-send";
 import {
   scheduleEmail,
@@ -207,34 +206,6 @@ export const emailRoutes = new Elysia({ prefix: "/emails", detail: { tags: ["Ema
     );
   })
 
-  .get("/important", ({ query }) => {
-    const { accountId, limit = "50", offset = "0" } = query;
-
-    if (!accountId) {
-      return { error: "accountId required" };
-    }
-
-    return emailQueries.getImportant.all(
-      accountId,
-      parseInt(limit as string),
-      parseInt(offset as string)
-    );
-  })
-
-  .get("/other", ({ query }) => {
-    const { accountId, limit = "50", offset = "0" } = query;
-
-    if (!accountId) {
-      return { error: "accountId required" };
-    }
-
-    return emailQueries.getOther.all(
-      accountId,
-      parseInt(limit as string),
-      parseInt(offset as string)
-    );
-  })
-
   .post("/sync/:accountId", async ({ params }) => {
     try {
       const provider = getProvider(params.accountId);
@@ -245,11 +216,8 @@ export const emailRoutes = new Elysia({ prefix: "/emails", detail: { tags: ["Ema
         return result;
       }
 
-      // Classify emails for importance after sync
+      // Extract contacts from newly synced emails
       if (result.synced > 0) {
-        classifyAllEmails(params.accountId);
-
-        // Extract contacts from newly synced emails
         // Get recent emails and add senders to contacts
         const recentEmails = db
           .prepare(`
@@ -544,35 +512,6 @@ export const emailRoutes = new Elysia({ prefix: "/emails", detail: { tags: ["Ema
     }
   })
 
-  .post("/classify/:accountId", async ({ params }) => {
-    try {
-      const classified = classifyAllEmails(params.accountId);
-      return { success: true, classified };
-    } catch (error) {
-      return { success: false, error: String(error), classified: 0 };
-    }
-  })
-
-  .post("/:id/important", async ({ params }) => {
-    const email = emailQueries.getById.get(params.id) as any;
-    if (!email) {
-      return { success: false, error: "Email not found" };
-    }
-
-    emailQueries.markImportant.run(params.id);
-    return { success: true };
-  })
-
-  .post("/:id/not-important", async ({ params }) => {
-    const email = emailQueries.getById.get(params.id) as any;
-    if (!email) {
-      return { success: false, error: "Email not found" };
-    }
-
-    emailQueries.markNotImportant.run(params.id);
-    return { success: true };
-  })
-
   .get("/snoozed", ({ query }) => {
     const { accountId, limit = "50", offset = "0" } = query;
 
@@ -793,4 +732,291 @@ export const emailRoutes = new Elysia({ prefix: "/emails", detail: { tags: ["Ema
   .delete("/scheduled/:id", async ({ params }) => {
     const result = cancelScheduledEmail(params.id);
     return result;
+  })
+
+  // Batch operations for multi-select
+  .post("/batch/archive", async ({ body }) => {
+    const { emailIds } = body as { emailIds: string[] };
+
+    if (!emailIds || !Array.isArray(emailIds) || emailIds.length === 0) {
+      return { success: false, error: "emailIds array required" };
+    }
+
+    if (emailIds.length > 100) {
+      return { success: false, error: "Maximum 100 emails per batch" };
+    }
+
+    const results = { success: true, count: 0, failed: [] as string[], errors: [] as string[] };
+
+    // Group emails by account_id for efficient provider calls
+    const emailsByAccount = new Map<string, string[]>();
+    for (const emailId of emailIds) {
+      const email = emailQueries.getById.get(emailId) as any;
+      if (email) {
+        const list = emailsByAccount.get(email.account_id) || [];
+        list.push(emailId);
+        emailsByAccount.set(email.account_id, list);
+      }
+    }
+
+    // Process each account's emails
+    for (const [accountId, ids] of emailsByAccount) {
+      try {
+        const provider = getProvider(accountId);
+        for (const id of ids) {
+          try {
+            await provider.archive(id);
+            emailQueries.archive.run(id);
+            results.count++;
+          } catch (e: any) {
+            results.failed.push(id);
+            results.errors.push(e.message || String(e));
+          }
+        }
+      } catch (e: any) {
+        results.failed.push(...ids);
+        results.errors.push(e.message || String(e));
+      }
+    }
+
+    results.success = results.failed.length === 0;
+    return results;
+  })
+
+  .post("/batch/trash", async ({ body }) => {
+    const { emailIds } = body as { emailIds: string[] };
+
+    if (!emailIds || !Array.isArray(emailIds) || emailIds.length === 0) {
+      return { success: false, error: "emailIds array required" };
+    }
+
+    if (emailIds.length > 100) {
+      return { success: false, error: "Maximum 100 emails per batch" };
+    }
+
+    const results = { success: true, count: 0, failed: [] as string[], errors: [] as string[] };
+
+    const emailsByAccount = new Map<string, string[]>();
+    for (const emailId of emailIds) {
+      const email = emailQueries.getById.get(emailId) as any;
+      if (email) {
+        const list = emailsByAccount.get(email.account_id) || [];
+        list.push(emailId);
+        emailsByAccount.set(email.account_id, list);
+      }
+    }
+
+    for (const [accountId, ids] of emailsByAccount) {
+      try {
+        const provider = getProvider(accountId);
+        for (const id of ids) {
+          try {
+            await provider.trash(id);
+            emailQueries.trash.run(id);
+            results.count++;
+          } catch (e: any) {
+            results.failed.push(id);
+            results.errors.push(e.message || String(e));
+          }
+        }
+      } catch (e: any) {
+        results.failed.push(...ids);
+        results.errors.push(e.message || String(e));
+      }
+    }
+
+    results.success = results.failed.length === 0;
+    return results;
+  })
+
+  .post("/batch/star", async ({ body }) => {
+    const { emailIds } = body as { emailIds: string[] };
+
+    if (!emailIds || !Array.isArray(emailIds) || emailIds.length === 0) {
+      return { success: false, error: "emailIds array required" };
+    }
+
+    if (emailIds.length > 100) {
+      return { success: false, error: "Maximum 100 emails per batch" };
+    }
+
+    const results = { success: true, count: 0, failed: [] as string[], errors: [] as string[] };
+
+    const emailsByAccount = new Map<string, string[]>();
+    for (const emailId of emailIds) {
+      const email = emailQueries.getById.get(emailId) as any;
+      if (email) {
+        const list = emailsByAccount.get(email.account_id) || [];
+        list.push(emailId);
+        emailsByAccount.set(email.account_id, list);
+      }
+    }
+
+    for (const [accountId, ids] of emailsByAccount) {
+      try {
+        const provider = getProvider(accountId);
+        for (const id of ids) {
+          try {
+            await provider.star(id);
+            emailQueries.star.run(id);
+            results.count++;
+          } catch (e: any) {
+            results.failed.push(id);
+            results.errors.push(e.message || String(e));
+          }
+        }
+      } catch (e: any) {
+        results.failed.push(...ids);
+        results.errors.push(e.message || String(e));
+      }
+    }
+
+    results.success = results.failed.length === 0;
+    return results;
+  })
+
+  .post("/batch/unstar", async ({ body }) => {
+    const { emailIds } = body as { emailIds: string[] };
+
+    if (!emailIds || !Array.isArray(emailIds) || emailIds.length === 0) {
+      return { success: false, error: "emailIds array required" };
+    }
+
+    if (emailIds.length > 100) {
+      return { success: false, error: "Maximum 100 emails per batch" };
+    }
+
+    const results = { success: true, count: 0, failed: [] as string[], errors: [] as string[] };
+
+    const emailsByAccount = new Map<string, string[]>();
+    for (const emailId of emailIds) {
+      const email = emailQueries.getById.get(emailId) as any;
+      if (email) {
+        const list = emailsByAccount.get(email.account_id) || [];
+        list.push(emailId);
+        emailsByAccount.set(email.account_id, list);
+      }
+    }
+
+    for (const [accountId, ids] of emailsByAccount) {
+      try {
+        const provider = getProvider(accountId);
+        for (const id of ids) {
+          try {
+            await provider.unstar(id);
+            emailQueries.unstar.run(id);
+            results.count++;
+          } catch (e: any) {
+            results.failed.push(id);
+            results.errors.push(e.message || String(e));
+          }
+        }
+      } catch (e: any) {
+        results.failed.push(...ids);
+        results.errors.push(e.message || String(e));
+      }
+    }
+
+    results.success = results.failed.length === 0;
+    return results;
+  })
+
+  .post("/batch/read", async ({ body }) => {
+    const { emailIds } = body as { emailIds: string[] };
+
+    if (!emailIds || !Array.isArray(emailIds) || emailIds.length === 0) {
+      return { success: false, error: "emailIds array required" };
+    }
+
+    if (emailIds.length > 100) {
+      return { success: false, error: "Maximum 100 emails per batch" };
+    }
+
+    const results = { success: true, count: 0, failed: [] as string[], errors: [] as string[] };
+
+    const emailsByAccount = new Map<string, string[]>();
+    for (const emailId of emailIds) {
+      const email = emailQueries.getById.get(emailId) as any;
+      if (email) {
+        const list = emailsByAccount.get(email.account_id) || [];
+        list.push(emailId);
+        emailsByAccount.set(email.account_id, list);
+      }
+    }
+
+    for (const [accountId, ids] of emailsByAccount) {
+      try {
+        const provider = getProvider(accountId);
+        for (const id of ids) {
+          try {
+            await provider.markRead(id);
+            emailQueries.markRead.run(id);
+            results.count++;
+          } catch (e: any) {
+            // Still update local DB for better UX
+            emailQueries.markRead.run(id);
+            results.count++;
+          }
+        }
+      } catch (e: any) {
+        // For read status, we still update locally even if provider fails
+        for (const id of ids) {
+          emailQueries.markRead.run(id);
+          results.count++;
+        }
+      }
+    }
+
+    results.success = true;
+    return results;
+  })
+
+  .post("/batch/unread", async ({ body }) => {
+    const { emailIds } = body as { emailIds: string[] };
+
+    if (!emailIds || !Array.isArray(emailIds) || emailIds.length === 0) {
+      return { success: false, error: "emailIds array required" };
+    }
+
+    if (emailIds.length > 100) {
+      return { success: false, error: "Maximum 100 emails per batch" };
+    }
+
+    const results = { success: true, count: 0, failed: [] as string[], errors: [] as string[] };
+
+    const emailsByAccount = new Map<string, string[]>();
+    for (const emailId of emailIds) {
+      const email = emailQueries.getById.get(emailId) as any;
+      if (email) {
+        const list = emailsByAccount.get(email.account_id) || [];
+        list.push(emailId);
+        emailsByAccount.set(email.account_id, list);
+      }
+    }
+
+    for (const [accountId, ids] of emailsByAccount) {
+      try {
+        const provider = getProvider(accountId);
+        for (const id of ids) {
+          try {
+            await provider.markUnread(id);
+            emailQueries.markUnread.run(id);
+            results.count++;
+          } catch (e: any) {
+            // Still update local DB for better UX
+            emailQueries.markUnread.run(id);
+            results.count++;
+          }
+        }
+      } catch (e: any) {
+        // For read status, we still update locally even if provider fails
+        for (const id of ids) {
+          emailQueries.markUnread.run(id);
+          results.count++;
+        }
+      }
+    }
+
+    results.success = true;
+    return results;
   });

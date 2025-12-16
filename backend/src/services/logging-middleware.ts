@@ -55,6 +55,9 @@ export const loggingMiddleware = new Elysia({ name: "logging" })
     };
   })
   .onRequest(({ request, requestId, requestContext }) => {
+    // Skip logging if requestContext wasn't set
+    if (!requestContext) return;
+
     // Log incoming request (debug level to avoid noise)
     logger.debug("Request received", {
       requestId,
@@ -64,7 +67,10 @@ export const loggingMiddleware = new Elysia({ name: "logging" })
     });
   })
   .onAfterResponse(({ request, requestId, requestContext, startTime, response, set }) => {
-    const duration = performance.now() - startTime;
+    // Skip logging if requestContext wasn't set (e.g., CORS preflight handled early)
+    if (!requestContext) return;
+
+    const duration = performance.now() - (startTime || performance.now());
     const statusCode = set.status || 200;
 
     // Record timing metric
@@ -95,18 +101,22 @@ export const loggingMiddleware = new Elysia({ name: "logging" })
     }
   })
   .onError(({ error, request, requestId, requestContext, set }) => {
+    // Extract request info even if requestContext wasn't set
+    const method = requestContext?.method || request?.method;
+    const path = requestContext?.path || (request ? new URL(request.url).pathname : undefined);
+
     // Capture the error
     errorTracking.captureException(error as Error, {
       requestId,
-      method: requestContext?.method,
-      path: requestContext?.path,
+      method,
+      path,
     });
 
     // Log the error
     logger.error("Unhandled error in request", error as Error, {
       requestId,
-      method: requestContext?.method,
-      path: requestContext?.path,
+      method,
+      path,
     });
 
     // Return a clean error response

@@ -10,8 +10,8 @@ Hamba is a keyboard-driven email client (Superhuman alternative). It supports bo
 
 **Development (run both):**
 ```bash
-cd backend && bun run dev     # API at localhost:3001
-cd frontend && bun run dev    # Web at localhost:5173
+cd backend && bun run dev     # API at localhost:8877
+cd frontend && bun run dev    # Web at localhost:8878
 ```
 
 **Tauri desktop app:**
@@ -79,7 +79,7 @@ Requires `.env` in root with:
 ```
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
-REDIRECT_URI=http://localhost:3001/auth/callback
+REDIRECT_URI=http://localhost:8877/auth/callback
 
 # Optional: For AI email composition (Cmd+J in compose)
 ANTHROPIC_API_KEY=...
@@ -121,7 +121,7 @@ Gmail uses polling (every 60s) as fallback. For true push notifications:
 3. Call Gmail `watch` API to register the webhook
 
 ### WebSocket Protocol
-- Connect to `ws://localhost:3001/ws`
+- Connect to `ws://localhost:8877/ws`
 - Send `{"type": "subscribe", "accountId": "..."}` to subscribe
 - Receive `{"type": "new_mail", "accountId": "..."}` on new mail
 - Receive `{"type": "sync_complete", "accountId": "...", "count": N}` after sync
@@ -137,7 +137,7 @@ Run `./test --help` for all options.
 
 ## API Documentation
 
-OpenAPI/Swagger documentation is available at `http://localhost:3001/docs` when the backend is running. The documentation includes:
+OpenAPI/Swagger documentation is available at `http://localhost:8877/docs` when the backend is running. The documentation includes:
 - All API endpoints organized by tags (Auth, Emails, Drafts, Labels, Contacts, AI, Snippets, Signatures)
 - Request/response schemas
 - Interactive "Try it out" functionality via Swagger UI
@@ -193,7 +193,7 @@ The application can be run in Docker containers for production deployment or con
 docker compose up -d
 
 # Frontend: http://localhost:8080
-# Backend API: http://localhost:3001
+# Backend API: http://localhost:8877
 ```
 
 ### Development with Docker
@@ -202,8 +202,8 @@ docker compose up -d
 # Run with hot reload support
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
-# Frontend dev server: http://localhost:5173
-# Backend API: http://localhost:3001
+# Frontend dev server: http://localhost:8878
+# Backend API: http://localhost:8877
 ```
 
 ### Docker Architecture
@@ -230,7 +230,7 @@ Create a `.env` file in the project root (see `.env.example` in backend/):
 # Required for email providers
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
-REDIRECT_URI=http://localhost:3001/auth/callback
+REDIRECT_URI=http://localhost:8877/auth/callback
 
 # Optional
 ANTHROPIC_API_KEY=...
@@ -248,7 +248,7 @@ docker build -t hamba-backend ./backend
 docker build -t hamba-frontend ./frontend
 
 # Run backend with custom database path
-docker run -p 3001:3001 -v $(pwd)/data:/app/data --env-file .env hamba-backend
+docker run -p 8877:8877 -v $(pwd)/data:/app/data --env-file .env hamba-backend
 ```
 
 ### Health Checks

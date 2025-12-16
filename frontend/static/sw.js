@@ -27,8 +27,6 @@ const CACHEABLE_API_PATTERNS = [
   /\/emails\/sent/,
   /\/emails\/archived/,
   /\/emails\/snoozed/,
-  /\/emails\/important/,
-  /\/emails\/other/,
   /\/auth\/accounts$/,
   /\/labels(\?|$)/,
   /\/contacts/,
@@ -50,8 +48,6 @@ const MUTATION_API_PATTERNS = [
   { pattern: /\/emails\/[^/]+\/unsnooze$/, method: 'POST' },
   { pattern: /\/emails\/[^/]+\/reminder$/, method: 'POST' },
   { pattern: /\/emails\/[^/]+\/reminder$/, method: 'DELETE' },
-  { pattern: /\/emails\/[^/]+\/important$/, method: 'POST' },
-  { pattern: /\/emails\/[^/]+\/not-important$/, method: 'POST' },
   { pattern: /\/labels\/[^/]+\/emails\/[^/]+$/, method: 'POST' },
   { pattern: /\/labels\/[^/]+\/emails\/[^/]+$/, method: 'DELETE' },
 ];
@@ -170,7 +166,7 @@ self.addEventListener('fetch', (event) => {
   // Only handle same-origin and API requests
   if (url.origin !== self.location.origin && !url.pathname.startsWith('/')) {
     // Check if it's an API request (different origin for API)
-    if (!url.href.includes('localhost:3001') && !url.href.includes('/api/')) {
+    if (!url.href.includes('localhost:8877') && !url.href.includes('/api/')) {
       return;
     }
   }

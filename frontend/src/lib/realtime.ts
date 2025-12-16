@@ -25,7 +25,7 @@ let currentReconnectDelay = INITIAL_RECONNECT_DELAY;
 // Subscriptions to re-subscribe after reconnect
 const activeSubscriptions = new Set<string>();
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:3001/ws";
+const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8877/ws";
 
 export function connect(): void {
   if (ws?.readyState === WebSocket.OPEN) {

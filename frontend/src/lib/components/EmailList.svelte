@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { emails, selectedEmailId, selectedIndex, searchQuery, isLoadingMore, hasMoreEmails, selectedLabel } from "$lib/stores";
-  import type { Folder, InboxTab } from "$lib/stores";
+  import { emails, selectedEmailId, selectedIndex, searchQuery, isLoadingMore, hasMoreEmails, selectedLabel, selectedEmailIds } from "$lib/stores";
+  import type { Folder } from "$lib/stores";
   import { extractSearchTerms } from "$lib/search";
   import EmailRow from "./EmailRow.svelte";
   import EmailRowSkeleton from "./EmailRowSkeleton.svelte";
@@ -12,10 +12,9 @@
     loading?: boolean;
     onLoadMore?: () => void;
     folder?: Folder;
-    inboxTab?: InboxTab;
   }
 
-  let { loading = false, onLoadMore, folder = "inbox", inboxTab = "important" }: Props = $props();
+  let { loading = false, onLoadMore, folder = "inbox" }: Props = $props();
 
   // Determine the appropriate empty state based on context
   const emptyState = $derived.by(() => {
@@ -32,30 +31,12 @@
     // Folder-specific empty states
     switch (folder) {
       case "inbox":
-        // Different states for inbox tabs
-        if (inboxTab === "important") {
-          return {
-            icon: "✨",
-            title: "All caught up!",
-            description: "No important emails right now. Check back later or view Other emails.",
-            variant: "success" as const,
-          };
-        } else if (inboxTab === "other") {
-          return {
-            icon: "📬",
-            title: "No other emails",
-            description: "Newsletters and automated emails will appear here.",
-            variant: "default" as const,
-          };
-        } else {
-          // "all" tab - inbox zero!
-          return {
-            icon: "🎉",
-            title: "Inbox Zero!",
-            description: "You've processed all your emails. Enjoy the moment!",
-            variant: "success" as const,
-          };
-        }
+        return {
+          icon: "🎉",
+          title: "Inbox Zero!",
+          description: "You've processed all your emails. Enjoy the moment!",
+          variant: "success" as const,
+        };
 
       case "starred":
         return {
@@ -180,6 +161,7 @@
         <EmailRow
           {email}
           selected={email.id === $selectedEmailId}
+          checked={$selectedEmailIds.has(email.id)}
           {index}
           {searchTerms}
         />

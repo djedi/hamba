@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Email } from "$lib/api";
-  import { selectedEmailId, selectedIndex, view, emailActions, prefetchEmail, emailLabelsCache, labelActions } from "$lib/stores";
+  import { selectedEmailId, selectedIndex, view, emailActions, prefetchEmail, emailLabelsCache, labelActions, selectionActions } from "$lib/stores";
   import { formatRelativeDate, formatDateTooltip } from "$lib/dateUtils";
   import { onMount } from "svelte";
   import HighlightText from "./HighlightText.svelte";
@@ -10,9 +10,10 @@
     selected: boolean;
     index: number;
     searchTerms?: string[];
+    checked?: boolean;
   }
 
-  let { email, selected, index, searchTerms = [] }: Props = $props();
+  let { email, selected, index, searchTerms = [], checked = false }: Props = $props();
 
   // Get labels for this email from cache
   const emailLabels = $derived($emailLabelsCache.get(email.id) || []);
@@ -22,7 +23,23 @@
     labelActions.loadLabelsForEmail(email.id);
   });
 
-  function handleClick() {
+  function handleClick(e: MouseEvent) {
+    // Cmd/Ctrl+click: toggle selection without opening
+    if (e.metaKey || e.ctrlKey) {
+      e.preventDefault();
+      selectionActions.toggleSelection(email.id, index);
+      return;
+    }
+
+    // Shift+click: range selection
+    if (e.shiftKey) {
+      e.preventDefault();
+      selectionActions.selectRange(index);
+      return;
+    }
+
+    // Regular click: select and open email, clear multi-selection
+    selectionActions.clearSelection();
     selectedEmailId.set(email.id);
     selectedIndex.set(index);
     view.set("email");
@@ -33,6 +50,11 @@
     const url = new URL(window.location.href);
     url.searchParams.set("email", email.id);
     window.history.pushState({}, "", url);
+  }
+
+  function handleCheckboxClick(e: MouseEvent) {
+    e.stopPropagation();
+    selectionActions.toggleSelection(email.id, index);
   }
 
   function handleStar(e: MouseEvent) {
@@ -50,11 +72,32 @@
   class="email-row"
   class:selected
   class:unread={!email.is_read}
+  class:checked
   onclick={handleClick}
   onmouseenter={handleMouseEnter}
   role="button"
   tabindex="0"
 >
+  <span
+    class="checkbox"
+    class:checked
+    onclick={handleCheckboxClick}
+    role="checkbox"
+    aria-checked={checked}
+    tabindex="-1"
+  >
+    {#if checked}
+      <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
+        <rect x="1" y="1" width="14" height="14" rx="2" fill="var(--accent)" />
+        <path d="M4.5 8L7 10.5L11.5 5.5" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    {:else}
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" width="16" height="16">
+        <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" stroke-width="1.5"/>
+      </svg>
+    {/if}
+  </span>
+
   <span
     class="star"
     class:starred={email.is_starred}
@@ -126,7 +169,14 @@
   }
 
   .email-row.selected {
-    background: var(--bg-selected);
+    background: var(--bg-secondary);
+    border-left: 4px solid var(--accent);
+    padding-left: 12px;
+    box-shadow:
+      0 -1px 3px rgba(0, 0, 0, 0.1),
+      0 1px 3px rgba(0, 0, 0, 0.1);
+    position: relative;
+    z-index: 1;
   }
 
   .email-row.unread {
@@ -141,6 +191,22 @@
   .email-row.unread .subject {
     font-weight: 600;
     color: var(--text-primary);
+  }
+
+  .checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+
+  .checkbox:hover {
+    color: var(--accent);
+  }
+
+  .email-row.checked {
+    background: var(--bg-selected);
   }
 
   .star {

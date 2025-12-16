@@ -17,7 +17,7 @@
 
   let iframeRef: HTMLIFrameElement | undefined = $state();
 
-  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8877";
 
   // Escape HTML entities for plain text display
   function escapeHtml(text: string): string {

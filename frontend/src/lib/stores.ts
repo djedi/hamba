@@ -20,10 +20,6 @@ export const hasMoreEmails = writable(true);
 export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "reminders" | "scheduled" | "label";
 export const currentFolder = writable<Folder>("inbox");
 
-// Split inbox tab (important, other, all) - only applies when currentFolder is "inbox"
-export type InboxTab = "important" | "other" | "all";
-export const inboxTab = writable<InboxTab>("important");
-
 // Labels store
 export const labels = writable<Label[]>([]);
 export const selectedLabelId = writable<string | null>(null);
@@ -312,72 +308,6 @@ export const emailActions = {
     });
   },
 
-  markImportant: (emailId: string) => {
-    const $inboxTab = get(inboxTab);
-
-    // Optimistic update
-    emails.update(($emails) =>
-      $emails.map((e) => (e.id === emailId ? { ...e, is_important: 1 } : e))
-    );
-
-    // If viewing "other" tab, remove from list
-    if ($inboxTab === "other") {
-      emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
-    }
-
-    api.markImportant(emailId).then(() => {
-      showToast("Marked as important", "success", {
-        action: {
-          label: "Undo",
-          onClick: () => emailActions.markNotImportant(emailId),
-        },
-      });
-    }).catch(() => {
-      emails.update(($emails) =>
-        $emails.map((e) => (e.id === emailId ? { ...e, is_important: 0 } : e))
-      );
-      showToast("Failed to mark as important");
-    });
-  },
-
-  markNotImportant: (emailId: string) => {
-    const $inboxTab = get(inboxTab);
-
-    // Optimistic update
-    emails.update(($emails) =>
-      $emails.map((e) => (e.id === emailId ? { ...e, is_important: 0 } : e))
-    );
-
-    // If viewing "important" tab, remove from list
-    if ($inboxTab === "important") {
-      emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
-    }
-
-    api.markNotImportant(emailId).then(() => {
-      showToast("Marked as not important", "success", {
-        action: {
-          label: "Undo",
-          onClick: () => emailActions.markImportant(emailId),
-        },
-      });
-    }).catch(() => {
-      emails.update(($emails) =>
-        $emails.map((e) => (e.id === emailId ? { ...e, is_important: 1 } : e))
-      );
-      showToast("Failed to mark as not important");
-    });
-  },
-
-  toggleImportant: (emailId: string) => {
-    const $emails = get(emails);
-    const email = $emails.find((e) => e.id === emailId);
-    if (email?.is_important) {
-      emailActions.markNotImportant(emailId);
-    } else {
-      emailActions.markImportant(emailId);
-    }
-  },
-
   snooze: (emailId: string, snoozedUntil: number) => {
     const $emails = get(emails);
     const email = $emails.find((e) => e.id === emailId);
@@ -618,6 +548,217 @@ export const unreadCount = derived(emails, ($emails) =>
 
 // Keyboard navigation index
 export const selectedIndex = writable(0);
+
+// Multi-selection state
+export const selectedEmailIds = writable<Set<string>>(new Set());
+export const lastSelectedIndex = writable<number | null>(null);
+
+// Selection actions
+export const selectionActions = {
+  toggleSelection: (emailId: string, index: number) => {
+    selectedEmailIds.update(($ids) => {
+      const newSet = new Set($ids);
+      if (newSet.has(emailId)) {
+        newSet.delete(emailId);
+      } else {
+        newSet.add(emailId);
+      }
+      return newSet;
+    });
+    lastSelectedIndex.set(index);
+  },
+
+  selectRange: (toIndex: number) => {
+    const $lastIndex = get(lastSelectedIndex);
+    const $emails = get(emails);
+
+    if ($lastIndex === null) {
+      // No previous selection, just select current
+      if ($emails[toIndex]) {
+        selectedEmailIds.update(($ids) => {
+          const newSet = new Set($ids);
+          newSet.add($emails[toIndex].id);
+          return newSet;
+        });
+      }
+    } else {
+      // Select range from lastIndex to toIndex
+      const start = Math.min($lastIndex, toIndex);
+      const end = Math.max($lastIndex, toIndex);
+
+      selectedEmailIds.update(($ids) => {
+        const newSet = new Set($ids);
+        for (let i = start; i <= end; i++) {
+          if ($emails[i]) {
+            newSet.add($emails[i].id);
+          }
+        }
+        return newSet;
+      });
+    }
+    lastSelectedIndex.set(toIndex);
+  },
+
+  selectAll: () => {
+    const $emails = get(emails);
+    selectedEmailIds.set(new Set($emails.map((e) => e.id)));
+  },
+
+  clearSelection: () => {
+    selectedEmailIds.set(new Set());
+    lastSelectedIndex.set(null);
+  },
+};
+
+// Bulk email actions (for multi-select)
+export const bulkEmailActions = {
+  archive: async (emailIds: string[]) => {
+    if (emailIds.length === 0) return;
+
+    const $emails = get(emails);
+    const affectedEmails = $emails.filter((e) => emailIds.includes(e.id));
+
+    // Optimistic remove from list
+    emails.update(($emails) => $emails.filter((e) => !emailIds.includes(e.id)));
+    selectionActions.clearSelection();
+
+    try {
+      await api.batchArchive(emailIds);
+      showToast(`${emailIds.length} email${emailIds.length > 1 ? "s" : ""} archived`, "success", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            // Restore emails to list
+            emails.update(($emails) => {
+              const newList = [...$emails, ...affectedEmails];
+              return newList.sort((a, b) => b.received_at - a.received_at);
+            });
+            // Unarchive each one
+            for (const email of affectedEmails) {
+              await api.unarchive(email.id).catch(() => {});
+            }
+          },
+        },
+      });
+    } catch {
+      // Rollback
+      emails.update(($emails) => {
+        const newList = [...$emails, ...affectedEmails];
+        return newList.sort((a, b) => b.received_at - a.received_at);
+      });
+      showToast("Failed to archive emails");
+    }
+  },
+
+  trash: async (emailIds: string[]) => {
+    if (emailIds.length === 0) return;
+
+    const $emails = get(emails);
+    const affectedEmails = $emails.filter((e) => emailIds.includes(e.id));
+
+    // Optimistic remove from list
+    emails.update(($emails) => $emails.filter((e) => !emailIds.includes(e.id)));
+    selectionActions.clearSelection();
+
+    try {
+      await api.batchTrash(emailIds);
+      showToast(`${emailIds.length} email${emailIds.length > 1 ? "s" : ""} moved to trash`, "success", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            emails.update(($emails) => {
+              const newList = [...$emails, ...affectedEmails];
+              return newList.sort((a, b) => b.received_at - a.received_at);
+            });
+            for (const email of affectedEmails) {
+              await api.untrash(email.id).catch(() => {});
+            }
+          },
+        },
+      });
+    } catch {
+      emails.update(($emails) => {
+        const newList = [...$emails, ...affectedEmails];
+        return newList.sort((a, b) => b.received_at - a.received_at);
+      });
+      showToast("Failed to move emails to trash");
+    }
+  },
+
+  star: async (emailIds: string[]) => {
+    if (emailIds.length === 0) return;
+
+    // Optimistic update
+    emails.update(($emails) =>
+      $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_starred: 1 } : e))
+    );
+
+    try {
+      await api.batchStar(emailIds);
+      showToast(`${emailIds.length} email${emailIds.length > 1 ? "s" : ""} starred`, "success");
+    } catch {
+      // Rollback
+      emails.update(($emails) =>
+        $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_starred: 0 } : e))
+      );
+      showToast("Failed to star emails");
+    }
+  },
+
+  unstar: async (emailIds: string[]) => {
+    if (emailIds.length === 0) return;
+
+    emails.update(($emails) =>
+      $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_starred: 0 } : e))
+    );
+
+    try {
+      await api.batchUnstar(emailIds);
+      showToast(`Star removed from ${emailIds.length} email${emailIds.length > 1 ? "s" : ""}`, "success");
+    } catch {
+      emails.update(($emails) =>
+        $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_starred: 1 } : e))
+      );
+      showToast("Failed to unstar emails");
+    }
+  },
+
+  markRead: async (emailIds: string[]) => {
+    if (emailIds.length === 0) return;
+
+    emails.update(($emails) =>
+      $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_read: 1 } : e))
+    );
+
+    try {
+      await api.batchMarkRead(emailIds);
+      showToast(`${emailIds.length} email${emailIds.length > 1 ? "s" : ""} marked as read`, "success");
+    } catch {
+      emails.update(($emails) =>
+        $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_read: 0 } : e))
+      );
+      showToast("Failed to mark emails as read");
+    }
+  },
+
+  markUnread: async (emailIds: string[]) => {
+    if (emailIds.length === 0) return;
+
+    emails.update(($emails) =>
+      $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_read: 0 } : e))
+    );
+
+    try {
+      await api.batchMarkUnread(emailIds);
+      showToast(`${emailIds.length} email${emailIds.length > 1 ? "s" : ""} marked as unread`, "success");
+    } catch {
+      emails.update(($emails) =>
+        $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_read: 1 } : e))
+      );
+      showToast("Failed to mark emails as unread");
+    }
+  },
+};
 
 // Label actions
 export const labelActions = {

@@ -113,8 +113,8 @@ cp backend/.env.example .env
 # Edit .env with your OAuth credentials
 
 # Start development servers
-cd backend && bun run dev     # Terminal 1: API at localhost:3001
-cd frontend && bun run dev    # Terminal 2: Web at localhost:5173
+cd backend && bun run dev     # Terminal 1: API at localhost:8877
+cd frontend && bun run dev    # Terminal 2: Web at localhost:8878
 ```
 
 ### Docker Deployment
@@ -124,7 +124,7 @@ cd frontend && bun run dev    # Terminal 2: Web at localhost:5173
 docker compose up -d
 
 # Frontend: http://localhost:8080
-# Backend API: http://localhost:3001
+# Backend API: http://localhost:8877
 ```
 
 For development with hot reload:
@@ -153,7 +153,7 @@ Create a `.env` file in the project root with the following variables:
 # Get from https://console.cloud.google.com/apis/credentials
 GOOGLE_CLIENT_ID=your_client_id
 GOOGLE_CLIENT_SECRET=your_client_secret
-REDIRECT_URI=http://localhost:3001/auth/callback
+REDIRECT_URI=http://localhost:8877/auth/callback
 ```
 
 **Setup steps:**
@@ -161,7 +161,7 @@ REDIRECT_URI=http://localhost:3001/auth/callback
 2. Create or select a project
 3. Enable the Gmail API
 4. Create OAuth 2.0 credentials (Web application)
-5. Add `http://localhost:3001/auth/callback` as an authorized redirect URI
+5. Add `http://localhost:8877/auth/callback` as an authorized redirect URI
 
 ### Optional: Microsoft OAuth (Outlook/Office365)
 
@@ -169,13 +169,13 @@ REDIRECT_URI=http://localhost:3001/auth/callback
 # Get from https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps
 MICROSOFT_CLIENT_ID=your_microsoft_client_id
 MICROSOFT_CLIENT_SECRET=your_microsoft_client_secret
-MICROSOFT_REDIRECT_URI=http://localhost:3001/auth/microsoft/callback
+MICROSOFT_REDIRECT_URI=http://localhost:8877/auth/microsoft/callback
 ```
 
 **Setup steps:**
 1. Register new application at Azure Portal
 2. Select "Accounts in any organizational directory and personal Microsoft accounts"
-3. Add Web redirect URI: `http://localhost:3001/auth/microsoft/callback`
+3. Add Web redirect URI: `http://localhost:8877/auth/microsoft/callback`
 4. Under "API permissions", add: `Mail.ReadWrite`, `Mail.Send`, `User.Read`
 
 ### Optional: Yahoo OAuth
@@ -184,7 +184,7 @@ MICROSOFT_REDIRECT_URI=http://localhost:3001/auth/microsoft/callback
 # Get from https://developer.yahoo.com/apps/
 YAHOO_CLIENT_ID=your_yahoo_client_id
 YAHOO_CLIENT_SECRET=your_yahoo_client_secret
-YAHOO_REDIRECT_URI=http://localhost:3001/auth/yahoo/callback
+YAHOO_REDIRECT_URI=http://localhost:8877/auth/yahoo/callback
 ```
 
 ### Optional: AI Features
@@ -287,9 +287,9 @@ SENTRY_DSN=your_sentry_dsn  # Error tracking
 
 When the backend is running, interactive API documentation is available at:
 
-- **Swagger UI**: http://localhost:3001/docs
-- **Health Check**: http://localhost:3001/health
-- **Metrics**: http://localhost:3001/metrics
+- **Swagger UI**: http://localhost:8877/docs
+- **Health Check**: http://localhost:8877/health
+- **Metrics**: http://localhost:8877/metrics
 
 ## Testing
 

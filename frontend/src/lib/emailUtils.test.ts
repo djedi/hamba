@@ -14,7 +14,7 @@ function escapeHtml(text: string): string {
 
 function sanitizeEmailHtml(html: string, emailId: string): string {
   let sanitized = html;
-  const API_URL = "http://localhost:3001";
+  const API_URL = "http://localhost:8877";
 
   // Replace cid: image references with API endpoint URLs
   sanitized = sanitized.replace(

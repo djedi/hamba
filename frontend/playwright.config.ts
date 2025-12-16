@@ -5,8 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
  * Run with: bun run test:e2e
  *
  * Tests require both backend and frontend to be running:
- * - Backend: cd backend && bun run dev (port 3001)
- * - Frontend: cd frontend && bun run dev (port 5173)
+ * - Backend: cd backend && bun run dev (port 8877)
+ * - Frontend: cd frontend && bun run dev (port 8878)
  */
 export default defineConfig({
   testDir: './e2e',
@@ -17,7 +17,7 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }], ['list']],
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:8878',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

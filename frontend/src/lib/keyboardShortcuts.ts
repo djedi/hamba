@@ -28,14 +28,12 @@ export type ShortcutAction =
   | "trash_backspace"
   | "trash_delete"
   | "toggle_star"
-  | "toggle_important"
   | "toggle_read"
   | "snooze"
   | "set_reminder"
-  // Inbox tabs
-  | "tab_important"
-  | "tab_other"
-  | "tab_all"
+  // Selection
+  | "toggle_select"
+  | "select_all"
   // Account switching
   | "switch_account_1"
   | "switch_account_2"
@@ -62,7 +60,7 @@ export interface ShortcutDefinition {
   action: ShortcutAction;
   defaultKey: string;
   description: string;
-  category: "Navigation" | "Go to" | "Actions" | "Compose" | "Inbox Tabs" | "Other";
+  category: "Navigation" | "Go to" | "Actions" | "Compose" | "Other";
   // Some shortcuts can have aliases (e.g., "o" and "Enter" both open email)
   isAlias?: boolean;
 }
@@ -97,15 +95,11 @@ export const defaultShortcuts: ShortcutDefinition[] = [
   { action: "trash_backspace", defaultKey: "Backspace", description: "Move to trash", category: "Actions", isAlias: true },
   { action: "trash_delete", defaultKey: "Delete", description: "Move to trash", category: "Actions", isAlias: true },
   { action: "toggle_star", defaultKey: "s", description: "Star/Unstar", category: "Actions" },
-  { action: "toggle_important", defaultKey: "!", description: "Toggle important", category: "Actions" },
   { action: "toggle_read", defaultKey: "Shift+i", description: "Toggle read/unread", category: "Actions" },
   { action: "snooze", defaultKey: "h", description: "Snooze", category: "Actions" },
   { action: "set_reminder", defaultKey: "Shift+h", description: "Set reminder", category: "Actions" },
-
-  // Inbox tabs
-  { action: "tab_important", defaultKey: "1", description: "Important tab", category: "Inbox Tabs" },
-  { action: "tab_other", defaultKey: "2", description: "Other tab", category: "Inbox Tabs" },
-  { action: "tab_all", defaultKey: "3", description: "All tab", category: "Inbox Tabs" },
+  { action: "toggle_select", defaultKey: "x", description: "Select/Deselect", category: "Actions" },
+  { action: "select_all", defaultKey: "Cmd+a", description: "Select all", category: "Actions" },
 
   // Compose
   { action: "compose_new", defaultKey: "c", description: "New email", category: "Compose" },
@@ -247,7 +241,7 @@ export function hasCustomBindings(): boolean {
 // Get all shortcuts grouped by category (with current keys)
 export function getShortcutsByCategory(): { category: string; shortcuts: Array<{ action: ShortcutAction; key: string; description: string; isCustom: boolean; isAlias?: boolean }> }[] {
   const bindings = get(customBindings);
-  const categories = ["Navigation", "Go to", "Actions", "Compose", "Inbox Tabs", "Other"] as const;
+  const categories = ["Navigation", "Go to", "Actions", "Compose", "Other"] as const;
 
   return categories.map((category) => ({
     category,

@@ -24,11 +24,13 @@ interface WebSocketData {
 }
 
 const app = new Elysia()
-  .use(loggingMiddleware)
   .use(cors({
-    origin: "http://localhost:5173",
+    origin: "http://localhost:8878",
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }))
+  .use(loggingMiddleware)
   .use(swagger({
     documentation: {
       info: {
@@ -283,7 +285,7 @@ const app = new Elysia()
       },
     },
   })
-  .listen(3001);
+  .listen(8877);
 
 logger.info("Hamba API started", { port: app.server?.port, url: `http://localhost:${app.server?.port}` });
 

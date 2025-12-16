@@ -47,9 +47,9 @@ Thank you for your interest in contributing to Hamba! This guide will help you g
    cd frontend && bun run dev
    ```
 
-   - Backend API: http://localhost:3001
-   - Frontend: http://localhost:5173
-   - API docs: http://localhost:3001/docs
+   - Backend API: http://localhost:8877
+   - Frontend: http://localhost:8878
+   - API docs: http://localhost:8877/docs
 
 ### Development Commands
 
@@ -312,7 +312,7 @@ When requesting features:
 ## Getting Help
 
 - Check existing [issues](https://github.com/yourusername/hamba/issues)
-- Read the [README](README.md) and [API docs](http://localhost:3001/docs)
+- Read the [README](README.md) and [API docs](http://localhost:8877/docs)
 - Review [CLAUDE.md](CLAUDE.md) for architecture details
 
 ## License

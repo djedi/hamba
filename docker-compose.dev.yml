@@ -24,11 +24,11 @@ services:
       context: ./frontend
       target: builder
     ports:
-      - "5173:5173"
+      - "8878:8878"
     volumes:
       # Mount source code for hot reload
       - ./frontend/src:/app/src:ro
       - ./frontend/static:/app/static:ro
-    command: ["bun", "run", "dev", "--host", "0.0.0.0"]
+    command: ["bun", "run", "dev", "--host", "0.0.0.0", "--port", "8878"]
     environment:
       - NODE_ENV=development

@@ -14,9 +14,11 @@ import {
   emailActions,
   prefetchAdjacentEmails,
   currentFolder,
-  inboxTab,
   accounts,
   selectedAccountId,
+  selectedEmailIds,
+  selectionActions,
+  bulkEmailActions,
 } from "./stores";
 import {
   type ShortcutAction,
@@ -128,9 +130,13 @@ const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
   back_to_list: () => {
     const $view = get(view);
     const $isCommandPaletteOpen = get(isCommandPaletteOpen);
+    const $selectedEmailIds = get(selectedEmailIds);
 
     if ($isCommandPaletteOpen) {
       isCommandPaletteOpen.set(false);
+    } else if ($selectedEmailIds.size > 0) {
+      // Clear multi-selection first
+      selectionActions.clearSelection();
     } else if ($view === "email") {
       view.set("inbox");
       updateUrlWithEmail(null);
@@ -224,10 +230,17 @@ const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
 
   // Email actions
   archive: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.archive($selectedEmailId);
+    const $selectedEmailIds = get(selectedEmailIds);
+    if ($selectedEmailIds.size > 0) {
+      // Bulk action for multi-select
+      bulkEmailActions.archive(Array.from($selectedEmailIds));
       selectNextEmail();
+    } else {
+      const $selectedEmailId = get(selectedEmailId);
+      if ($selectedEmailId) {
+        emailActions.archive($selectedEmailId);
+        selectNextEmail();
+      }
     }
   },
 
@@ -236,10 +249,17 @@ const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
   },
 
   trash: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.trash($selectedEmailId);
+    const $selectedEmailIds = get(selectedEmailIds);
+    if ($selectedEmailIds.size > 0) {
+      // Bulk action for multi-select
+      bulkEmailActions.trash(Array.from($selectedEmailIds));
       selectNextEmail();
+    } else {
+      const $selectedEmailId = get(selectedEmailId);
+      if ($selectedEmailId) {
+        emailActions.trash($selectedEmailId);
+        selectNextEmail();
+      }
     }
   },
 
@@ -252,23 +272,42 @@ const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
   },
 
   toggle_star: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.toggleStar($selectedEmailId);
-    }
-  },
-
-  toggle_important: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.toggleImportant($selectedEmailId);
+    const $selectedEmailIds = get(selectedEmailIds);
+    if ($selectedEmailIds.size > 0) {
+      // Check if all selected are starred to determine action
+      const $emails = get(emails);
+      const selected = $emails.filter((e) => $selectedEmailIds.has(e.id));
+      const allStarred = selected.every((e) => e.is_starred);
+      if (allStarred) {
+        bulkEmailActions.unstar(Array.from($selectedEmailIds));
+      } else {
+        bulkEmailActions.star(Array.from($selectedEmailIds));
+      }
+    } else {
+      const $selectedEmailId = get(selectedEmailId);
+      if ($selectedEmailId) {
+        emailActions.toggleStar($selectedEmailId);
+      }
     }
   },
 
   toggle_read: () => {
-    const $selectedEmailId = get(selectedEmailId);
-    if ($selectedEmailId) {
-      emailActions.toggleRead($selectedEmailId);
+    const $selectedEmailIds = get(selectedEmailIds);
+    if ($selectedEmailIds.size > 0) {
+      // Check if all selected are read to determine action
+      const $emails = get(emails);
+      const selected = $emails.filter((e) => $selectedEmailIds.has(e.id));
+      const allRead = selected.every((e) => e.is_read);
+      if (allRead) {
+        bulkEmailActions.markUnread(Array.from($selectedEmailIds));
+      } else {
+        bulkEmailActions.markRead(Array.from($selectedEmailIds));
+      }
+    } else {
+      const $selectedEmailId = get(selectedEmailId);
+      if ($selectedEmailId) {
+        emailActions.toggleRead($selectedEmailId);
+      }
     }
   },
 
@@ -286,26 +325,17 @@ const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
     }
   },
 
-  // Inbox tabs
-  tab_important: () => {
-    const $folder = get(currentFolder);
-    if ($folder === "inbox") {
-      inboxTab.set("important");
+  // Selection
+  toggle_select: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    const $selectedIndex = get(selectedIndex);
+    if ($selectedEmailId) {
+      selectionActions.toggleSelection($selectedEmailId, $selectedIndex);
     }
   },
 
-  tab_other: () => {
-    const $folder = get(currentFolder);
-    if ($folder === "inbox") {
-      inboxTab.set("other");
-    }
-  },
-
-  tab_all: () => {
-    const $folder = get(currentFolder);
-    if ($folder === "inbox") {
-      inboxTab.set("all");
-    }
+  select_all: () => {
+    selectionActions.selectAll();
   },
 
   // Compose

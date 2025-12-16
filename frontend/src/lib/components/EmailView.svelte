@@ -78,7 +78,7 @@
       .replace(/'/g, "&#039;");
   }
 
-  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8877";
 
   // Sanitize HTML and replace cid: URLs with API URLs
   function sanitizeEmailHtml(html: string, emailId: string): string {
