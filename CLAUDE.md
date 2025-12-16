@@ -181,3 +181,78 @@ metrics.timing("operation.duration", durationMs, { type: "sync" });
 // Error tracking
 errorTracking.captureException(error, { userId, action });
 ```
+
+## Docker Deployment
+
+The application can be run in Docker containers for production deployment or consistent development environments.
+
+### Quick Start (Production)
+
+```bash
+# Build and run both services
+docker compose up -d
+
+# Frontend: http://localhost:8080
+# Backend API: http://localhost:3001
+```
+
+### Development with Docker
+
+```bash
+# Run with hot reload support
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+# Frontend dev server: http://localhost:5173
+# Backend API: http://localhost:3001
+```
+
+### Docker Architecture
+
+- **backend/Dockerfile**: Bun-based API server (Elysia framework)
+- **frontend/Dockerfile**: SvelteKit static build served by nginx
+- **docker-compose.yml**: Production configuration
+- **docker-compose.dev.yml**: Development override with hot reload
+
+### Data Persistence
+
+The SQLite database is stored in a Docker volume mounted at `./data`. The `DATABASE_PATH` environment variable controls the database location inside the container.
+
+```bash
+# Database is persisted at ./data/hamba.db
+# Backup: cp ./data/hamba.db ./backup/
+```
+
+### Environment Variables
+
+Create a `.env` file in the project root (see `.env.example` in backend/):
+
+```bash
+# Required for email providers
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+REDIRECT_URI=http://localhost:3001/auth/callback
+
+# Optional
+ANTHROPIC_API_KEY=...
+LOG_LEVEL=info
+LOG_FORMAT=json
+```
+
+### Building Individual Images
+
+```bash
+# Backend only
+docker build -t hamba-backend ./backend
+
+# Frontend only
+docker build -t hamba-frontend ./frontend
+
+# Run backend with custom database path
+docker run -p 3001:3001 -v $(pwd)/data:/app/data --env-file .env hamba-backend
+```
+
+### Health Checks
+
+The backend exposes health endpoints used by Docker:
+- `GET /health` - Basic health check
+- `GET /health/detailed` - Detailed health with metrics

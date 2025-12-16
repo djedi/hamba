@@ -262,7 +262,9 @@ export function down(db: Database): void {
 
 // CLI entry point
 if (import.meta.main) {
-  const db = new Database("hamba.db");
+  // Support DATABASE_PATH env var for Docker deployments
+  const databasePath = process.env.DATABASE_PATH || "hamba.db";
+  const db = new Database(databasePath);
   const command = process.argv[2] || "up";
   const arg = process.argv[3];
 

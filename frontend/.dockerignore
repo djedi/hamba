@@ -1,0 +1,39 @@
+# Dependencies (reinstalled in container)
+node_modules/
+
+# Build output (generated in container)
+build/
+.svelte-kit/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Tests
+*.test.ts
+coverage/
+e2e/
+playwright-report/
+test-results/
+
+# Tauri (desktop app - not needed for Docker)
+src-tauri/
+
+# Development scripts
+scripts/

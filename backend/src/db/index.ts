@@ -1,7 +1,9 @@
 import { Database } from "bun:sqlite";
 import { migrate, getAppliedMigrations } from "./migrate";
 
-export const db = new Database("hamba.db");
+// Support DATABASE_PATH env var for Docker deployments
+const databasePath = process.env.DATABASE_PATH || "hamba.db";
+export const db = new Database(databasePath);
 
 /**
  * Initialize the database using the migration system.
