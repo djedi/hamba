@@ -100,7 +100,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add theme customization** - Allow switching between dark/light mode. Add accent color picker. Save preferences to localStorage.
 
-- [ ] **Add notification preferences** - Desktop notifications for new email (using Notification API). Configurable: all emails, important only, none. Sound on/off.
+- [x] **Add notification preferences** - Desktop notifications for new email (using Notification API). Configurable: all emails, important only, none. Sound on/off.
 
 - [ ] **Add keyboard shortcut customization** - Allow rebinding keyboard shortcuts. Store custom bindings. Reset to defaults option.
 

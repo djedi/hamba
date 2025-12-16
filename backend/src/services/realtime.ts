@@ -30,8 +30,15 @@ export function subscribeToAccount(ws: ServerWebSocket<WebSocketData>, accountId
 }
 
 // Notify all clients watching an account that new mail arrived
-export function notifyNewMail(accountId: string) {
-  const message = JSON.stringify({ type: "new_mail", accountId });
+export function notifyNewMail(
+  accountId: string,
+  emailInfo?: { from: string; subject: string; isImportant: boolean }
+) {
+  const message = JSON.stringify({
+    type: "new_mail",
+    accountId,
+    email: emailInfo,
+  });
 
   for (const client of clients) {
     if (client.data.accountIds.has(accountId) || client.data.accountIds.size === 0) {

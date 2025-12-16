@@ -3,6 +3,7 @@
   import { api, AuthError } from "$lib/api";
   import { registerSyncCallback } from "$lib/keyboard";
   import { connect, disconnect, onMessage, subscribe } from "$lib/realtime";
+  import { showNewMailNotification } from "$lib/notifications";
   import {
     accounts,
     selectedAccountId,
@@ -224,9 +225,18 @@
             }
           }
 
-          // Show toast for new mail
+          // Show toast and desktop notification for new mail
           if (data.type === "new_mail") {
             showToast("New mail received", "success");
+
+            // Show desktop notification if enabled
+            if (data.email) {
+              showNewMailNotification({
+                from: data.email.from,
+                subject: data.email.subject,
+                isImportant: data.email.isImportant,
+              });
+            }
           }
         }).catch(console.error);
       }

@@ -4,7 +4,7 @@
  */
 
 import { ImapFlow } from "imapflow";
-import { accountQueries } from "../db";
+import { accountQueries, emailQueries } from "../db";
 import { notifyNewMail } from "./realtime";
 import { getProvider } from "./providers";
 
@@ -53,15 +53,34 @@ export async function startIdle(accountId: string): Promise<boolean> {
       if (data.count > data.prevCount) {
         console.log(`[IMAP IDLE] New mail for account ${accountId}`);
 
-        // Notify connected clients
-        notifyNewMail(accountId);
-
         // Trigger a quick sync to get the new messages
         try {
           const provider = getProvider(accountId);
           await provider.sync({ maxMessages: 10 });
+
+          // Get the latest email to include in notification
+          const latestEmail = emailQueries.getLatest.get(accountId) as {
+            from_name: string | null;
+            from_email: string;
+            subject: string | null;
+            is_important: number;
+          } | null;
+
+          // Notify connected clients with email details
+          notifyNewMail(
+            accountId,
+            latestEmail
+              ? {
+                  from: latestEmail.from_name || latestEmail.from_email,
+                  subject: latestEmail.subject || "(no subject)",
+                  isImportant: !!latestEmail.is_important,
+                }
+              : undefined
+          );
         } catch (e) {
           console.error(`[IMAP IDLE] Sync error for ${accountId}:`, e);
+          // Still notify even if sync fails
+          notifyNewMail(accountId);
         }
       }
     });

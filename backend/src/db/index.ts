@@ -469,6 +469,14 @@ export const emailQueries = {
     SELECT * FROM emails
     WHERE remind_at IS NOT NULL AND remind_at <= unixepoch() AND is_trashed = 0
   `),
+
+  // Get the most recent email for an account (for notifications)
+  getLatest: db.prepare(`
+    SELECT from_name, from_email, subject, is_important FROM emails
+    WHERE account_id = ? AND is_trashed = 0
+    ORDER BY received_at DESC
+    LIMIT 1
+  `),
 };
 
 // Attachment operations
