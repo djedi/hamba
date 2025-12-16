@@ -1,6 +1,7 @@
 <script lang="ts">
   import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions, scheduledEmails } from "$lib/stores";
   import { isOnline, pendingActionsCount, syncNow } from "$lib/offline";
+  import ConnectionStatus from "./ConnectionStatus.svelte";
 
   interface Props {
     onSync: () => void;
@@ -205,15 +206,8 @@
   </div>
 
   <div class="sidebar-footer">
-    {#if !$isOnline}
-      <div class="offline-status">
-        <span class="offline-icon">📡</span>
-        <span>Offline</span>
-        {#if $pendingActionsCount > 0}
-          <span class="pending-badge">{$pendingActionsCount} pending</span>
-        {/if}
-      </div>
-    {:else if $pendingActionsCount > 0}
+    <ConnectionStatus />
+    {#if $pendingActionsCount > 0 && $isOnline}
       <button class="sync-pending-btn" onclick={() => syncNow()}>
         <span class="pending-icon">⏳</span>
         <span>Sync {$pendingActionsCount} pending</span>
@@ -495,31 +489,6 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-  }
-
-  .offline-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--bg-tertiary);
-    border-radius: 6px;
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-
-  .offline-icon {
-    font-size: 14px;
-  }
-
-  .pending-badge {
-    margin-left: auto;
-    background: var(--accent);
-    color: white;
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: 10px;
-    font-weight: 600;
   }
 
   .sync-pending-btn {

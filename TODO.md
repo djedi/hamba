@@ -90,7 +90,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add global error boundary** - Catch and display errors gracefully. Show "Something went wrong" with retry button instead of crashing.
 
-- [ ] **Add connection status indicator** - Show when offline or WebSocket disconnected. Auto-reconnect with exponential backoff. Show "Reconnecting..." status.
+- [x] **Add connection status indicator** - Show when offline or WebSocket disconnected. Auto-reconnect with exponential backoff. Show "Reconnecting..." status.
 
 - [ ] **Handle token expiration gracefully** - For Gmail, detect 401 errors and prompt re-authentication. For IMAP, detect auth failures and show error.
 
