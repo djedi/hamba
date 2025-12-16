@@ -116,6 +116,9 @@ export const isShortcutOverlayOpen = writable(false);
 // Settings modal
 export const isSettingsOpen = writable(false);
 
+// Label picker modal
+export const isLabelPickerOpen = writable(false);
+
 // Email body cache for prefetching
 export const emailBodyCache = writable<Map<string, { text: string; html: string }>>(new Map());
 

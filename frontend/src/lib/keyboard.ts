@@ -9,6 +9,7 @@ import {
   isReminderModalOpen,
   isShortcutOverlayOpen,
   isSettingsOpen,
+  isLabelPickerOpen,
   composeMode,
   replyToEmail,
   emailActions,
@@ -322,6 +323,13 @@ const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
     const $selectedEmailId = get(selectedEmailId);
     if ($selectedEmailId) {
       isReminderModalOpen.set(true);
+    }
+  },
+
+  open_label_picker: () => {
+    const $selectedEmailId = get(selectedEmailId);
+    if ($selectedEmailId) {
+      isLabelPickerOpen.set(true);
     }
   },
 

@@ -31,6 +31,7 @@ export type ShortcutAction =
   | "toggle_read"
   | "snooze"
   | "set_reminder"
+  | "open_label_picker"
   // Selection
   | "toggle_select"
   | "select_all"
@@ -98,6 +99,7 @@ export const defaultShortcuts: ShortcutDefinition[] = [
   { action: "toggle_read", defaultKey: "Shift+i", description: "Toggle read/unread", category: "Actions" },
   { action: "snooze", defaultKey: "h", description: "Snooze", category: "Actions" },
   { action: "set_reminder", defaultKey: "Shift+h", description: "Set reminder", category: "Actions" },
+  { action: "open_label_picker", defaultKey: "l", description: "Manage labels", category: "Actions" },
   { action: "toggle_select", defaultKey: "x", description: "Select/Deselect", category: "Actions" },
   { action: "select_all", defaultKey: "Cmd+a", description: "Select all", category: "Actions" },
 

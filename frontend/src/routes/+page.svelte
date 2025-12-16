@@ -15,6 +15,7 @@
     isCommandPaletteOpen,
     isSnoozeModalOpen,
     isReminderModalOpen,
+    isLabelPickerOpen,
     isShortcutOverlayOpen,
     isSettingsOpen,
     composeMode,
@@ -49,6 +50,7 @@
   import SnippetManager from "$lib/components/SnippetManager.svelte";
   import SnoozeModal from "$lib/components/SnoozeModal.svelte";
   import ReminderModal from "$lib/components/ReminderModal.svelte";
+  import LabelPicker from "$lib/components/LabelPicker.svelte";
   import ScheduledList from "$lib/components/ScheduledList.svelte";
   import KeyboardShortcutOverlay from "$lib/components/KeyboardShortcutOverlay.svelte";
   import Settings from "$lib/components/Settings.svelte";
@@ -524,6 +526,10 @@
 
   {#if $isReminderModalOpen && $selectedEmailId}
     <ReminderModal emailId={$selectedEmailId} onClose={() => isReminderModalOpen.set(false)} />
+  {/if}
+
+  {#if $isLabelPickerOpen && $selectedEmailId}
+    <LabelPicker emailId={$selectedEmailId} onClose={() => isLabelPickerOpen.set(false)} />
   {/if}
 
   {#if $isShortcutOverlayOpen}
