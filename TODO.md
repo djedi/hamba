@@ -134,7 +134,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ## Documentation
 
-- [ ] **Write README** - Project overview, features, screenshots, installation instructions, configuration, contributing guidelines.
+- [x] **Write README** - Project overview, features, screenshots, installation instructions, configuration, contributing guidelines.
 
 - [ ] **Write CONTRIBUTING guide** - How to set up dev environment, code style, PR process, issue templates.
 
