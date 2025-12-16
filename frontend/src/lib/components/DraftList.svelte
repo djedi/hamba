@@ -1,6 +1,7 @@
 <script lang="ts">
   import { drafts } from "$lib/stores";
   import type { Draft } from "$lib/api";
+  import DraftRowSkeleton from "./DraftRowSkeleton.svelte";
 
   interface Props {
     loading?: boolean;
@@ -29,9 +30,10 @@
 
 <div class="draft-list">
   {#if loading && $drafts.length === 0}
-    <div class="loading">
-      <div class="spinner"></div>
-      <span>Loading drafts...</span>
+    <div class="skeleton-list">
+      {#each Array(5) as _, i (i)}
+        <DraftRowSkeleton />
+      {/each}
     </div>
   {:else if $drafts.length === 0}
     <div class="empty">
@@ -72,7 +74,11 @@
     overflow-x: hidden;
   }
 
-  .loading,
+  .skeleton-list {
+    flex: 1;
+    overflow: hidden;
+  }
+
   .empty {
     display: flex;
     flex-direction: column;
@@ -81,21 +87,6 @@
     height: 100%;
     gap: 12px;
     color: var(--text-secondary);
-  }
-
-  .loading .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--bg-tertiary);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 
   .empty-icon {

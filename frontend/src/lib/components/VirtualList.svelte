@@ -1,6 +1,7 @@
 <script lang="ts" generics="T">
   import { onMount, tick } from "svelte";
   import type { Snippet } from "svelte";
+  import EmailRowSkeleton from "./EmailRowSkeleton.svelte";
 
   interface Props {
     items: T[];
@@ -123,7 +124,7 @@
   class="virtual-list {className}"
   onscroll={handleScroll}
 >
-  <div class="virtual-list-inner" style="height: {totalHeight + (isLoadingMore ? 46 : 0)}px;">
+  <div class="virtual-list-inner" style="height: {totalHeight + (isLoadingMore ? 138 : 0)}px;">
     <div class="virtual-list-content" style="transform: translateY({offsetY}px);">
       {#each visibleItems as item, i (getKey(item, visibleRange.start + i))}
         {@render children({ item, index: visibleRange.start + i })}
@@ -131,8 +132,9 @@
     </div>
     {#if isLoadingMore}
       <div class="loading-more" style="position: absolute; bottom: 0; left: 0; right: 0;">
-        <div class="loading-spinner"></div>
-        <span>Loading more...</span>
+        <EmailRowSkeleton />
+        <EmailRowSkeleton />
+        <EmailRowSkeleton />
       </div>
     {/if}
   </div>
@@ -160,26 +162,7 @@
 
   .loading-more {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 12px;
-    color: var(--text-secondary);
-    font-size: 13px;
-  }
-
-  .loading-spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid var(--bg-tertiary);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    flex-direction: column;
+    background: var(--bg-primary);
   }
 </style>

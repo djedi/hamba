@@ -2,6 +2,7 @@
   import { emails, selectedEmailId, selectedIndex, searchQuery, isLoadingMore, hasMoreEmails } from "$lib/stores";
   import { extractSearchTerms } from "$lib/search";
   import EmailRow from "./EmailRow.svelte";
+  import EmailRowSkeleton from "./EmailRowSkeleton.svelte";
   import VirtualList from "./VirtualList.svelte";
   import type { Email } from "$lib/api";
 
@@ -41,9 +42,10 @@
 
 <div class="email-list">
   {#if loading && $emails.length === 0}
-    <div class="loading">
-      <div class="spinner"></div>
-      <span>Loading emails...</span>
+    <div class="skeleton-list">
+      {#each Array(10) as _, i (i)}
+        <EmailRowSkeleton />
+      {/each}
     </div>
   {:else if $emails.length === 0}
     <div class="empty">
@@ -82,7 +84,11 @@
     overflow: hidden;
   }
 
-  .loading,
+  .skeleton-list {
+    flex: 1;
+    overflow: hidden;
+  }
+
   .empty {
     display: flex;
     flex-direction: column;
@@ -91,21 +97,6 @@
     height: 100%;
     gap: 12px;
     color: var(--text-secondary);
-  }
-
-  .loading .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--bg-tertiary);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 
   .empty-icon {

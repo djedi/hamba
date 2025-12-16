@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scheduledEmails, scheduledEmailActions } from "$lib/stores";
+  import DraftRowSkeleton from "./DraftRowSkeleton.svelte";
 
   interface Props {
     loading?: boolean;
@@ -41,9 +42,10 @@
 
 <div class="scheduled-list">
   {#if loading && $scheduledEmails.length === 0}
-    <div class="loading">
-      <div class="spinner"></div>
-      <span>Loading scheduled emails...</span>
+    <div class="skeleton-list">
+      {#each Array(5) as _, i (i)}
+        <DraftRowSkeleton />
+      {/each}
     </div>
   {:else if $scheduledEmails.length === 0}
     <div class="empty">
@@ -89,7 +91,11 @@
     overflow-x: hidden;
   }
 
-  .loading,
+  .skeleton-list {
+    flex: 1;
+    overflow: hidden;
+  }
+
   .empty {
     display: flex;
     flex-direction: column;
@@ -98,21 +104,6 @@
     height: 100%;
     gap: 12px;
     color: var(--text-secondary);
-  }
-
-  .loading .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--bg-tertiary);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 
   .empty-icon {
