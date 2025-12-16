@@ -118,7 +118,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ## Infrastructure & Code Quality
 
-- [ ] **Add comprehensive tests** - Unit tests for database queries, email parsing, dark mode transformation. Integration tests for API routes. E2E tests with Playwright for critical flows.
+- [x] **Add comprehensive tests** - Unit tests for database queries, email parsing, dark mode transformation. Integration tests for API routes. E2E tests with Playwright for critical flows.
 
 - [ ] **Add TypeScript strict mode** - Enable strict TypeScript checking. Fix all type errors. Add proper types for all API responses.
 
