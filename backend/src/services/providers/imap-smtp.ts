@@ -4,6 +4,14 @@ import type { EmailProvider, SendParams, SendResult, SyncOptions, SyncResult } f
 import { accountQueries, emailQueries, attachmentQueries, draftQueries, labelQueries, emailLabelQueries } from "../../db";
 import { simpleParser, type Attachment } from "mailparser";
 
+// Normalize Message-ID for consistent comparison across syncs
+// Some IMAP servers may return Message-ID with different casing or formatting
+function normalizeMessageId(messageId: string | null | undefined): string {
+  if (!messageId) return "";
+  // Remove angle brackets, trim whitespace, and lowercase
+  return messageId.replace(/^<|>$/g, "").trim().toLowerCase();
+}
+
 // Default colors for IMAP folders
 const FOLDER_COLORS: Record<string, string> = {
   "INBOX": "#4285f4",
@@ -144,9 +152,11 @@ export class ImapSmtpProvider implements EmailProvider {
             // Generate composite ID for uniqueness
             const emailId = `${this.accountId}:${msg.uid}`;
 
-            // Track the message_id (stable across folder moves) for reconciliation
-            if (parsed.messageId) {
-              seenMessageIds.add(parsed.messageId);
+            // Track the normalized message_id (stable across folder moves) for reconciliation
+            // Normalize to handle potential casing/formatting differences between syncs
+            const normalizedMsgId = normalizeMessageId(parsed.messageId);
+            if (normalizedMsgId) {
+              seenMessageIds.add(normalizedMsgId);
             }
 
             emailQueries.upsert.run(
@@ -237,9 +247,11 @@ export class ImapSmtpProvider implements EmailProvider {
     let archived = 0;
 
     for (const email of localEmails) {
-      // Only archive if the message_id was not seen in the INBOX sync
+      // Only archive if the normalized message_id was not seen in the INBOX sync
       // This ensures emails that were unarchived (and got new UIDs) don't get re-archived
-      if (email.message_id && !seenMessageIds.has(email.message_id)) {
+      // Normalize to handle potential casing/formatting differences between syncs
+      const normalizedMsgId = normalizeMessageId(email.message_id);
+      if (normalizedMsgId && !seenMessageIds.has(normalizedMsgId)) {
         // Email is no longer in INBOX - mark as archived
         emailQueries.archive.run(email.id);
         archived++;
@@ -673,7 +685,13 @@ export class ImapSmtpProvider implements EmailProvider {
   }
 
   async unarchive(emailId: string): Promise<void> {
-    const uid = this.extractUid(emailId);
+    // Get the message_id from the local database - this is stable across folder moves
+    // unlike UIDs which change when emails move between folders
+    const email = emailQueries.getById.get(emailId) as { message_id: string } | null;
+    if (!email?.message_id) {
+      throw new Error("Email not found or has no message_id");
+    }
+
     const client = this.createImapClient();
 
     try {
@@ -698,9 +716,18 @@ export class ImapSmtpProvider implements EmailProvider {
 
       const lock = await client.getMailboxLock(archiveFolder);
       try {
-        // Move message back to INBOX
-        await client.messageMove({ uid }, "INBOX", { uid: true });
-        console.log(`[IMAP] Unarchived message ${uid} from ${archiveFolder} to INBOX`);
+        // Search for the email by Message-ID header instead of UID
+        // UIDs change when emails move between folders, but Message-ID is stable
+        const searchResult = await client.search({ header: { "Message-ID": email.message_id } }, { uid: true });
+
+        if (!searchResult || searchResult.length === 0) {
+          throw new Error("Email not found in archive folder");
+        }
+
+        // Move the found email back to INBOX
+        const archiveUid = searchResult[0];
+        await client.messageMove({ uid: archiveUid }, "INBOX", { uid: true });
+        console.log(`[IMAP] Unarchived message (Message-ID: ${email.message_id}) from ${archiveFolder} to INBOX`);
       } finally {
         lock.release();
       }
@@ -753,7 +780,13 @@ export class ImapSmtpProvider implements EmailProvider {
   }
 
   async untrash(emailId: string): Promise<void> {
-    const uid = this.extractUid(emailId);
+    // Get the message_id from the local database - this is stable across folder moves
+    // unlike UIDs which change when emails move between folders
+    const email = emailQueries.getById.get(emailId) as { message_id: string } | null;
+    if (!email?.message_id) {
+      throw new Error("Email not found or has no message_id");
+    }
+
     const client = this.createImapClient();
 
     try {
@@ -778,9 +811,18 @@ export class ImapSmtpProvider implements EmailProvider {
 
       const lock = await client.getMailboxLock(trashFolder);
       try {
-        // Move message back to INBOX
-        await client.messageMove({ uid }, "INBOX", { uid: true });
-        console.log(`[IMAP] Restored message ${uid} from trash to INBOX`);
+        // Search for the email by Message-ID header instead of UID
+        // UIDs change when emails move between folders, but Message-ID is stable
+        const uids = await client.search({ header: { "Message-ID": email.message_id } }, { uid: true });
+
+        if (uids.length === 0) {
+          throw new Error("Email not found in trash folder");
+        }
+
+        // Move the found email back to INBOX
+        const trashUid = uids[0];
+        await client.messageMove({ uid: trashUid }, "INBOX", { uid: true });
+        console.log(`[IMAP] Restored message (Message-ID: ${email.message_id}) from trash to INBOX`);
       } finally {
         lock.release();
       }
@@ -792,7 +834,13 @@ export class ImapSmtpProvider implements EmailProvider {
   }
 
   async permanentDelete(emailId: string): Promise<void> {
-    const uid = this.extractUid(emailId);
+    // Get the message_id from the local database - this is stable across folder moves
+    // unlike UIDs which change when emails move between folders
+    const email = emailQueries.getById.get(emailId) as { message_id: string } | null;
+    if (!email?.message_id) {
+      throw new Error("Email not found or has no message_id");
+    }
+
     const client = this.createImapClient();
 
     try {
@@ -815,9 +863,18 @@ export class ImapSmtpProvider implements EmailProvider {
       const folderToTry = trashFolder || "INBOX";
       const lock = await client.getMailboxLock(folderToTry);
       try {
-        await client.messageFlagsAdd({ uid }, ["\\Deleted"], { uid: true });
-        await client.messageDelete({ uid }, { uid: true });
-        console.log(`[IMAP] Permanently deleted message ${uid} from ${folderToTry}`);
+        // Search for the email by Message-ID header instead of UID
+        // UIDs change when emails move between folders, but Message-ID is stable
+        const uids = await client.search({ header: { "Message-ID": email.message_id } }, { uid: true });
+
+        if (uids.length === 0) {
+          throw new Error("Email not found in folder");
+        }
+
+        const foundUid = uids[0];
+        await client.messageFlagsAdd({ uid: foundUid }, ["\\Deleted"], { uid: true });
+        await client.messageDelete({ uid: foundUid }, { uid: true });
+        console.log(`[IMAP] Permanently deleted message (Message-ID: ${email.message_id}) from ${folderToTry}`);
       } finally {
         lock.release();
       }

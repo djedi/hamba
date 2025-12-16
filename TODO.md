@@ -142,7 +142,7 @@ A task list for building a viable open source Superhuman/Gmail clone. Each task 
 
 ## Bug Fixes and Enhancements
 
-- [ ] With an IMAP account, archive an email. Go to the archive view and move it to the inbox. Click sync. Noticed the email moves back to the archive.
+- [x] With an IMAP account, archive an email. Go to the archive view and move it to the inbox. Click sync. Noticed the email moves back to the archive.
 
 - [x] Make side bar scrollable. If I have a lot of labels I can't see them all. I can't scroll the sidebar to see the accounts or keyboard shortcuts.
 
