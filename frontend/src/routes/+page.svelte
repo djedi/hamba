@@ -15,6 +15,7 @@
     isSnoozeModalOpen,
     isReminderModalOpen,
     isShortcutOverlayOpen,
+    isSettingsOpen,
     composeMode,
     replyToEmail,
     toasts,
@@ -49,6 +50,7 @@
   import ReminderModal from "$lib/components/ReminderModal.svelte";
   import ScheduledList from "$lib/components/ScheduledList.svelte";
   import KeyboardShortcutOverlay from "$lib/components/KeyboardShortcutOverlay.svelte";
+  import Settings from "$lib/components/Settings.svelte";
 
   let needsReauth = $state(false);
   let errorMessage = $state("");
@@ -514,6 +516,10 @@
 
   {#if $isShortcutOverlayOpen}
     <KeyboardShortcutOverlay onClose={() => isShortcutOverlayOpen.set(false)} />
+  {/if}
+
+  {#if $isSettingsOpen}
+    <Settings onClose={() => isSettingsOpen.set(false)} />
   {/if}
 
   <Toasts />

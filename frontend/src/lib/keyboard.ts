@@ -8,6 +8,7 @@ import {
   isSnoozeModalOpen,
   isReminderModalOpen,
   isShortcutOverlayOpen,
+  isSettingsOpen,
   composeMode,
   replyToEmail,
   emailActions,
@@ -316,6 +317,11 @@ const handlers: Record<string, KeyHandler> = {
   // Command palette
   "Cmd+k": () => {
     isCommandPaletteOpen.update((v) => !v);
+  },
+
+  // Settings
+  "Cmd+,": () => {
+    isSettingsOpen.update((v) => !v);
   },
 
   // Keyboard shortcut overlay

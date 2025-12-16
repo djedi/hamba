@@ -60,6 +60,9 @@ export const isReminderModalOpen = writable(false);
 // Keyboard shortcut overlay
 export const isShortcutOverlayOpen = writable(false);
 
+// Settings modal
+export const isSettingsOpen = writable(false);
+
 // Email body cache for prefetching
 export const emailBodyCache = writable<Map<string, { text: string; html: string }>>(new Map());
 

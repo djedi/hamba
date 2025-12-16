@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions, scheduledEmails } from "$lib/stores";
+  import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions, scheduledEmails, isSettingsOpen } from "$lib/stores";
   import { isOnline, pendingActionsCount, syncNow } from "$lib/offline";
   import ConnectionStatus from "./ConnectionStatus.svelte";
 
@@ -213,13 +213,18 @@
         <span>Sync {$pendingActionsCount} pending</span>
       </button>
     {/if}
-    <button class="sync-btn" onclick={onSync} disabled={$isLoading || !$isOnline}>
-      {#if $isLoading}
-        <span class="spinner"></span> Syncing...
-      {:else}
-        🔄 Sync
-      {/if}
-    </button>
+    <div class="footer-buttons">
+      <button class="settings-btn" onclick={() => isSettingsOpen.set(true)} title="Settings (⌘,)">
+        ⚙️
+      </button>
+      <button class="sync-btn" onclick={onSync} disabled={$isLoading || !$isOnline}>
+        {#if $isLoading}
+          <span class="spinner"></span> Syncing...
+        {:else}
+          🔄 Sync
+        {/if}
+      </button>
+    </div>
   </div>
 
   <div class="snippets-section">
@@ -255,6 +260,7 @@
     <div class="shortcut"><kbd>#</kbd><kbd>⌫</kbd> trash</div>
     <div class="shortcut"><kbd>⇧R</kbd> sync</div>
     <div class="shortcut"><kbd>⌘K</kbd> command</div>
+    <div class="shortcut"><kbd>⌘,</kbd> settings</div>
   </div>
 </aside>
 
@@ -514,8 +520,26 @@
     font-size: 14px;
   }
 
+  .footer-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .settings-btn {
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .settings-btn:hover {
+    background: var(--bg-hover);
+  }
+
   .sync-btn {
-    width: 100%;
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;

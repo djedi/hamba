@@ -96,7 +96,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ## Settings & Configuration
 
-- [ ] **Create Settings UI** - Add Settings page accessible from sidebar or `Cmd+,`. Sections: Account, Appearance, Keyboard shortcuts, Notifications, AI.
+- [x] **Create Settings UI** - Add Settings page accessible from sidebar or `Cmd+,`. Sections: Account, Appearance, Keyboard shortcuts, Notifications, AI.
 
 - [ ] **Add theme customization** - Allow switching between dark/light mode. Add accent color picker. Save preferences to localStorage.
 
