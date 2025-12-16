@@ -1,6 +1,9 @@
 import { pendingSendQueries, emailQueries, accountQueries } from "../db";
 import { getProvider } from "./providers";
 import { addContactFromSend } from "../routes/contacts";
+import { logger, metrics } from "./logger";
+
+const sendLogger = logger.child({ service: "pending-send" });
 
 // Default undo window in seconds
 export const UNDO_WINDOW_SECONDS = 5;
@@ -110,7 +113,7 @@ export async function processPendingSends(): Promise<{ sent: number; errors: num
       const account = accountQueries.getById.get(pending.account_id) as any;
 
       if (!account) {
-        console.error(`[PendingSend] Account ${pending.account_id} not found, removing pending send ${pending.id}`);
+        sendLogger.error("Account not found, removing pending send", { accountId: pending.account_id, pendingId: pending.id });
         pendingSendQueries.delete.run(pending.id);
         errors++;
         continue;
@@ -122,7 +125,7 @@ export async function processPendingSends(): Promise<{ sent: number; errors: num
         try {
           attachments = JSON.parse(pending.attachments);
         } catch (e) {
-          console.error(`[PendingSend] Failed to parse attachments for ${pending.id}:`, e);
+          sendLogger.error("Failed to parse attachments", e as Error, { pendingId: pending.id });
         }
       }
 
@@ -158,7 +161,8 @@ export async function processPendingSends(): Promise<{ sent: number; errors: num
       });
 
       if (result.success) {
-        console.log(`[PendingSend] Successfully sent email ${pending.id} to ${pending.to_addresses}`);
+        sendLogger.info("Email sent successfully", { pendingId: pending.id, to: pending.to_addresses });
+        metrics.increment("email.sent");
         pendingSendQueries.delete.run(pending.id);
 
         // Add recipients to contacts
@@ -171,13 +175,15 @@ export async function processPendingSends(): Promise<{ sent: number; errors: num
 
         sent++;
       } else {
-        console.error(`[PendingSend] Failed to send email ${pending.id}: ${result.error}`);
+        sendLogger.error("Failed to send email", { pendingId: pending.id, error: result.error });
+        metrics.increment("email.send_failed");
         // Keep in queue for retry? For now, remove to avoid spam
         pendingSendQueries.delete.run(pending.id);
         errors++;
       }
     } catch (error) {
-      console.error(`[PendingSend] Error processing pending send ${pending.id}:`, error);
+      sendLogger.error("Error processing pending send", error as Error, { pendingId: pending.id });
+      metrics.increment("email.send_error");
       pendingSendQueries.delete.run(pending.id);
       errors++;
     }
@@ -199,20 +205,20 @@ export function startPendingSendProcessor(): void {
     try {
       const result = await processPendingSends();
       if (result.sent > 0 || result.errors > 0) {
-        console.log(`[PendingSend] Processed: ${result.sent} sent, ${result.errors} errors`);
+        sendLogger.info("Processor batch completed", { sent: result.sent, errors: result.errors });
       }
     } catch (error) {
-      console.error("[PendingSend] Error in processor:", error);
+      sendLogger.error("Error in processor", error as Error);
     }
   }, 1000);
 
-  console.log("[PendingSend] Background processor started");
+  sendLogger.info("Background processor started");
 }
 
 export function stopPendingSendProcessor(): void {
   if (processorInterval) {
     clearInterval(processorInterval);
     processorInterval = null;
-    console.log("[PendingSend] Background processor stopped");
+    sendLogger.info("Background processor stopped");
   }
 }

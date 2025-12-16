@@ -16,12 +16,15 @@ import { addClient, removeClient, subscribeToAccount, notifySyncComplete } from 
 import { startAllIdle, getIdleStatus } from "./services/imap-idle";
 import { startPendingSendProcessor } from "./services/pending-send";
 import { startScheduledSendProcessor } from "./services/scheduled-send";
+import { logger, errorTracking } from "./services/logger";
+import { loggingMiddleware, metricsEndpoints } from "./services/logging-middleware";
 
 interface WebSocketData {
   accountIds: Set<string>;
 }
 
 const app = new Elysia()
+  .use(loggingMiddleware)
   .use(cors({
     origin: "http://localhost:5173",
     credentials: true,
@@ -214,6 +217,7 @@ const app = new Elysia()
       },
     },
   })
+  .use(metricsEndpoints)
   .use(authRoutes)
   .use(emailRoutes)
   .use(draftRoutes)
@@ -281,10 +285,10 @@ const app = new Elysia()
   })
   .listen(3001);
 
-console.log(`🚀 Hamba API running at http://localhost:${app.server?.port}`);
+logger.info("Hamba API started", { port: app.server?.port, url: `http://localhost:${app.server?.port}` });
 
 // Start IMAP IDLE connections for all IMAP accounts
-startAllIdle().catch(console.error);
+startAllIdle().catch((err) => errorTracking.captureException(err, { context: "startAllIdle" }));
 
 // Start pending send processor for undo send feature
 startPendingSendProcessor();
@@ -298,10 +302,10 @@ function cleanupOldTrashedEmails() {
     const result = emailQueries.deleteOldTrashed.run();
     const deleted = result.changes;
     if (deleted > 0) {
-      console.log(`🗑️ Cleaned up ${deleted} emails from trash (30+ days old)`);
+      logger.info("Cleaned up old trashed emails", { count: deleted, ageThresholdDays: 30 });
     }
   } catch (error) {
-    console.error("Error cleaning up old trashed emails:", error);
+    logger.error("Failed to cleanup old trashed emails", error as Error);
   }
 }
 
@@ -315,10 +319,10 @@ function unsnoozeDueEmails() {
       notifySyncComplete(email.account_id, 1);
     }
     if (dueEmails.length > 0) {
-      console.log(`⏰ Unsnoozed ${dueEmails.length} email(s)`);
+      logger.info("Unsnoozed due emails", { count: dueEmails.length });
     }
   } catch (error) {
-    console.error("Error unsnoozing emails:", error);
+    logger.error("Failed to unsnooze emails", error as Error);
   }
 }
 

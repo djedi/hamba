@@ -7,6 +7,9 @@ import { ImapFlow } from "imapflow";
 import { accountQueries, emailQueries } from "../db";
 import { notifyNewMail } from "./realtime";
 import { getProvider } from "./providers";
+import { logger, errorTracking } from "./logger";
+
+const imapLogger = logger.child({ service: "imap-idle" });
 
 interface IdleConnection {
   client: ImapFlow;
@@ -51,7 +54,7 @@ export async function startIdle(accountId: string): Promise<boolean> {
     // Listen for new mail
     client.on("exists", async (data: { count: number; prevCount: number }) => {
       if (data.count > data.prevCount) {
-        console.log(`[IMAP IDLE] New mail for account ${accountId}`);
+        imapLogger.info("New mail detected", { accountId, newCount: data.count, prevCount: data.prevCount });
 
         // Trigger a quick sync to get the new messages
         try {
@@ -78,7 +81,7 @@ export async function startIdle(accountId: string): Promise<boolean> {
               : undefined
           );
         } catch (e) {
-          console.error(`[IMAP IDLE] Sync error for ${accountId}:`, e);
+          imapLogger.error("Sync error after new mail detection", e as Error, { accountId });
           // Still notify even if sync fails
           notifyNewMail(accountId);
         }
@@ -87,26 +90,26 @@ export async function startIdle(accountId: string): Promise<boolean> {
 
     // Handle disconnection
     client.on("close", () => {
-      console.log(`[IMAP IDLE] Connection closed for ${accountId}`);
+      imapLogger.info("Connection closed", { accountId });
       connections.delete(accountId);
 
       // Attempt to reconnect after 30 seconds
       connection.reconnectTimeout = setTimeout(() => {
-        startIdle(accountId).catch(console.error);
+        startIdle(accountId).catch((err) => errorTracking.captureException(err, { accountId, context: "idle-reconnect" }));
       }, 30000);
     });
 
     client.on("error", (err: Error) => {
-      console.error(`[IMAP IDLE] Error for ${accountId}:`, err.message);
+      imapLogger.error("Connection error", err, { accountId });
     });
 
     // Start IDLE - this keeps the connection alive waiting for updates
     // ImapFlow handles IDLE automatically when mailbox is open
-    console.log(`[IMAP IDLE] Started for account ${accountId}`);
+    imapLogger.info("IDLE started", { accountId });
     return true;
 
   } catch (error) {
-    console.error(`[IMAP IDLE] Failed to start for ${accountId}:`, error);
+    imapLogger.error("Failed to start IDLE", error as Error, { accountId });
     return false;
   }
 }
@@ -124,7 +127,7 @@ export async function stopIdle(accountId: string): Promise<void> {
       // Ignore logout errors
     }
     connections.delete(accountId);
-    console.log(`[IMAP IDLE] Stopped for account ${accountId}`);
+    imapLogger.info("IDLE stopped", { accountId });
   }
 }
 
@@ -133,10 +136,10 @@ export async function startAllIdle(): Promise<void> {
   const accounts = accountQueries.getAll.all() as any[];
   const imapAccounts = accounts.filter(a => a.provider_type === "imap");
 
-  console.log(`[IMAP IDLE] Starting IDLE for ${imapAccounts.length} IMAP accounts`);
+  imapLogger.info("Starting IDLE for IMAP accounts", { count: imapAccounts.length });
 
   for (const account of imapAccounts) {
-    await startIdle(account.id).catch(console.error);
+    await startIdle(account.id).catch((err) => errorTracking.captureException(err, { accountId: account.id, context: "startAllIdle" }));
   }
 }
 

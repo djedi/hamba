@@ -1,6 +1,9 @@
 import { scheduledEmailQueries, emailQueries, accountQueries } from "../db";
 import { getProvider } from "./providers";
 import { addContactFromSend } from "../routes/contacts";
+import { logger, metrics } from "./logger";
+
+const scheduleLogger = logger.child({ service: "scheduled-send" });
 
 interface ScheduledEmail {
   id: string;
@@ -159,7 +162,7 @@ export async function processScheduledEmails(): Promise<{ sent: number; errors: 
       const account = accountQueries.getById.get(scheduled.account_id) as any;
 
       if (!account) {
-        console.error(`[ScheduledSend] Account ${scheduled.account_id} not found, removing scheduled email ${scheduled.id}`);
+        scheduleLogger.error("Account not found, removing scheduled email", { accountId: scheduled.account_id, scheduledId: scheduled.id });
         scheduledEmailQueries.delete.run(scheduled.id);
         errors++;
         continue;
@@ -171,7 +174,7 @@ export async function processScheduledEmails(): Promise<{ sent: number; errors: 
         try {
           attachments = JSON.parse(scheduled.attachments);
         } catch (e) {
-          console.error(`[ScheduledSend] Failed to parse attachments for ${scheduled.id}:`, e);
+          scheduleLogger.error("Failed to parse attachments", e as Error, { scheduledId: scheduled.id });
         }
       }
 
@@ -207,7 +210,8 @@ export async function processScheduledEmails(): Promise<{ sent: number; errors: 
       });
 
       if (result.success) {
-        console.log(`[ScheduledSend] Successfully sent scheduled email ${scheduled.id} to ${scheduled.to_addresses}`);
+        scheduleLogger.info("Scheduled email sent successfully", { scheduledId: scheduled.id, to: scheduled.to_addresses });
+        metrics.increment("email.scheduled_sent");
         scheduledEmailQueries.delete.run(scheduled.id);
 
         // Add recipients to contacts
@@ -220,13 +224,15 @@ export async function processScheduledEmails(): Promise<{ sent: number; errors: 
 
         sent++;
       } else {
-        console.error(`[ScheduledSend] Failed to send scheduled email ${scheduled.id}: ${result.error}`);
+        scheduleLogger.error("Failed to send scheduled email", { scheduledId: scheduled.id, error: result.error });
+        metrics.increment("email.scheduled_send_failed");
         // Keep in queue for retry? For now, remove to avoid spam
         scheduledEmailQueries.delete.run(scheduled.id);
         errors++;
       }
     } catch (error) {
-      console.error(`[ScheduledSend] Error processing scheduled email ${scheduled.id}:`, error);
+      scheduleLogger.error("Error processing scheduled email", error as Error, { scheduledId: scheduled.id });
+      metrics.increment("email.scheduled_send_error");
       scheduledEmailQueries.delete.run(scheduled.id);
       errors++;
     }
@@ -248,20 +254,20 @@ export function startScheduledSendProcessor(): void {
     try {
       const result = await processScheduledEmails();
       if (result.sent > 0 || result.errors > 0) {
-        console.log(`[ScheduledSend] Processed: ${result.sent} sent, ${result.errors} errors`);
+        scheduleLogger.info("Processor batch completed", { sent: result.sent, errors: result.errors });
       }
     } catch (error) {
-      console.error("[ScheduledSend] Error in processor:", error);
+      scheduleLogger.error("Error in processor", error as Error);
     }
   }, 60 * 1000); // Check every minute
 
-  console.log("[ScheduledSend] Background processor started");
+  scheduleLogger.info("Background processor started");
 }
 
 export function stopScheduledSendProcessor(): void {
   if (processorInterval) {
     clearInterval(processorInterval);
     processorInterval = null;
-    console.log("[ScheduledSend] Background processor stopped");
+    scheduleLogger.info("Background processor stopped");
   }
 }

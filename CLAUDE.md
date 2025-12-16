@@ -83,6 +83,11 @@ REDIRECT_URI=http://localhost:3001/auth/callback
 
 # Optional: For AI email composition (Cmd+J in compose)
 ANTHROPIC_API_KEY=...
+
+# Optional: Logging configuration
+LOG_LEVEL=info          # debug, info, warn, error
+LOG_FORMAT=json         # Set to 'json' for production, omit for human-readable
+SENTRY_DSN=...          # Optional: Error tracking via Sentry
 ```
 
 ## Key Patterns
@@ -136,3 +141,43 @@ OpenAPI/Swagger documentation is available at `http://localhost:3001/docs` when 
 - All API endpoints organized by tags (Auth, Emails, Drafts, Labels, Contacts, AI, Snippets, Signatures)
 - Request/response schemas
 - Interactive "Try it out" functionality via Swagger UI
+
+## Logging & Monitoring
+
+The backend uses structured logging via `backend/src/services/logger.ts`. Key features:
+
+**Structured Logging:**
+- JSON output in production (`LOG_FORMAT=json`), human-readable in development
+- Log levels: debug, info, warn, error (controlled via `LOG_LEVEL`)
+- Contextual logging with service tags (e.g., `imap-idle`, `pending-send`, `scheduled-send`)
+- Request/response logging middleware with request IDs
+
+**Monitoring Endpoints:**
+- `GET /health` - Basic health check
+- `GET /health/detailed` - Detailed health with memory usage, metrics, error counts
+- `GET /metrics` - Performance metrics (request timings, operation durations)
+- `GET /errors/recent` - Recent error log for debugging
+
+**Usage in Code:**
+```typescript
+import { logger, metrics, errorTracking } from "./services/logger";
+
+// Basic logging
+logger.info("Operation completed", { accountId, count: 5 });
+logger.error("Operation failed", error, { context: "sync" });
+
+// Child logger with default context
+const syncLogger = logger.child({ service: "sync" });
+syncLogger.info("Starting sync");
+
+// Performance metrics
+const result = await metrics.measure("db.query", async () => {
+  return await db.query(...);
+});
+
+// Manual timing
+metrics.timing("operation.duration", durationMs, { type: "sync" });
+
+// Error tracking
+errorTracking.captureException(error, { userId, action });
+```

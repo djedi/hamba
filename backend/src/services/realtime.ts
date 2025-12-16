@@ -4,6 +4,7 @@
  */
 
 import type { ServerWebSocket } from "bun";
+import { logger } from "./logger";
 
 interface WebSocketData {
   accountIds: Set<string>;
@@ -15,13 +16,13 @@ const clients = new Set<ServerWebSocket<WebSocketData>>();
 // Register a new WebSocket client
 export function addClient(ws: ServerWebSocket<WebSocketData>) {
   clients.add(ws);
-  console.log(`WebSocket client connected. Total: ${clients.size}`);
+  logger.debug("WebSocket client connected", { totalClients: clients.size });
 }
 
 // Remove a WebSocket client
 export function removeClient(ws: ServerWebSocket<WebSocketData>) {
   clients.delete(ws);
-  console.log(`WebSocket client disconnected. Total: ${clients.size}`);
+  logger.debug("WebSocket client disconnected", { totalClients: clients.size });
 }
 
 // Subscribe a client to account updates
