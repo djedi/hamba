@@ -102,7 +102,9 @@ export class ImapSmtpProvider implements EmailProvider {
 
     const client = this.createImapClient();
     let synced = 0;
-    const seenEmailIds = new Set<string>();
+    // Track seen message_ids (RFC Message-ID header) instead of UIDs
+    // Message-ID is stable across folder moves, unlike UIDs which change
+    const seenMessageIds = new Set<string>();
 
     try {
       await client.connect();
@@ -118,8 +120,8 @@ export class ImapSmtpProvider implements EmailProvider {
         const total = mailbox && typeof mailbox === "object" ? mailbox.exists : 0;
 
         if (total === 0) {
-          // Empty INBOX - mark all local emails as archived
-          this.reconcileArchivedEmails(seenEmailIds);
+          // Empty INBOX - mark all local inbox emails as archived
+          this.reconcileArchivedEmails(seenMessageIds);
           return { synced: 0, total: 0 };
         }
 
@@ -138,7 +140,11 @@ export class ImapSmtpProvider implements EmailProvider {
 
             // Generate composite ID for uniqueness
             const emailId = `${this.accountId}:${msg.uid}`;
-            seenEmailIds.add(emailId);
+
+            // Track the message_id (stable across folder moves) for reconciliation
+            if (parsed.messageId) {
+              seenMessageIds.add(parsed.messageId);
+            }
 
             emailQueries.upsert.run(
               emailId,
@@ -196,7 +202,8 @@ export class ImapSmtpProvider implements EmailProvider {
       await client.logout();
 
       // Reconcile: mark emails not in INBOX as archived
-      const archived = this.reconcileArchivedEmails(seenEmailIds);
+      // Uses message_id (stable across folder moves) instead of UID-based id
+      const archived = this.reconcileArchivedEmails(seenMessageIds);
       if (archived > 0) {
         console.log(`[IMAP] Reconciled ${archived} archived emails for account ${this.accountId}`);
       }
@@ -213,13 +220,18 @@ export class ImapSmtpProvider implements EmailProvider {
     }
   }
 
-  private reconcileArchivedEmails(seenEmailIds: Set<string>): number {
-    // Get all local active (non-archived) emails for this account
-    const localEmails = emailQueries.getActiveIdsByAccount.all(this.accountId) as { id: string }[];
+  private reconcileArchivedEmails(seenMessageIds: Set<string>): number {
+    // Get all local active (non-archived) inbox emails for this account
+    // Uses message_id (RFC Message-ID header) which is stable across folder moves
+    // This fixes the bug where unarchived emails get re-archived after sync
+    // because UIDs change when emails move between folders
+    const localEmails = emailQueries.getActiveMessageIdsByAccount.all(this.accountId) as { id: string; message_id: string }[];
     let archived = 0;
 
     for (const email of localEmails) {
-      if (!seenEmailIds.has(email.id)) {
+      // Only archive if the message_id was not seen in the INBOX sync
+      // This ensures emails that were unarchived (and got new UIDs) don't get re-archived
+      if (email.message_id && !seenMessageIds.has(email.message_id)) {
         // Email is no longer in INBOX - mark as archived
         emailQueries.archive.run(email.id);
         archived++;

@@ -257,6 +257,13 @@ export const emailQueries = {
     WHERE account_id = ? AND is_archived = 0 AND is_trashed = 0
   `),
 
+  // For reconciliation - get message_ids of non-archived inbox emails for an account
+  // Uses message_id (RFC Message-ID header) which is stable across folder moves
+  getActiveMessageIdsByAccount: db.prepare(`
+    SELECT id, message_id FROM emails
+    WHERE account_id = ? AND is_archived = 0 AND is_trashed = 0 AND folder = 'inbox'
+  `),
+
   getStarred: db.prepare(`
     SELECT * FROM emails
     WHERE account_id = ? AND is_starred = 1 AND is_trashed = 0
