@@ -7,6 +7,63 @@ export const accounts = writable<Account[]>([]);
 export const selectedAccountId = writable<string | null>(null);
 export const emails = writable<Email[]>([]);
 export const selectedEmailId = writable<string | null>(null);
+
+// Seamlessly merge new emails into existing list without jarring reload
+// Returns { added: number, updated: number, removed: number } for optional toast
+export function mergeEmails(newEmails: Email[]): { added: number; updated: number; removed: number } {
+  const $emails = get(emails);
+  const existingMap = new Map($emails.map((e) => [e.id, e]));
+  const newMap = new Map(newEmails.map((e) => [e.id, e]));
+
+  let added = 0;
+  let updated = 0;
+  let removed = 0;
+
+  // Build merged list
+  const mergedList: Email[] = [];
+
+  // Add all new emails, updating existing ones in place
+  for (const newEmail of newEmails) {
+    const existing = existingMap.get(newEmail.id);
+    if (existing) {
+      // Check if email was updated (compare key fields)
+      const hasChanged =
+        existing.is_read !== newEmail.is_read ||
+        existing.is_starred !== newEmail.is_starred ||
+        existing.is_archived !== newEmail.is_archived ||
+        existing.is_trashed !== newEmail.is_trashed ||
+        existing.labels !== newEmail.labels ||
+        existing.snoozed_until !== newEmail.snoozed_until ||
+        existing.remind_at !== newEmail.remind_at;
+
+      if (hasChanged) {
+        mergedList.push(newEmail);
+        updated++;
+      } else {
+        // Keep existing object reference to avoid unnecessary re-renders
+        mergedList.push(existing);
+      }
+    } else {
+      // New email
+      mergedList.push(newEmail);
+      added++;
+    }
+  }
+
+  // Count removed emails (in existing but not in new)
+  for (const existing of $emails) {
+    if (!newMap.has(existing.id)) {
+      removed++;
+    }
+  }
+
+  // Only update store if there are changes
+  if (added > 0 || updated > 0 || removed > 0) {
+    emails.set(mergedList);
+  }
+
+  return { added, updated, removed };
+}
 export const isLoading = writable(false);
 export const searchQuery = writable("");
 export const view = writable<"inbox" | "email" | "compose">("inbox");

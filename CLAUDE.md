@@ -186,17 +186,39 @@ errorTracking.captureException(error, { userId, action });
 
 The application can be run in Docker containers for production deployment or consistent development environments.
 
+### Dev Script (Recommended)
+
+A `dev` script is provided for easy Docker Compose management:
+
+```bash
+./dev                    # Start containers in foreground (default)
+./dev up -d              # Start containers in background
+./dev down               # Stop and remove containers
+./dev restart            # Restart containers
+./dev rebuild            # Full rebuild with --no-cache
+./dev build              # Build images without starting
+./dev logs [service]     # Follow container logs
+./dev status             # Show container status
+./dev shell [service]    # Open shell in container (default: backend)
+./dev clean              # Stop and remove volumes (with confirmation)
+./dev --help             # Show all commands
+```
+
+**Development ports:**
+- Frontend: http://localhost:8878
+- Backend API: http://localhost:8877
+
 ### Quick Start (Production)
 
 ```bash
-# Build and run both services
+# Build and run both services (production mode)
 docker compose up -d
 
 # Frontend: http://localhost:8080
 # Backend API: http://localhost:8877
 ```
 
-### Development with Docker
+### Manual Development (without dev script)
 
 ```bash
 # Run with hot reload support

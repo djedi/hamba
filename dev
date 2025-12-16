@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+#
+# dev - Docker Compose development environment manager for Hamba
+#
+# Usage: ./dev [command] [options]
+#
+
+set -euo pipefail
+
+# Project configuration
+PROJECT_NAME="hamba"
+COMPOSE_FILES="-f docker-compose.dev.yml"
+DEFAULT_SERVICE="backend"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Print colored message
+print_status() {
+    local color=$1
+    local message=$2
+    echo -e "${color}${message}${NC}"
+}
+
+# Show usage information
+show_help() {
+    cat << EOF
+${BLUE}dev${NC} - Docker Compose development environment manager for Hamba
+
+${YELLOW}Usage:${NC}
+    ./dev [command] [options]
+
+${YELLOW}Commands:${NC}
+    up, start       Start containers (default if no command given)
+    down, stop      Stop and remove containers
+    restart         Restart containers
+    rebuild         Full rebuild with --no-cache
+    build           Build images without starting
+    logs [service]  Follow container logs (optionally for specific service)
+    ps, status      Show container status
+    shell [service] Open shell in container (default: ${DEFAULT_SERVICE})
+    clean           Stop containers and remove volumes (with confirmation)
+
+${YELLOW}Options:${NC}
+    -d, --detach    Run containers in background (for up, restart, rebuild)
+    -h, --help      Show this help message
+
+${YELLOW}Ports:${NC}
+    Backend API     http://localhost:8877
+    Frontend        http://localhost:8878
+
+${YELLOW}Examples:${NC}
+    ./dev                    # Start containers in foreground
+    ./dev up -d              # Start containers in background
+    ./dev logs backend       # Follow backend logs
+    ./dev shell frontend     # Open shell in frontend container
+    ./dev rebuild -d         # Full rebuild and start detached
+
+EOF
+}
+
+# Docker Compose wrapper with project name
+dc() {
+    docker compose -p "$PROJECT_NAME" $COMPOSE_FILES "$@"
+}
+
+# Start containers
+cmd_up() {
+    local detach=""
+    for arg in "$@"; do
+        case $arg in
+            -d|--detach) detach="-d" ;;
+        esac
+    done
+
+    print_status "$GREEN" "Starting containers..."
+    dc up $detach
+}
+
+# Stop containers
+cmd_down() {
+    print_status "$YELLOW" "Stopping containers..."
+    dc down
+}
+
+# Restart containers
+cmd_restart() {
+    local detach=""
+    for arg in "$@"; do
+        case $arg in
+            -d|--detach) detach="-d" ;;
+        esac
+    done
+
+    print_status "$YELLOW" "Restarting containers..."
+    dc down
+    dc up $detach
+}
+
+# Rebuild containers
+cmd_rebuild() {
+    local detach=""
+    for arg in "$@"; do
+        case $arg in
+            -d|--detach) detach="-d" ;;
+        esac
+    done
+
+    print_status "$YELLOW" "Rebuilding containers (no cache)..."
+    dc build --no-cache
+    dc up $detach
+}
+
+# Build images only
+cmd_build() {
+    print_status "$BLUE" "Building images..."
+    dc build
+}
+
+# Show logs
+cmd_logs() {
+    local service="${1:-}"
+    if [ -n "$service" ]; then
+        dc logs -f "$service"
+    else
+        dc logs -f
+    fi
+}
+
+# Show container status
+cmd_status() {
+    dc ps
+}
+
+# Open shell in container
+cmd_shell() {
+    local service="${1:-$DEFAULT_SERVICE}"
+    print_status "$BLUE" "Opening shell in ${service}..."
+    dc exec "$service" /bin/sh
+}
+
+# Clean up everything
+cmd_clean() {
+    print_status "$RED" "WARNING: This will stop all containers and remove volumes!"
+    read -p "Are you sure? (y/N) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        print_status "$RED" "Cleaning up..."
+        dc down -v --remove-orphans
+        print_status "$GREEN" "Cleanup complete."
+    else
+        print_status "$YELLOW" "Cancelled."
+    fi
+}
+
+# Main entry point
+main() {
+    # Check for help flag anywhere in args
+    for arg in "$@"; do
+        case $arg in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+        esac
+    done
+
+    # Get command (default to 'up')
+    local cmd="${1:-up}"
+    shift || true
+
+    case $cmd in
+        up|start)
+            cmd_up "$@"
+            ;;
+        down|stop)
+            cmd_down "$@"
+            ;;
+        restart)
+            cmd_restart "$@"
+            ;;
+        rebuild)
+            cmd_rebuild "$@"
+            ;;
+        build)
+            cmd_build "$@"
+            ;;
+        logs)
+            cmd_logs "$@"
+            ;;
+        ps|status)
+            cmd_status "$@"
+            ;;
+        shell)
+            cmd_shell "$@"
+            ;;
+        clean)
+            cmd_clean "$@"
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        *)
+            print_status "$RED" "Unknown command: $cmd"
+            echo "Run './dev --help' for usage information."
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

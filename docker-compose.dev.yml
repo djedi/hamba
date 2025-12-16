@@ -1,34 +1,52 @@
-# Docker Compose override for local development
-# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Docker Compose for local development
+# Usage: ./dev or docker compose -f docker-compose.dev.yml up
 #
-# This configuration mounts source code for hot reload during development.
-# For production, use only: docker compose up
+# This is a standalone dev configuration - does NOT require docker-compose.yml
 
 services:
   backend:
     build:
+      context: ./backend
+      dockerfile: Dockerfile
       target: deps
+    ports:
+      - "8877:8877"
     volumes:
       # Mount source code for hot reload
       - ./backend/src:/app/src:ro
       # Persist database in development
       - ./data:/app/data
-    command: ["bun", "--hot", "run", "src/index.ts"]
+    env_file:
+      - .env
     environment:
+      - DATABASE_PATH=/app/data/hamba.db
       - NODE_ENV=development
       - LOG_LEVEL=debug
+    command: ["bun", "--hot", "run", "src/index.ts"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8877/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   frontend:
-    # For development, run the dev server instead of nginx
     build:
       context: ./frontend
-      target: builder
+      dockerfile: Dockerfile
+      target: dev
     ports:
       - "8878:8878"
     volumes:
-      # Mount source code for hot reload
-      - ./frontend/src:/app/src:ro
-      - ./frontend/static:/app/static:ro
-    command: ["bun", "run", "dev", "--host", "0.0.0.0", "--port", "8878"]
+      # Mount only source directories for hot reload (NOT .svelte-kit)
+      - ./frontend/src:/app/src
+      - ./frontend/static:/app/static
+      - ./frontend/svelte.config.js:/app/svelte.config.js
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
     environment:
       - NODE_ENV=development
+    depends_on:
+      - backend
+    # Regenerate .svelte-kit inside container before starting dev server
+    command: ["sh", "-c", "bunx svelte-kit sync && bun run dev --host 0.0.0.0 --port 8878"]

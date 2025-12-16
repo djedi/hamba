@@ -33,6 +33,7 @@
     isLoadingMore,
     hasMoreEmails,
     selectionActions,
+    mergeEmails,
   } from "$lib/stores";
   import type { Draft } from "$lib/api";
   import EmailList from "$lib/components/EmailList.svelte";
@@ -230,7 +231,9 @@
 
         fetchPromise.then(msgs => {
           const currentSelectedId = $selectedEmailId;
-          emails.set(msgs);
+
+          // Use seamless merge instead of full replacement to avoid jarring UI reload
+          const { added, updated, removed } = mergeEmails(msgs);
 
           // Preserve selection if still valid
           if (currentSelectedId) {
@@ -242,8 +245,8 @@
           }
 
           // Show toast and desktop notification for new mail
-          if (data.type === "new_mail") {
-            showToast("New mail received", "success");
+          if (data.type === "new_mail" && added > 0) {
+            showToast(`${added} new email${added > 1 ? 's' : ''} received`, "success");
 
             // Show desktop notification if enabled
             if (data.email) {

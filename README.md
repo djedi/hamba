@@ -117,20 +117,35 @@ cd backend && bun run dev     # Terminal 1: API at localhost:8877
 cd frontend && bun run dev    # Terminal 2: Web at localhost:8878
 ```
 
-### Docker Deployment
+### Docker Development
+
+A `dev` script is provided for easy Docker Compose management:
 
 ```bash
-# Production deployment
+./dev              # Start containers in foreground
+./dev up -d        # Start containers in background
+./dev logs         # Follow all container logs
+./dev logs backend # Follow backend logs only
+./dev shell        # Open shell in backend container
+./dev restart      # Restart containers
+./dev rebuild      # Full rebuild with --no-cache
+./dev status       # Show container status
+./dev clean        # Stop and remove volumes (with confirmation)
+./dev --help       # Show all commands
+```
+
+**Ports:**
+- Frontend: http://localhost:8878
+- Backend API: http://localhost:8877
+
+### Docker Production Deployment
+
+```bash
+# Production deployment (without dev script)
 docker compose up -d
 
 # Frontend: http://localhost:8080
 # Backend API: http://localhost:8877
-```
-
-For development with hot reload:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
 ### Desktop App (Tauri)
@@ -336,6 +351,7 @@ hamba/
 │   └── src-tauri/                # Tauri desktop config
 ├── docker-compose.yml            # Production Docker config
 ├── docker-compose.dev.yml        # Development Docker config
+├── dev                           # Docker Compose dev helper script
 └── .env                          # Environment variables
 ```
 
