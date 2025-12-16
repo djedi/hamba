@@ -11,6 +11,11 @@ export const isLoading = writable(false);
 export const searchQuery = writable("");
 export const view = writable<"inbox" | "email" | "compose">("inbox");
 
+// Pagination state for infinite scroll
+export const emailOffset = writable(0);
+export const isLoadingMore = writable(false);
+export const hasMoreEmails = writable(true);
+
 // Current folder (inbox, starred, sent, drafts, trash, archive, snoozed, reminders, scheduled, label, etc.)
 export type Folder = "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "reminders" | "scheduled" | "label";
 export const currentFolder = writable<Folder>("inbox");

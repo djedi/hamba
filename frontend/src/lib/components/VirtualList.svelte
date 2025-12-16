@@ -9,6 +9,10 @@
     getKey: (item: T, index: number) => string | number;
     children: Snippet<[{ item: T; index: number }]>;
     class?: string;
+    onLoadMore?: () => void;
+    isLoadingMore?: boolean;
+    hasMore?: boolean;
+    loadMoreThreshold?: number;
   }
 
   let {
@@ -18,6 +22,10 @@
     getKey,
     children,
     class: className = "",
+    onLoadMore,
+    isLoadingMore = false,
+    hasMore = true,
+    loadMoreThreshold = 5,
   }: Props = $props();
 
   // Container element reference
@@ -53,6 +61,16 @@
   function handleScroll(e: Event) {
     const target = e.target as HTMLDivElement;
     scrollTop = target.scrollTop;
+
+    // Check if we're near the bottom and should load more
+    if (onLoadMore && hasMore && !isLoadingMore) {
+      const distanceFromBottom = totalHeight - (scrollTop + containerHeight);
+      const thresholdPx = loadMoreThreshold * itemHeight;
+
+      if (distanceFromBottom <= thresholdPx) {
+        onLoadMore();
+      }
+    }
   }
 
   // Scroll to a specific index (for keyboard navigation)
@@ -105,12 +123,18 @@
   class="virtual-list {className}"
   onscroll={handleScroll}
 >
-  <div class="virtual-list-inner" style="height: {totalHeight}px;">
+  <div class="virtual-list-inner" style="height: {totalHeight + (isLoadingMore ? 46 : 0)}px;">
     <div class="virtual-list-content" style="transform: translateY({offsetY}px);">
       {#each visibleItems as item, i (getKey(item, visibleRange.start + i))}
         {@render children({ item, index: visibleRange.start + i })}
       {/each}
     </div>
+    {#if isLoadingMore}
+      <div class="loading-more" style="position: absolute; bottom: 0; left: 0; right: 0;">
+        <div class="loading-spinner"></div>
+        <span>Loading more...</span>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -132,5 +156,30 @@
     top: 0;
     left: 0;
     right: 0;
+  }
+
+  .loading-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  .loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--bg-tertiary);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

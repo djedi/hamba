@@ -26,6 +26,9 @@
     scheduledEmails,
     scheduledEmailActions,
     snippetActions,
+    emailOffset,
+    isLoadingMore,
+    hasMoreEmails,
   } from "$lib/stores";
   import type { Draft } from "$lib/api";
   import EmailList from "$lib/components/EmailList.svelte";
@@ -56,6 +59,9 @@
 
   // Auto-sync every 60 seconds (fallback for Gmail accounts without push)
   const AUTO_SYNC_INTERVAL = 60 * 1000;
+
+  // Pagination constants
+  const PAGE_SIZE = 50;
 
   let lastLoadedFolder: string | null = null;
   let lastLoadedTab: string | null = null;
@@ -238,6 +244,10 @@
 
   async function loadEmails(accountId: string, emailIdFromUrl?: string | null, folder?: "inbox" | "starred" | "sent" | "drafts" | "trash" | "archive" | "snoozed" | "reminders" | "scheduled" | "label") {
     isLoading.set(true);
+    // Reset pagination state when loading fresh
+    emailOffset.set(0);
+    hasMoreEmails.set(true);
+
     try {
       const targetFolder = folder ?? $currentFolder;
 
@@ -255,24 +265,24 @@
 
       let msgs: Awaited<ReturnType<typeof api.getEmails>> = [];
       if (targetFolder === "starred") {
-        msgs = await api.getStarredEmails(accountId);
+        msgs = await api.getStarredEmails(accountId, PAGE_SIZE, 0);
       } else if (targetFolder === "sent") {
         // Sync sent emails first, then load them
         await api.syncSentEmails(accountId);
-        msgs = await api.getSentEmails(accountId);
+        msgs = await api.getSentEmails(accountId, PAGE_SIZE, 0);
       } else if (targetFolder === "trash") {
-        msgs = await api.getTrashedEmails(accountId);
+        msgs = await api.getTrashedEmails(accountId, PAGE_SIZE, 0);
       } else if (targetFolder === "archive") {
-        msgs = await api.getArchivedEmails(accountId);
+        msgs = await api.getArchivedEmails(accountId, PAGE_SIZE, 0);
       } else if (targetFolder === "snoozed") {
-        msgs = await api.getSnoozedEmails(accountId);
+        msgs = await api.getSnoozedEmails(accountId, PAGE_SIZE, 0);
       } else if (targetFolder === "reminders") {
-        msgs = await api.getReminderEmails(accountId);
+        msgs = await api.getReminderEmails(accountId, PAGE_SIZE, 0);
       } else if (targetFolder === "label") {
         // Load emails for the selected label
         const labelId = $selectedLabelId;
         if (labelId) {
-          msgs = await api.getEmailsForLabel(labelId);
+          msgs = await api.getEmailsForLabel(labelId, PAGE_SIZE, 0);
         } else {
           msgs = [];
         }
@@ -280,15 +290,19 @@
         // Inbox view - use split inbox tabs
         const tab = $inboxTab;
         if (tab === "important") {
-          msgs = await api.getImportantEmails(accountId);
+          msgs = await api.getImportantEmails(accountId, PAGE_SIZE, 0);
         } else if (tab === "other") {
-          msgs = await api.getOtherEmails(accountId);
+          msgs = await api.getOtherEmails(accountId, PAGE_SIZE, 0);
         } else {
           // "all" tab shows all inbox emails
-          msgs = await api.getEmails(accountId);
+          msgs = await api.getEmails(accountId, PAGE_SIZE, 0);
         }
       }
       emails.set(msgs);
+
+      // Update pagination state
+      emailOffset.set(msgs.length);
+      hasMoreEmails.set(msgs.length >= PAGE_SIZE);
 
       if (msgs.length > 0) {
         // If email ID from URL, restore that selection
@@ -366,6 +380,59 @@
     }
   }
 
+  async function loadMoreEmails() {
+    const accountId = $selectedAccountId;
+    if (!accountId || $isLoadingMore || !$hasMoreEmails) return;
+
+    isLoadingMore.set(true);
+    const currentOffset = $emailOffset;
+
+    try {
+      const targetFolder = $currentFolder;
+      let moreMsgs: Awaited<ReturnType<typeof api.getEmails>> = [];
+
+      if (targetFolder === "starred") {
+        moreMsgs = await api.getStarredEmails(accountId, PAGE_SIZE, currentOffset);
+      } else if (targetFolder === "sent") {
+        moreMsgs = await api.getSentEmails(accountId, PAGE_SIZE, currentOffset);
+      } else if (targetFolder === "trash") {
+        moreMsgs = await api.getTrashedEmails(accountId, PAGE_SIZE, currentOffset);
+      } else if (targetFolder === "archive") {
+        moreMsgs = await api.getArchivedEmails(accountId, PAGE_SIZE, currentOffset);
+      } else if (targetFolder === "snoozed") {
+        moreMsgs = await api.getSnoozedEmails(accountId, PAGE_SIZE, currentOffset);
+      } else if (targetFolder === "reminders") {
+        moreMsgs = await api.getReminderEmails(accountId, PAGE_SIZE, currentOffset);
+      } else if (targetFolder === "label") {
+        const labelId = $selectedLabelId;
+        if (labelId) {
+          moreMsgs = await api.getEmailsForLabel(labelId, PAGE_SIZE, currentOffset);
+        }
+      } else {
+        // Inbox view - use split inbox tabs
+        const tab = $inboxTab;
+        if (tab === "important") {
+          moreMsgs = await api.getImportantEmails(accountId, PAGE_SIZE, currentOffset);
+        } else if (tab === "other") {
+          moreMsgs = await api.getOtherEmails(accountId, PAGE_SIZE, currentOffset);
+        } else {
+          moreMsgs = await api.getEmails(accountId, PAGE_SIZE, currentOffset);
+        }
+      }
+
+      // Append to existing emails
+      emails.update(($emails) => [...$emails, ...moreMsgs]);
+
+      // Update pagination state
+      emailOffset.set(currentOffset + moreMsgs.length);
+      hasMoreEmails.set(moreMsgs.length >= PAGE_SIZE);
+    } catch (err) {
+      handleError(err);
+    } finally {
+      isLoadingMore.set(false);
+    }
+  }
+
   function handleLogin() {
     window.location.href = api.getLoginUrl();
   }
@@ -412,7 +479,7 @@
         {#if $currentFolder === "inbox"}
           <InboxTabs />
         {/if}
-        <EmailList loading={$isLoading} />
+        <EmailList loading={$isLoading} onLoadMore={loadMoreEmails} />
       {/if}
     {:else if $view === "email"}
       <EmailView />

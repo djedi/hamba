@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { emails, selectedEmailId, selectedIndex, searchQuery } from "$lib/stores";
+  import { emails, selectedEmailId, selectedIndex, searchQuery, isLoadingMore, hasMoreEmails } from "$lib/stores";
   import { extractSearchTerms } from "$lib/search";
   import EmailRow from "./EmailRow.svelte";
   import VirtualList from "./VirtualList.svelte";
@@ -7,9 +7,10 @@
 
   interface Props {
     loading?: boolean;
+    onLoadMore?: () => void;
   }
 
-  let { loading = false }: Props = $props();
+  let { loading = false, onLoadMore }: Props = $props();
 
   // Extract search terms from the current search query
   const searchTerms = $derived(extractSearchTerms($searchQuery));
@@ -57,6 +58,9 @@
       itemHeight={ROW_HEIGHT}
       getKey={getEmailKey}
       overscan={5}
+      {onLoadMore}
+      isLoadingMore={$isLoadingMore}
+      hasMore={$hasMoreEmails}
     >
       {#snippet children({ item: email, index })}
         <EmailRow

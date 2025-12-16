@@ -130,4 +130,56 @@ describe("VirtualList calculations", () => {
       expect(offsetY).toBe(2300);
     });
   });
+
+  describe("infinite scroll detection", () => {
+    const loadMoreThreshold = 5;
+
+    function shouldLoadMore(
+      scrollTop: number,
+      containerHeight: number,
+      totalHeight: number,
+      hasMore: boolean,
+      isLoadingMore: boolean
+    ): boolean {
+      if (!hasMore || isLoadingMore) return false;
+
+      const distanceFromBottom = totalHeight - (scrollTop + containerHeight);
+      const thresholdPx = loadMoreThreshold * itemHeight;
+
+      return distanceFromBottom <= thresholdPx;
+    }
+
+    it("should trigger load more when near bottom", () => {
+      // 100 items, totalHeight = 4600
+      // Container height 500, scroll to near end
+      // At scrollTop 4100, viewport bottom is at 4600 (end of list)
+      const result = shouldLoadMore(4100, 500, 4600, true, false);
+      expect(result).toBe(true);
+    });
+
+    it("should trigger load more when within threshold", () => {
+      // Threshold = 5 * 46 = 230px from bottom
+      // At scrollTop 3870, viewport bottom is at 4370
+      // Distance from bottom = 4600 - 4370 = 230 (exactly at threshold)
+      const result = shouldLoadMore(3870, 500, 4600, true, false);
+      expect(result).toBe(true);
+    });
+
+    it("should not trigger load more when far from bottom", () => {
+      // At scrollTop 0, viewport bottom is at 500
+      // Distance from bottom = 4600 - 500 = 4100 (way above threshold)
+      const result = shouldLoadMore(0, 500, 4600, true, false);
+      expect(result).toBe(false);
+    });
+
+    it("should not trigger load more if no more items", () => {
+      const result = shouldLoadMore(4100, 500, 4600, false, false);
+      expect(result).toBe(false);
+    });
+
+    it("should not trigger load more if already loading", () => {
+      const result = shouldLoadMore(4100, 500, 4600, true, true);
+      expect(result).toBe(false);
+    });
+  });
 });
