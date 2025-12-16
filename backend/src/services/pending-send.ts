@@ -1,5 +1,6 @@
 import { pendingSendQueries, emailQueries, accountQueries } from "../db";
 import { getProvider } from "./providers";
+import { addContactFromSend } from "../routes/contacts";
 
 // Default undo window in seconds
 export const UNDO_WINDOW_SECONDS = 5;
@@ -159,6 +160,15 @@ export async function processPendingSends(): Promise<{ sent: number; errors: num
       if (result.success) {
         console.log(`[PendingSend] Successfully sent email ${pending.id} to ${pending.to_addresses}`);
         pendingSendQueries.delete.run(pending.id);
+
+        // Add recipients to contacts
+        addContactFromSend(
+          pending.account_id,
+          pending.to_addresses,
+          pending.cc_addresses || undefined,
+          pending.bcc_addresses || undefined
+        );
+
         sent++;
       } else {
         console.error(`[PendingSend] Failed to send email ${pending.id}: ${result.error}`);

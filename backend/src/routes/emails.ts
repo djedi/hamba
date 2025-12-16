@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { emailQueries, accountQueries, attachmentQueries, scheduledEmailQueries } from "../db";
+import { emailQueries, accountQueries, attachmentQueries, scheduledEmailQueries, contactQueries, db } from "../db";
 import { getProvider } from "../services/providers";
 import { notifySyncComplete } from "../services/realtime";
 import { classifyAndUpdateEmail, classifyAllEmails } from "../services/importance";
@@ -11,6 +11,7 @@ import {
   getScheduledEmails,
   getScheduledEmail,
 } from "../services/scheduled-send";
+import { addContactFromReceive } from "./contacts";
 
 export const emailRoutes = new Elysia({ prefix: "/emails" })
   .get("/", async ({ query }) => {
@@ -139,6 +140,28 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
       // Classify emails for importance after sync
       if (result.synced > 0) {
         classifyAllEmails(params.accountId);
+
+        // Extract contacts from newly synced emails
+        // Get recent emails and add senders to contacts
+        const recentEmails = db
+          .prepare(`
+            SELECT from_email, from_name, received_at FROM emails
+            WHERE account_id = ? AND folder = 'inbox'
+            ORDER BY received_at DESC
+            LIMIT ?
+          `)
+          .all(params.accountId, result.synced) as any[];
+
+        for (const email of recentEmails) {
+          if (email.from_email) {
+            addContactFromReceive(
+              params.accountId,
+              email.from_email,
+              email.from_name,
+              email.received_at
+            );
+          }
+        }
       }
 
       // Notify connected clients of sync completion

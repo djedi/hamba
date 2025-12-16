@@ -579,6 +579,60 @@ export const snippetQueries = {
   deleteByAccount: db.prepare("DELETE FROM snippets WHERE account_id = ?"),
 };
 
+// Contacts table for autocomplete
+db.run(`
+  CREATE TABLE IF NOT EXISTS contacts (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    name TEXT,
+    last_contacted INTEGER,
+    contact_count INTEGER DEFAULT 1,
+    created_at INTEGER DEFAULT (unixepoch()),
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+    UNIQUE(account_id, email)
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_contacts_account_id ON contacts(account_id)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_contacts_last_contacted ON contacts(last_contacted DESC)`);
+
+// Contact operations
+export const contactQueries = {
+  getByAccount: db.prepare(`
+    SELECT * FROM contacts
+    WHERE account_id = ?
+    ORDER BY last_contacted DESC, contact_count DESC
+  `),
+
+  search: db.prepare(`
+    SELECT * FROM contacts
+    WHERE account_id = ? AND (
+      email LIKE ? OR name LIKE ?
+    )
+    ORDER BY last_contacted DESC, contact_count DESC
+    LIMIT ?
+  `),
+
+  getByEmail: db.prepare(`
+    SELECT * FROM contacts WHERE account_id = ? AND email = ?
+  `),
+
+  upsert: db.prepare(`
+    INSERT INTO contacts (id, account_id, email, name, last_contacted, contact_count)
+    VALUES (?, ?, ?, ?, ?, 1)
+    ON CONFLICT(account_id, email) DO UPDATE SET
+      name = COALESCE(excluded.name, contacts.name),
+      last_contacted = MAX(excluded.last_contacted, contacts.last_contacted),
+      contact_count = contacts.contact_count + 1
+  `),
+
+  delete: db.prepare("DELETE FROM contacts WHERE id = ?"),
+
+  deleteByAccount: db.prepare("DELETE FROM contacts WHERE account_id = ?"),
+};
+
 // Email-Label junction operations
 export const emailLabelQueries = {
   getLabelsForEmail: db.prepare(`

@@ -309,6 +309,29 @@ export const api = {
     request<{ success: boolean; error?: string }>(`/snippets/${id}`, {
       method: "DELETE",
     }),
+
+  // Contacts
+  getContacts: (accountId: string) =>
+    request<Contact[]>(`/contacts?accountId=${accountId}`),
+
+  searchContacts: (accountId: string, query?: string, limit = 10) =>
+    request<Contact[]>(`/contacts/search?accountId=${accountId}${query ? `&q=${encodeURIComponent(query)}` : ''}&limit=${limit}`),
+
+  populateContacts: (accountId: string) =>
+    request<{ success: boolean; count?: number; error?: string }>(`/contacts/populate?accountId=${accountId}`, {
+      method: "POST",
+    }),
+
+  addContact: (params: { accountId: string; email: string; name?: string }) =>
+    request<{ success: boolean; id?: string; error?: string }>("/contacts", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  deleteContact: (id: string) =>
+    request<{ success: boolean; error?: string }>(`/contacts/${id}`, {
+      method: "DELETE",
+    }),
 };
 
 export interface Account {
@@ -411,4 +434,14 @@ export interface Snippet {
   content: string;
   created_at: number;
   updated_at: number;
+}
+
+export interface Contact {
+  id: string;
+  account_id: string;
+  email: string;
+  name: string | null;
+  last_contacted: number;
+  contact_count: number;
+  created_at: number;
 }

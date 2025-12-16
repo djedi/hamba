@@ -5,6 +5,7 @@ import { emailRoutes } from "./routes/emails";
 import { draftRoutes } from "./routes/drafts";
 import { labelRoutes } from "./routes/labels";
 import { snippetRoutes } from "./routes/snippets";
+import { contactRoutes } from "./routes/contacts";
 // Database is initialized on import
 import "./db";
 import { emailQueries } from "./db";
@@ -28,6 +29,7 @@ const app = new Elysia()
   .use(draftRoutes)
   .use(labelRoutes)
   .use(snippetRoutes)
+  .use(contactRoutes)
   // WebSocket for real-time updates
   .ws("/ws", {
     open(ws) {

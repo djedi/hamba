@@ -1,5 +1,6 @@
 import { scheduledEmailQueries, emailQueries, accountQueries } from "../db";
 import { getProvider } from "./providers";
+import { addContactFromSend } from "../routes/contacts";
 
 interface ScheduledEmail {
   id: string;
@@ -208,6 +209,15 @@ export async function processScheduledEmails(): Promise<{ sent: number; errors: 
       if (result.success) {
         console.log(`[ScheduledSend] Successfully sent scheduled email ${scheduled.id} to ${scheduled.to_addresses}`);
         scheduledEmailQueries.delete.run(scheduled.id);
+
+        // Add recipients to contacts
+        addContactFromSend(
+          scheduled.account_id,
+          scheduled.to_addresses,
+          scheduled.cc_addresses || undefined,
+          scheduled.bcc_addresses || undefined
+        );
+
         sent++;
       } else {
         console.error(`[ScheduledSend] Failed to send scheduled email ${scheduled.id}: ${result.error}`);

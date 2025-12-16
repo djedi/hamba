@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { api, type Email, type Draft } from "$lib/api";
   import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails, snippets, snippetActions } from "$lib/stores";
+  import EmailInput from "./EmailInput.svelte";
   import { get } from "svelte/store";
 
   interface Props {
@@ -57,7 +58,6 @@
   let showSnippetSuggestions = $state(false);
   let selectedSnippetIndex = $state(0);
 
-  let toInput: HTMLInputElement;
   let fileInput: HTMLInputElement;
   let bodyTextarea: HTMLTextAreaElement;
   let draftId = draft?.id || crypto.randomUUID();
@@ -283,7 +283,7 @@
     // Focus the appropriate field
     setTimeout(() => {
       if (mode === "new" || mode === "forward") {
-        toInput?.focus();
+        document.querySelector<HTMLInputElement>("#to input")?.focus();
       } else {
         // Focus body for replies
         document.querySelector<HTMLTextAreaElement>(".compose-body")?.focus();
@@ -506,9 +506,6 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     }
   }
 
-  let ccInput: HTMLInputElement;
-  let bccInput: HTMLInputElement;
-
   function handleKeydown(e: KeyboardEvent) {
     // Handle snippet keyboard navigation first
     if (handleSnippetKeydown(e)) {
@@ -525,14 +522,14 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "c") {
       e.preventDefault();
       showCc = true;
-      setTimeout(() => ccInput?.focus(), 0);
+      setTimeout(() => document.querySelector<HTMLInputElement>("#cc input")?.focus(), 0);
     }
 
     // Cmd/Ctrl + Shift + B to toggle/focus Bcc field
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "b") {
       e.preventDefault();
       showBcc = true;
-      setTimeout(() => bccInput?.focus(), 0);
+      setTimeout(() => document.querySelector<HTMLInputElement>("#bcc input")?.focus(), 0);
     }
 
     // Escape to close (unless in textarea with content or snippet suggestions shown)
@@ -698,11 +695,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   <div class="fields">
     <div class="field">
       <label for="to">To</label>
-      <input
-        bind:this={toInput}
-        id="to"
-        type="text"
+      <EmailInput
         bind:value={to}
+        id="to"
         placeholder="recipient@example.com"
       />
       <div class="field-actions">
@@ -718,14 +713,14 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     {#if showCc}
       <div class="field">
         <label for="cc">Cc</label>
-        <input bind:this={ccInput} id="cc" type="text" bind:value={cc} placeholder="cc@example.com" />
+        <EmailInput bind:value={cc} id="cc" placeholder="cc@example.com" />
       </div>
     {/if}
 
     {#if showBcc}
       <div class="field">
         <label for="bcc">Bcc</label>
-        <input bind:this={bccInput} id="bcc" type="text" bind:value={bcc} placeholder="bcc@example.com" />
+        <EmailInput bind:value={bcc} id="bcc" placeholder="bcc@example.com" />
       </div>
     {/if}
 

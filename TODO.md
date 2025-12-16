@@ -40,7 +40,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **Add CC/BCC UI in compose** - Currently CC/BCC fields may not be visible by default. Add Cc/Bcc links that expand input fields. Remember preference. Keyboard shortcut `Cmd+Shift+C` for Cc, `Cmd+Shift+B` for Bcc.
 
-- [ ] **Implement contact autocomplete** - Create a `contacts` table populated from sent/received emails. In compose To/Cc/Bcc fields, show autocomplete dropdown as user types. Match on name and email. Show recent contacts first, then alphabetical.
+- [x] **Implement contact autocomplete** - Create a `contacts` table populated from sent/received emails. In compose To/Cc/Bcc fields, show autocomplete dropdown as user types. Match on name and email. Show recent contacts first, then alphabetical.
 
 ### Search
 
