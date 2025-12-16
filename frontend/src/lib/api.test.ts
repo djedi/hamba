@@ -3,7 +3,7 @@ import { AuthError, api } from './api';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+(globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = mockFetch;
 
 describe('api', () => {
 	beforeEach(() => {

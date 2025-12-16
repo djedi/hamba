@@ -357,6 +357,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ emailId, regenerate }),
     }),
+
+  aiClassify: (emailId: string, force?: boolean) =>
+    request<{ success: boolean; score?: number; is_important?: boolean; reason?: string; cached?: boolean; classified_at?: number; error?: string }>("/ai/classify", {
+      method: "POST",
+      body: JSON.stringify({ emailId, force }),
+    }),
+
+  aiClassifyBatch: (accountId: string, limit?: number, force?: boolean) =>
+    request<{ success: boolean; classified?: number; total?: number; message?: string; error?: string }>("/ai/classify-batch", {
+      method: "POST",
+      body: JSON.stringify({ accountId, limit, force }),
+    }),
 };
 
 export interface Account {
@@ -412,6 +424,8 @@ export interface Email {
   received_at: number;
   summary: string | null;
   summary_generated_at: number | null;
+  ai_importance_score: number | null;
+  ai_classified_at: number | null;
 }
 
 export interface Draft {

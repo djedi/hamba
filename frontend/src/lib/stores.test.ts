@@ -71,6 +71,8 @@ const mockEmail = (id: string, overrides = {}) => ({
 	received_at: Date.now(),
 	summary: null,
 	summary_generated_at: null,
+	ai_importance_score: null,
+	ai_classified_at: null,
 	...overrides
 });
 

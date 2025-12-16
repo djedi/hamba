@@ -54,7 +54,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 - [x] **AI Email Summarization** - For long emails/threads, show "Summarize" button. Use AI to generate 2-3 sentence summary. Cache summaries in database.
 
-- [ ] **AI-powered Split Inbox** - Use embeddings or Claude to classify emails as Important vs Other based on content, sender relationship, and user behavior patterns.
+- [x] **AI-powered Split Inbox** - Use embeddings or Claude to classify emails as Important vs Other based on content, sender relationship, and user behavior patterns.
 
 - [ ] **Smart Reply Suggestions** - Show 3 quick reply options at bottom of email view (like Gmail). Use AI to generate contextual short responses.
 

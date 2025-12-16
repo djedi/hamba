@@ -71,6 +71,10 @@ addColumnIfNotExists("emails", "remind_at", "INTEGER");
 addColumnIfNotExists("emails", "summary", "TEXT");
 addColumnIfNotExists("emails", "summary_generated_at", "INTEGER");
 
+// Add AI importance classification columns
+addColumnIfNotExists("emails", "ai_importance_score", "REAL");
+addColumnIfNotExists("emails", "ai_classified_at", "INTEGER");
+
 db.run(`
   CREATE TABLE IF NOT EXISTS emails (
     id TEXT PRIMARY KEY,
@@ -420,6 +424,17 @@ export const emailQueries = {
   // Summary operations
   setSummary: db.prepare("UPDATE emails SET summary = ?, summary_generated_at = unixepoch() WHERE id = ?"),
   clearSummary: db.prepare("UPDATE emails SET summary = NULL, summary_generated_at = NULL WHERE id = ?"),
+
+  // AI importance classification operations
+  setAiImportanceScore: db.prepare("UPDATE emails SET ai_importance_score = ?, ai_classified_at = unixepoch() WHERE id = ?"),
+  clearAiImportanceScore: db.prepare("UPDATE emails SET ai_importance_score = NULL, ai_classified_at = NULL WHERE id = ?"),
+  getUnclassifiedByAi: db.prepare(`
+    SELECT id, account_id, from_email, from_name, subject, to_addresses, labels, snippet
+    FROM emails
+    WHERE account_id = ? AND folder = 'inbox' AND is_trashed = 0 AND ai_importance_score IS NULL
+    ORDER BY received_at DESC
+    LIMIT ?
+  `),
 
   // Snooze operations
   snooze: db.prepare("UPDATE emails SET snoozed_until = ? WHERE id = ?"),
