@@ -117,7 +117,7 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
 
     // Extract before: operator (YYYY-MM-DD)
     const beforeMatch = remainingQuery.match(/before:(\d{4}-\d{2}-\d{2})/i);
-    if (beforeMatch) {
+    if (beforeMatch && beforeMatch[1]) {
       const date = new Date(beforeMatch[1]);
       date.setHours(23, 59, 59, 999); // End of day
       operators.before = Math.floor(date.getTime() / 1000);
@@ -126,7 +126,7 @@ export const emailRoutes = new Elysia({ prefix: "/emails" })
 
     // Extract after: operator (YYYY-MM-DD)
     const afterMatch = remainingQuery.match(/after:(\d{4}-\d{2}-\d{2})/i);
-    if (afterMatch) {
+    if (afterMatch && afterMatch[1]) {
       const date = new Date(afterMatch[1]);
       date.setHours(0, 0, 0, 0); // Start of day
       operators.after = Math.floor(date.getTime() / 1000);

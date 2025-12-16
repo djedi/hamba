@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 import { aiRoutes } from "./ai";
 
 describe("ai routes", () => {
-  let app: Elysia;
+  let app: ReturnType<typeof Elysia.prototype.use>;
 
   beforeAll(() => {
     app = new Elysia().use(aiRoutes);

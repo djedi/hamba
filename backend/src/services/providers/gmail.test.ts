@@ -394,10 +394,11 @@ describe("Gmail Email Parsing", () => {
       const result = extractBodyAndAttachments(payload);
 
       expect(result.attachments.length).toBe(1);
-      expect(result.attachments[0].attachmentId).toBe("att-123");
-      expect(result.attachments[0].filename).toBe("document.pdf");
-      expect(result.attachments[0].mimeType).toBe("application/pdf");
-      expect(result.attachments[0].size).toBe(12345);
+      const firstAttachment = result.attachments[0]!;
+      expect(firstAttachment.attachmentId).toBe("att-123");
+      expect(firstAttachment.filename).toBe("document.pdf");
+      expect(firstAttachment.mimeType).toBe("application/pdf");
+      expect(firstAttachment.size).toBe(12345);
     });
 
     it("should extract inline images with content ID", () => {
@@ -428,7 +429,7 @@ describe("Gmail Email Parsing", () => {
 
       expect(result.html).toBe('<img src="cid:image001">');
       expect(result.attachments.length).toBe(1);
-      expect(result.attachments[0].contentId).toBe("image001");
+      expect(result.attachments[0]!.contentId).toBe("image001");
     });
 
     it("should handle deeply nested parts", () => {
@@ -491,7 +492,7 @@ describe("Gmail Email Parsing", () => {
 
       const result = extractBodyAndAttachments(payload);
 
-      expect(result.attachments[0].filename).toBe("attachment");
+      expect(result.attachments[0]!.filename).toBe("attachment");
     });
   });
 

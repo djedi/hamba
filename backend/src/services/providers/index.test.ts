@@ -1,7 +1,7 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test';
 
 // Mock the db module
-const mockGetById = mock(() => null);
+const mockGetById = mock(() => null as { id: string; email: string; provider_type?: string } | null);
 
 mock.module('../../db', () => ({
 	accountQueries: {

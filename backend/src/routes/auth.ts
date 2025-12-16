@@ -159,8 +159,8 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       error_description?: string;
     };
 
-    if (tokens.error) {
-      return { error: tokens.error_description || tokens.error };
+    if (tokens.error || !tokens.access_token) {
+      return { error: tokens.error_description || tokens.error || "Failed to get access token" };
     }
 
     // Get user info from Microsoft Graph
@@ -182,6 +182,9 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
     // Store account with microsoft provider type
     const id = crypto.randomUUID();
+    // Non-null assertion safe here because we returned early if !tokens.access_token
+    const accessToken = tokens.access_token!;
+    const refreshToken = tokens.refresh_token ?? null;
     const expiresAt = Math.floor(Date.now() / 1000) + (tokens.expires_in || 3600);
 
     // Use raw SQL to set provider_type to microsoft
@@ -195,7 +198,7 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         refresh_token = excluded.refresh_token,
         token_expires_at = excluded.token_expires_at,
         updated_at = unixepoch()
-    `, [id, email, user.displayName || email.split("@")[0], tokens.access_token, tokens.refresh_token, expiresAt]);
+    `, [id, email, user.displayName ?? email.split("@")[0] ?? email, accessToken, refreshToken, expiresAt]);
 
     // Redirect to frontend with success
     return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(email)}`);
@@ -251,8 +254,8 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       error_description?: string;
     };
 
-    if (tokens.error) {
-      return { error: tokens.error_description || tokens.error };
+    if (tokens.error || !tokens.access_token) {
+      return { error: tokens.error_description || tokens.error || "Failed to get access token" };
     }
 
     // Get user info from Yahoo OpenID Connect userinfo endpoint
@@ -274,10 +277,13 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       return { error: "Could not retrieve email address from Yahoo account" };
     }
 
-    const displayName = user.name || user.given_name || user.preferred_username || email.split("@")[0];
+    const displayName = user.name || user.given_name || user.preferred_username || email.split("@")[0] || email;
 
     // Store account with yahoo provider type
     const id = crypto.randomUUID();
+    // Non-null assertion safe here because we returned early if !tokens.access_token
+    const accessToken = tokens.access_token!;
+    const refreshToken = tokens.refresh_token ?? null;
     const expiresAt = Math.floor(Date.now() / 1000) + (tokens.expires_in || 3600);
 
     // Use raw SQL to set provider_type to yahoo
@@ -291,7 +297,7 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
         refresh_token = excluded.refresh_token,
         token_expires_at = excluded.token_expires_at,
         updated_at = unixepoch()
-    `, [id, email, displayName, tokens.access_token, tokens.refresh_token, expiresAt]);
+    `, [id, email, displayName, accessToken, refreshToken, expiresAt]);
 
     // Redirect to frontend with success
     return redirect(`http://localhost:5173/?auth=success&email=${encodeURIComponent(email)}`);

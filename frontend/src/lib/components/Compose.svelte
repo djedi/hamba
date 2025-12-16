@@ -77,10 +77,10 @@
 
   // Get filtered snippets
   function getFilteredSnippets() {
-    const $snippets = get(snippets);
+    const allSnippets = get(snippets);
     if (!snippetQuery) return [];
     const query = snippetQuery.toLowerCase();
-    return $snippets.filter(
+    return allSnippets.filter(
       (s) => s.shortcut.toLowerCase().startsWith(query) || s.name.toLowerCase().includes(query)
     );
   }
@@ -763,6 +763,7 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       });
 
       if (result.success && result.content) {
+        const generatedContent = result.content;
         // Insert the generated content at the cursor position or at the beginning
         if (bodyTextarea) {
           const cursorPos = bodyTextarea.selectionStart || 0;
@@ -771,22 +772,22 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
 
           // If inserting at the start or body is empty, just prepend
           if (cursorPos === 0 || !body.trim()) {
-            body = result.content + (body.trim() ? "\n\n" + body : "");
+            body = generatedContent + (body.trim() ? "\n\n" + body : "");
           } else {
             // Insert at cursor
-            body = beforeCursor + result.content + afterCursor;
+            body = beforeCursor + generatedContent + afterCursor;
           }
 
           // Move cursor after inserted content
           setTimeout(() => {
             if (bodyTextarea) {
-              const newPos = cursorPos + result.content.length;
+              const newPos = cursorPos + generatedContent.length;
               bodyTextarea.setSelectionRange(newPos, newPos);
               bodyTextarea.focus();
             }
           }, 0);
         } else {
-          body = result.content;
+          body = generatedContent;
         }
 
         closeAiModal();

@@ -361,7 +361,7 @@ Preview: ${content}`;
       } catch {
         // If JSON parsing fails, try to extract score from text
         const scoreMatch = textContent.text.match(/score["\s:]+([0-9.]+)/i);
-        score = scoreMatch ? parseFloat(scoreMatch[1]) : 0.5;
+        score = scoreMatch && scoreMatch[1] ? parseFloat(scoreMatch[1]) : 0.5;
         reason = textContent.text;
       }
 

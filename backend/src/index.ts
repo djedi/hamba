@@ -37,18 +37,20 @@ const app = new Elysia()
   // WebSocket for real-time updates
   .ws("/ws", {
     open(ws) {
-      ws.data = { accountIds: new Set() };
-      addClient(ws as any);
+      // Elysia's WebSocket wrapper requires type casting for custom data
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (ws as any).data = { accountIds: new Set() };
+      addClient(ws as unknown as import("bun").ServerWebSocket<WebSocketData>);
     },
     close(ws) {
-      removeClient(ws as any);
+      removeClient(ws as unknown as import("bun").ServerWebSocket<WebSocketData>);
     },
     message(ws, message) {
       // Handle subscription messages
       try {
         const data = typeof message === "string" ? JSON.parse(message) : message;
         if (data.type === "subscribe" && data.accountId) {
-          subscribeToAccount(ws as any, data.accountId);
+          subscribeToAccount(ws as unknown as import("bun").ServerWebSocket<WebSocketData>, data.accountId);
         }
       } catch (e) {
         // Ignore invalid messages

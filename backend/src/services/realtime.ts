@@ -3,7 +3,7 @@
  * Manages WebSocket connections and pushes updates to connected clients
  */
 
-import { ServerWebSocket } from "bun";
+import type { ServerWebSocket } from "bun";
 
 interface WebSocketData {
   accountIds: Set<string>;

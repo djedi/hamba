@@ -30,7 +30,7 @@ function parseEmailAddresses(addressString: string | null): Array<{ email: strin
   for (const addr of addresses) {
     // Format: "Name <email@example.com>"
     const match = addr.match(/^(.+?)\s*<([^>]+)>$/);
-    if (match) {
+    if (match && match[1] !== undefined && match[2] !== undefined) {
       results.push({ email: match[2].toLowerCase(), name: match[1].trim() || null });
     } else {
       // Plain email address

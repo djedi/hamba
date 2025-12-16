@@ -13,15 +13,15 @@ describe("ErrorBoundary error handling logic", () => {
     originalAddEventListener = window.addEventListener;
     originalRemoveEventListener = window.removeEventListener;
 
-    window.addEventListener = vi.fn((type: string, handler: EventListener) => {
+    window.addEventListener = vi.fn((type: string, handler: EventListenerOrEventListenerObject) => {
       if (type === "error") {
         errorHandler = handler as (event: ErrorEvent) => void;
       } else if (type === "unhandledrejection") {
         rejectionHandler = handler as (event: PromiseRejectionEvent) => void;
       }
-    });
+    }) as unknown as typeof window.addEventListener;
 
-    window.removeEventListener = vi.fn();
+    window.removeEventListener = vi.fn() as unknown as typeof window.removeEventListener;
   });
 
   afterEach(() => {
@@ -75,7 +75,7 @@ describe("ErrorBoundary error handling logic", () => {
     });
 
     it("should convert non-Error rejection reasons to string", () => {
-      const reason = "String rejection reason";
+      const reason: unknown = "String rejection reason";
 
       const extractedMessage = reason instanceof Error
         ? reason.message
@@ -95,7 +95,7 @@ describe("ErrorBoundary error handling logic", () => {
     });
 
     it("should handle null rejection reasons", () => {
-      const reason = null;
+      const reason: unknown = null;
 
       const extractedMessage = reason instanceof Error
         ? reason.message
@@ -105,7 +105,7 @@ describe("ErrorBoundary error handling logic", () => {
     });
 
     it("should handle undefined rejection reasons", () => {
-      const reason = undefined;
+      const reason: unknown = undefined;
 
       const extractedMessage = reason instanceof Error
         ? reason.message
@@ -124,7 +124,7 @@ describe("ErrorBoundary error handling logic", () => {
     });
 
     it("should return empty string for non-Error objects", () => {
-      const error = "String error";
+      const error: unknown = "String error";
       const stack = error instanceof Error ? error.stack || "" : "";
 
       expect(stack).toBe("");

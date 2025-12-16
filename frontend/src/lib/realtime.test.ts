@@ -73,15 +73,15 @@ describe("realtime module", () => {
     MockWebSocket.clearInstances();
 
     // Save and replace WebSocket
-    originalWebSocket = global.WebSocket;
-    (global as any).WebSocket = MockWebSocket;
+    originalWebSocket = globalThis.WebSocket;
+    (globalThis as unknown as { WebSocket: typeof MockWebSocket }).WebSocket = MockWebSocket;
   });
 
   afterEach(async () => {
     vi.resetModules();
     vi.restoreAllMocks();
     vi.useRealTimers();
-    global.WebSocket = originalWebSocket;
+    globalThis.WebSocket = originalWebSocket;
   });
 
   describe("connectionState store", () => {

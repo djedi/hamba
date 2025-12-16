@@ -1,8 +1,16 @@
 import { describe, it, expect, mock, beforeEach, afterEach, spyOn } from 'bun:test';
 import { tokenNeedsRefresh, getValidAccessToken } from './token';
 
+interface MockAccount {
+	id: string;
+	email: string;
+	access_token?: string;
+	refresh_token?: string | null;
+	token_expires_at?: number | null;
+}
+
 // Mock the db module
-const mockGetById = mock(() => null);
+const mockGetById = mock(() => null as MockAccount | null);
 
 mock.module('../db', () => ({
 	accountQueries: {

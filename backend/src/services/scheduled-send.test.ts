@@ -201,8 +201,8 @@ describe("scheduled-send", () => {
       const scheduled = getScheduledEmails(testAccountId);
       expect(scheduled.length).toBe(2);
       // Should be sorted by send_at ascending
-      expect(scheduled[0].send_at).toBe(futureTime1);
-      expect(scheduled[1].send_at).toBe(futureTime2);
+      expect(scheduled[0]!.send_at).toBe(futureTime1);
+      expect(scheduled[1]!.send_at).toBe(futureTime2);
     });
 
     it("should return empty array for account with no scheduled emails", () => {
