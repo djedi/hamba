@@ -17,6 +17,7 @@
     composeMode,
     replyToEmail,
     toasts,
+    showToast,
     currentFolder,
     inboxTab,
     drafts,
@@ -221,11 +222,7 @@
 
           // Show toast for new mail
           if (data.type === "new_mail") {
-            toasts.update(t => [...t, {
-              id: crypto.randomUUID(),
-              message: "New mail received",
-              type: "success" as const
-            }]);
+            showToast("New mail received", "success");
           }
         }).catch(console.error);
       }
@@ -373,6 +370,7 @@
     try {
       await api.syncEmails(accountId);
       await loadEmails(accountId);
+      showToast("Sync complete", "success");
     } catch (err) {
       handleError(err);
     } finally {

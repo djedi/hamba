@@ -72,7 +72,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ### UI Polish
 
-- [ ] **Add toast notifications** - Show non-blocking toast messages for actions: "Email archived", "Email sent", "Sync complete". Use a toast library or build simple component. Include undo action where applicable.
+- [x] **Add toast notifications** - Show non-blocking toast messages for actions: "Email archived", "Email sent", "Sync complete". Use a toast library or build simple component. Include undo action where applicable.
 
 - [ ] **Add loading skeletons** - Replace loading spinners with skeleton loaders that match the shape of content (email rows, email body). Feels faster and more polished.
 

@@ -105,7 +105,14 @@ export const emailActions = {
       $emails.map((e) => (e.id === emailId ? { ...e, is_starred: 1 } : e))
     );
     // Background API call
-    api.star(emailId).catch(() => {
+    api.star(emailId).then(() => {
+      showToast("Email starred", "success", {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.unstar(emailId),
+        },
+      });
+    }).catch(() => {
       // Rollback on failure
       emails.update(($emails) =>
         $emails.map((e) => (e.id === emailId ? { ...e, is_starred: 0 } : e))
@@ -118,7 +125,14 @@ export const emailActions = {
     emails.update(($emails) =>
       $emails.map((e) => (e.id === emailId ? { ...e, is_starred: 0 } : e))
     );
-    api.unstar(emailId).catch(() => {
+    api.unstar(emailId).then(() => {
+      showToast("Star removed", "success", {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.star(emailId),
+        },
+      });
+    }).catch(() => {
       emails.update(($emails) =>
         $emails.map((e) => (e.id === emailId ? { ...e, is_starred: 1 } : e))
       );
@@ -176,7 +190,14 @@ export const emailActions = {
     // Optimistic remove from list
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
-    api.archive(emailId).catch(() => {
+    api.archive(emailId).then(() => {
+      showToast("Email archived", "success", {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.unarchive(emailId),
+        },
+      });
+    }).catch(() => {
       // Rollback: add back to list
       if (email) {
         emails.update(($emails) => {
@@ -195,7 +216,14 @@ export const emailActions = {
     // Optimistic remove from archive view
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
-    api.unarchive(emailId).catch(() => {
+    api.unarchive(emailId).then(() => {
+      showToast("Moved to inbox", "success", {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.archive(emailId),
+        },
+      });
+    }).catch(() => {
       // Rollback: add back to list
       if (email) {
         emails.update(($emails) => {
@@ -213,7 +241,14 @@ export const emailActions = {
 
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
-    api.trash(emailId).catch(() => {
+    api.trash(emailId).then(() => {
+      showToast("Moved to trash", "success", {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.untrash(emailId),
+        },
+      });
+    }).catch(() => {
       if (email) {
         emails.update(($emails) => {
           const newList = [...$emails, email];
@@ -231,7 +266,14 @@ export const emailActions = {
     // Optimistic remove from trash view
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
-    api.untrash(emailId).catch(() => {
+    api.untrash(emailId).then(() => {
+      showToast("Email restored", "success", {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.trash(emailId),
+        },
+      });
+    }).catch(() => {
       // Rollback: add back to list
       if (email) {
         emails.update(($emails) => {
@@ -250,7 +292,9 @@ export const emailActions = {
     // Optimistic remove from list
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
-    api.permanentDelete(emailId).catch(() => {
+    api.permanentDelete(emailId).then(() => {
+      showToast("Email deleted permanently", "success");
+    }).catch(() => {
       // Rollback: add back to list
       if (email) {
         emails.update(($emails) => {
@@ -275,7 +319,14 @@ export const emailActions = {
       emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
     }
 
-    api.markImportant(emailId).catch(() => {
+    api.markImportant(emailId).then(() => {
+      showToast("Marked as important", "success", {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.markNotImportant(emailId),
+        },
+      });
+    }).catch(() => {
       emails.update(($emails) =>
         $emails.map((e) => (e.id === emailId ? { ...e, is_important: 0 } : e))
       );
@@ -296,7 +347,14 @@ export const emailActions = {
       emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
     }
 
-    api.markNotImportant(emailId).catch(() => {
+    api.markNotImportant(emailId).then(() => {
+      showToast("Marked as not important", "success", {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.markImportant(emailId),
+        },
+      });
+    }).catch(() => {
       emails.update(($emails) =>
         $emails.map((e) => (e.id === emailId ? { ...e, is_important: 1 } : e))
       );
@@ -331,7 +389,21 @@ export const emailActions = {
       );
     }
 
-    api.snooze(emailId, snoozedUntil).catch(() => {
+    api.snooze(emailId, snoozedUntil).then(() => {
+      const snoozeDate = new Date(snoozedUntil);
+      const timeStr = snoozeDate.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      showToast(`Snoozed until ${timeStr}`, "success", {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.unsnooze(emailId),
+        },
+      });
+    }).catch(() => {
       // Rollback: add back to list
       if (email) {
         emails.update(($emails) => {
@@ -350,7 +422,9 @@ export const emailActions = {
     // Optimistic remove from snoozed view
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
-    api.unsnooze(emailId).catch(() => {
+    api.unsnooze(emailId).then(() => {
+      showToast("Snooze cancelled", "success");
+    }).catch(() => {
       // Rollback: add back to list
       if (email) {
         emails.update(($emails) => {
@@ -374,7 +448,21 @@ export const emailActions = {
       )
     );
 
-    api.setReminder(emailId, remindAt).catch(() => {
+    api.setReminder(emailId, remindAt).then(() => {
+      const reminderDate = new Date(remindAt);
+      const timeStr = reminderDate.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      showToast(`Reminder set for ${timeStr}`, "success", {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.clearReminder(emailId),
+        },
+      });
+    }).catch(() => {
       // Rollback
       if (email) {
         emails.update(($emails) =>
@@ -391,6 +479,7 @@ export const emailActions = {
     const $emails = get(emails);
     const email = $emails.find((e) => e.id === emailId);
     const $currentFolder = get(currentFolder);
+    const previousRemindAt = email?.remind_at;
 
     // If viewing reminders folder, remove from list
     if ($currentFolder === "reminders") {
@@ -404,7 +493,14 @@ export const emailActions = {
       );
     }
 
-    api.clearReminder(emailId).catch(() => {
+    api.clearReminder(emailId).then(() => {
+      showToast("Reminder cleared", "success", previousRemindAt ? {
+        action: {
+          label: "Undo",
+          onClick: () => emailActions.setReminder(emailId, previousRemindAt),
+        },
+      } : undefined);
+    }).catch(() => {
       // Rollback
       if (email) {
         if ($currentFolder === "reminders") {
