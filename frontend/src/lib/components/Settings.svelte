@@ -16,6 +16,19 @@
   // Appearance settings (stored in localStorage)
   let theme = $state<"dark" | "light">("dark");
   let fontSize = $state<"12" | "14" | "16">("14");
+  let accentColor = $state<string>("#6366f1");
+
+  // Preset accent colors
+  const accentPresets = [
+    { name: "Indigo", color: "#6366f1" },
+    { name: "Blue", color: "#3b82f6" },
+    { name: "Purple", color: "#8b5cf6" },
+    { name: "Pink", color: "#ec4899" },
+    { name: "Red", color: "#ef4444" },
+    { name: "Orange", color: "#f97316" },
+    { name: "Green", color: "#22c55e" },
+    { name: "Teal", color: "#14b8a6" },
+  ];
 
   // Notification settings (stored in localStorage)
   let notificationsEnabled = $state(false);
@@ -85,6 +98,7 @@
     if (typeof localStorage !== "undefined") {
       theme = (localStorage.getItem("settings.theme") as "dark" | "light") || "dark";
       fontSize = (localStorage.getItem("settings.fontSize") as "12" | "14" | "16") || "14";
+      accentColor = localStorage.getItem("settings.accentColor") || "#6366f1";
       notificationsEnabled = localStorage.getItem("settings.notifications") === "true";
       notifyImportantOnly = localStorage.getItem("settings.notifyImportantOnly") === "true";
       soundEnabled = localStorage.getItem("settings.sound") !== "false";
@@ -115,6 +129,26 @@
       localStorage.setItem("settings.fontSize", fontSize);
       // Apply font size to document
       document.documentElement.style.fontSize = `${fontSize}px`;
+    }
+  });
+
+  // Helper to calculate hover color
+  function adjustColor(hex: string, amount: number): string {
+    hex = hex.replace("#", "");
+    const r = Math.max(0, Math.min(255, parseInt(hex.substr(0, 2), 16) + amount));
+    const g = Math.max(0, Math.min(255, parseInt(hex.substr(2, 2), 16) + amount));
+    const b = Math.max(0, Math.min(255, parseInt(hex.substr(4, 2), 16) + amount));
+    return "#" + [r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  }
+
+  $effect(() => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("settings.accentColor", accentColor);
+      // Apply accent color to document
+      document.documentElement.style.setProperty("--accent", accentColor);
+      // Calculate hover color (lighter for dark theme, darker for light)
+      const hoverColor = theme === "dark" ? adjustColor(accentColor, 20) : adjustColor(accentColor, -20);
+      document.documentElement.style.setProperty("--accent-hover", hoverColor);
     }
   });
 
@@ -259,6 +293,29 @@
                 <option value="dark">Dark</option>
                 <option value="light">Light</option>
               </select>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Accent Color</h3>
+            <div class="color-presets">
+              {#each accentPresets as preset}
+                <button
+                  class="color-swatch"
+                  class:selected={accentColor === preset.color}
+                  style="background-color: {preset.color}"
+                  title={preset.name}
+                  onclick={() => (accentColor = preset.color)}
+                ></button>
+              {/each}
+              <label class="custom-color-wrapper" title="Custom color">
+                <input
+                  type="color"
+                  bind:value={accentColor}
+                  class="custom-color-input"
+                />
+                <span class="custom-color-icon">+</span>
+              </label>
             </div>
           </div>
 
@@ -739,5 +796,64 @@
   button.primary.small {
     padding: 6px 12px;
     font-size: 13px;
+  }
+
+  .color-presets {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .color-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    padding: 0;
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+
+  .color-swatch:hover {
+    transform: scale(1.1);
+  }
+
+  .color-swatch.selected {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 2px var(--bg-primary);
+  }
+
+  .custom-color-wrapper {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px dashed var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+
+  .custom-color-wrapper:hover {
+    border-color: var(--text-secondary);
+  }
+
+  .custom-color-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+  }
+
+  .custom-color-icon {
+    font-size: 18px;
+    color: var(--text-muted);
+    pointer-events: none;
   }
 </style>
