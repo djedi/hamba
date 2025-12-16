@@ -114,6 +114,7 @@
     <span class="logo-text">Hamba</span>
   </div>
 
+  <div class="sidebar-content">
   <nav class="nav">
     <button class="nav-item" class:active={$currentFolder === "inbox" && ($view === "inbox" || $view === "email")} onclick={goToInbox}>
       <span class="nav-icon">📥</span>
@@ -211,28 +212,6 @@
     </button>
   </div>
 
-  <div class="sidebar-footer">
-    <ConnectionStatus />
-    {#if $pendingActionsCount > 0 && $isOnline}
-      <button class="sync-pending-btn" onclick={() => syncNow()}>
-        <span class="pending-icon">⏳</span>
-        <span>Sync {$pendingActionsCount} pending</span>
-      </button>
-    {/if}
-    <div class="footer-buttons">
-      <button class="settings-btn" onclick={() => isSettingsOpen.set(true)} title="Settings (⌘,)">
-        ⚙️
-      </button>
-      <button class="sync-btn" onclick={onSync} disabled={$isLoading || !$isOnline}>
-        {#if $isLoading}
-          <span class="spinner"></span> Syncing...
-        {:else}
-          🔄 Sync
-        {/if}
-      </button>
-    </div>
-  </div>
-
   <div class="snippets-section">
     <div class="snippets-header">
       <h4>Snippets</h4>
@@ -269,6 +248,29 @@
     <div class="shortcut"><kbd>⌘,</kbd> settings</div>
     <div class="shortcut"><kbd>⌘1</kbd><kbd>⌘2</kbd><kbd>⌘3</kbd> accounts</div>
   </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <ConnectionStatus />
+    {#if $pendingActionsCount > 0 && $isOnline}
+      <button class="sync-pending-btn" onclick={() => syncNow()}>
+        <span class="pending-icon">⏳</span>
+        <span>Sync {$pendingActionsCount} pending</span>
+      </button>
+    {/if}
+    <div class="footer-buttons">
+      <button class="settings-btn" onclick={() => isSettingsOpen.set(true)} title="Settings (⌘,)">
+        ⚙️
+      </button>
+      <button class="sync-btn" onclick={onSync} disabled={$isLoading || !$isOnline}>
+        {#if $isLoading}
+          <span class="spinner"></span> Syncing...
+        {:else}
+          🔄 Sync
+        {/if}
+      </button>
+    </div>
+  </div>
 </aside>
 
 <style>
@@ -279,6 +281,15 @@
     display: flex;
     flex-direction: column;
     padding: 16px;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
   }
 
   .logo {
@@ -287,6 +298,7 @@
     gap: 8px;
     padding: 8px;
     margin-bottom: 24px;
+    flex-shrink: 0;
   }
 
   .logo-icon {
@@ -517,7 +529,7 @@
   }
 
   .sidebar-footer {
-    margin-top: auto;
+    flex-shrink: 0;
     padding-top: 16px;
     border-top: 1px solid var(--border);
     display: flex;

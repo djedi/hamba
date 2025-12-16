@@ -144,7 +144,7 @@ A task list for building a viable open source Superhuman/Gmail clone. Each task 
 
 - [x] With an IMAP account, archive an email. Go to the archive view and move it to the inbox. Click sync. Noticed the email moves back to the archive.
 
-- [ ] Make side bar scrollable. If I have a lot of labels I can't see them all. I can't scroll the sidebar to see the accounts or keyboard shortcuts.
+- [x] Make side bar scrollable. If I have a lot of labels I can't see them all. I can't scroll the sidebar to see the accounts or keyboard shortcuts.
 
 - [ ] Use one of the favicon sizes to add an icon next to the Hamba title in the upper left.
 
