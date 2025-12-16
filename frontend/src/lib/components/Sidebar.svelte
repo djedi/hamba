@@ -187,19 +187,25 @@
 
   <div class="accounts">
     <h3>Accounts</h3>
-    {#each $accounts as account}
+    {#each $accounts as account, i}
       <button
         class="account"
         class:active={account.id === $selectedAccountId}
         onclick={() => selectedAccountId.set(account.id)}
+        title={`${account.email} (⌘${i + 1})`}
       >
+        <span class="account-indicator" class:active={account.id === $selectedAccountId}></span>
         <span class="account-avatar" class:gmail={account.provider_type === "gmail"} class:imap={account.provider_type === "imap"}>
           {getProviderIcon(account.provider_type || "gmail")}
         </span>
         <span class="account-email">{account.email}</span>
+        {#if account.unread_count && account.unread_count > 0}
+          <span class="badge account-badge">{account.unread_count}</span>
+        {/if}
       </button>
     {/each}
     <button class="account add" onclick={onAddAccount}>
+      <span class="account-indicator"></span>
       <span class="account-avatar">+</span>
       <span class="account-email">Add account</span>
     </button>
@@ -261,6 +267,7 @@
     <div class="shortcut"><kbd>⇧R</kbd> sync</div>
     <div class="shortcut"><kbd>⌘K</kbd> command</div>
     <div class="shortcut"><kbd>⌘,</kbd> settings</div>
+    <div class="shortcut"><kbd>⌘1</kbd><kbd>⌘2</kbd><kbd>⌘3</kbd> accounts</div>
   </div>
 </aside>
 
@@ -436,6 +443,7 @@
     align-items: center;
     gap: 8px;
     padding: 8px;
+    padding-left: 4px;
     width: 100%;
     background: transparent;
     border: none;
@@ -443,6 +451,7 @@
     color: var(--text-secondary);
     cursor: pointer;
     text-align: left;
+    position: relative;
   }
 
   .account:hover {
@@ -456,6 +465,25 @@
 
   .account.add {
     color: var(--accent);
+  }
+
+  .account-indicator {
+    width: 3px;
+    height: 20px;
+    border-radius: 2px;
+    background: transparent;
+    flex-shrink: 0;
+    transition: background 0.15s ease;
+  }
+
+  .account-indicator.active {
+    background: var(--accent);
+  }
+
+  .account-badge {
+    font-size: 10px;
+    padding: 1px 5px;
+    margin-left: auto;
   }
 
   .account-avatar {

@@ -88,6 +88,17 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
 
   .get("/accounts", () => {
     const accounts = accountQueries.getAll.all() as any[];
+
+    // Get unread counts per account
+    const unreadCounts = db.prepare(`
+      SELECT account_id, COUNT(*) as unread_count
+      FROM emails
+      WHERE is_read = 0 AND is_trashed = 0 AND is_archived = 0 AND snoozed_until IS NULL
+      GROUP BY account_id
+    `).all() as { account_id: string; unread_count: number }[];
+
+    const unreadMap = new Map(unreadCounts.map(r => [r.account_id, r.unread_count]));
+
     // Don't expose tokens or password
     return accounts.map(({
       access_token,
@@ -97,6 +108,7 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       ...account
     }) => ({
       ...account,
+      unread_count: unreadMap.get(account.id) || 0,
       tokenStatus: account.provider_type === "imap"
         ? "valid" // IMAP accounts don't expire like OAuth
         : token_expires_at

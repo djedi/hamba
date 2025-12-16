@@ -15,6 +15,8 @@ import {
   prefetchAdjacentEmails,
   currentFolder,
   inboxTab,
+  accounts,
+  selectedAccountId,
 } from "./stores";
 import {
   type ShortcutAction,
@@ -349,6 +351,70 @@ const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
       composeMode.set("forward");
       replyToEmail.set(email);
       view.set("compose");
+    }
+  },
+
+  // Account switching
+  switch_account_1: () => {
+    const $accounts = get(accounts);
+    if ($accounts.length > 0) {
+      selectedAccountId.set($accounts[0].id);
+    }
+  },
+
+  switch_account_2: () => {
+    const $accounts = get(accounts);
+    if ($accounts.length > 1) {
+      selectedAccountId.set($accounts[1].id);
+    }
+  },
+
+  switch_account_3: () => {
+    const $accounts = get(accounts);
+    if ($accounts.length > 2) {
+      selectedAccountId.set($accounts[2].id);
+    }
+  },
+
+  switch_account_4: () => {
+    const $accounts = get(accounts);
+    if ($accounts.length > 3) {
+      selectedAccountId.set($accounts[3].id);
+    }
+  },
+
+  switch_account_5: () => {
+    const $accounts = get(accounts);
+    if ($accounts.length > 4) {
+      selectedAccountId.set($accounts[4].id);
+    }
+  },
+
+  switch_account_6: () => {
+    const $accounts = get(accounts);
+    if ($accounts.length > 5) {
+      selectedAccountId.set($accounts[5].id);
+    }
+  },
+
+  switch_account_7: () => {
+    const $accounts = get(accounts);
+    if ($accounts.length > 6) {
+      selectedAccountId.set($accounts[6].id);
+    }
+  },
+
+  switch_account_8: () => {
+    const $accounts = get(accounts);
+    if ($accounts.length > 7) {
+      selectedAccountId.set($accounts[7].id);
+    }
+  },
+
+  switch_account_9: () => {
+    const $accounts = get(accounts);
+    if ($accounts.length > 8) {
+      selectedAccountId.set($accounts[8].id);
     }
   },
 

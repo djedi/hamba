@@ -108,7 +108,7 @@ A task list for building a viable open source Superhuman clone. Each task includ
 
 ## Account Management
 
-- [ ] **Improve account switcher** - Show unread count per account in sidebar. Keyboard shortcut to switch accounts (`Cmd+1`, `Cmd+2`, etc). Show which account is active more prominently.
+- [x] **Improve account switcher** - Show unread count per account in sidebar. Keyboard shortcut to switch accounts (`Cmd+1`, `Cmd+2`, etc). Show which account is active more prominently.
 
 - [ ] **Add account settings per account** - Configure sync frequency, signature, name, etc. per account. Edit/delete account.
 

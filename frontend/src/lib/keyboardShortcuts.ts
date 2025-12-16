@@ -36,6 +36,16 @@ export type ShortcutAction =
   | "tab_important"
   | "tab_other"
   | "tab_all"
+  // Account switching
+  | "switch_account_1"
+  | "switch_account_2"
+  | "switch_account_3"
+  | "switch_account_4"
+  | "switch_account_5"
+  | "switch_account_6"
+  | "switch_account_7"
+  | "switch_account_8"
+  | "switch_account_9"
   // Compose
   | "compose_new"
   | "reply"
@@ -102,6 +112,17 @@ export const defaultShortcuts: ShortcutDefinition[] = [
   { action: "reply", defaultKey: "r", description: "Reply", category: "Compose" },
   { action: "reply_all", defaultKey: "a", description: "Reply all", category: "Compose" },
   { action: "forward", defaultKey: "f", description: "Forward", category: "Compose" },
+
+  // Account switching
+  { action: "switch_account_1", defaultKey: "Cmd+1", description: "Switch to account 1", category: "Other" },
+  { action: "switch_account_2", defaultKey: "Cmd+2", description: "Switch to account 2", category: "Other" },
+  { action: "switch_account_3", defaultKey: "Cmd+3", description: "Switch to account 3", category: "Other" },
+  { action: "switch_account_4", defaultKey: "Cmd+4", description: "Switch to account 4", category: "Other" },
+  { action: "switch_account_5", defaultKey: "Cmd+5", description: "Switch to account 5", category: "Other" },
+  { action: "switch_account_6", defaultKey: "Cmd+6", description: "Switch to account 6", category: "Other" },
+  { action: "switch_account_7", defaultKey: "Cmd+7", description: "Switch to account 7", category: "Other" },
+  { action: "switch_account_8", defaultKey: "Cmd+8", description: "Switch to account 8", category: "Other" },
+  { action: "switch_account_9", defaultKey: "Cmd+9", description: "Switch to account 9", category: "Other" },
 
   // Other
   { action: "command_palette", defaultKey: "Cmd+k", description: "Command palette", category: "Other" },

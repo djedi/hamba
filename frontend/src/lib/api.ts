@@ -420,6 +420,7 @@ export interface Account {
   provider_type: "gmail" | "imap";
   created_at: number;
   tokenStatus?: "valid" | "expired" | "unknown";
+  unread_count?: number;
 }
 
 export interface ImapAccountParams {
