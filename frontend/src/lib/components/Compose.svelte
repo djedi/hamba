@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { api, type Email, type Draft, type Signature } from "$lib/api";
-  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails, snippets, snippetActions, composePrefillBody } from "$lib/stores";
+  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails, snippets, snippetActions, composePrefillBody, sentEmails } from "$lib/stores";
   import EmailInput from "./EmailInput.svelte";
   import { get } from "svelte/store";
 
@@ -64,7 +64,8 @@
 
   let fileInput: HTMLInputElement;
   let bodyTextarea: HTMLTextAreaElement;
-  let draftId = draft?.id || crypto.randomUUID();
+  const generatedDraftId = crypto.randomUUID();
+  let draftId = $derived(draft?.id || generatedDraftId);
   let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   let lastSavedContent = "";
 
@@ -512,18 +513,19 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
         },
       });
 
-      // Handle reminder setting after the email is sent (after undo window)
-      if (savedReminderDays !== null) {
-        setTimeout(async () => {
-          if (undone) return; // Don't set reminder if undone
+      // After the undo window, refresh the sent emails cache
+      setTimeout(async () => {
+        if (undone) return; // Don't refresh if undone
 
-          try {
-            // Sync sent folder to get the sent email
-            await api.syncSentEmails(accountId);
-            // Get sent emails and find the one we just sent
-            const sentEmails = await api.getSentEmails(accountId, 10);
+        try {
+          // Refresh sent emails cache so the sent folder shows the new email
+          const updatedSent = await api.getSentEmails(accountId);
+          sentEmails.update(c => ({ ...c, [accountId]: updatedSent }));
+
+          // Handle reminder setting if configured
+          if (savedReminderDays !== null) {
             // Find the email that matches our subject and recipient (best effort)
-            const sentEmail = sentEmails.find(
+            const sentEmail = updatedSent.find(
               e => e.subject === sendData.subject && e.to_addresses.includes(sendData.to.split(',')[0])
             );
             if (sentEmail) {
@@ -531,12 +533,12 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
               const remindAt = Math.floor(Date.now() / 1000) + (savedReminderDays * 24 * 60 * 60);
               await api.setReminder(sentEmail.id, remindAt);
             }
-          } catch (e) {
-            console.error("Failed to set reminder on sent email:", e);
-            // Don't show error to user - the email was sent successfully
           }
-        }, undoWindowMs + 2000); // Wait a bit after undo window for the email to be sent
-      }
+        } catch (e) {
+          console.error("Failed to refresh sent emails:", e);
+          // Don't show error to user - the email was sent successfully
+        }
+      }, undoWindowMs + 1000); // Wait a bit after undo window for the email to be sent
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to send";
       sending = false;

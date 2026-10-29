@@ -24,6 +24,7 @@
     showToast,
     currentFolder,
     drafts,
+    sentEmails,
     labels,
     selectedLabelId,
     labelActions,
@@ -181,9 +182,12 @@
         // Subscribe to real-time updates for all accounts
         accts.forEach(acct => subscribe(acct.id));
 
-        // Load labels, snippets and emails with URL param to restore view state
+        // Load labels, snippets, drafts, sent and emails with URL param to restore view state
         await labelActions.loadLabels(firstAccountId);
         await snippetActions.loadSnippets(firstAccountId);
+        // Load drafts and sent in background for instant folder switching
+        api.getDrafts(firstAccountId).then(d => drafts.set(d)).catch(() => {});
+        api.getSentEmails(firstAccountId).then(s => sentEmails.update(c => ({ ...c, [firstAccountId]: s }))).catch(() => {});
         await loadEmails(firstAccountId, emailIdFromUrl);
 
         // Start auto-sync as fallback (for Gmail without push)
@@ -206,6 +210,20 @@
     }
     disconnect();
   });
+
+  // Sync sent folder from the provider and refresh the cache (and the list if still viewing it)
+  function refreshSentEmails(accountId: string) {
+    api.syncSentEmails(accountId)
+      .catch(() => {})
+      .then(() => api.getSentEmails(accountId, PAGE_SIZE, 0))
+      .then(msgs => {
+        sentEmails.update(c => ({ ...c, [accountId]: msgs }));
+        if ($currentFolder === "sent" && $selectedAccountId === accountId) {
+          mergeEmails(msgs);
+        }
+      })
+      .catch(() => {});
+  }
 
   // Handle real-time WebSocket messages
   function handleRealtimeMessage(data: any) {
@@ -299,9 +317,15 @@
       if (targetFolder === "starred") {
         msgs = await api.getStarredEmails(accountId, PAGE_SIZE, 0);
       } else if (targetFolder === "sent") {
-        // Sync sent emails first, then load them
-        await api.syncSentEmails(accountId);
-        msgs = await api.getSentEmails(accountId, PAGE_SIZE, 0);
+        // Use cached sent emails for instant display, then revalidate in background
+        const cached = $sentEmails[accountId];
+        if (cached) {
+          msgs = cached;
+        } else {
+          msgs = await api.getSentEmails(accountId, PAGE_SIZE, 0);
+          sentEmails.update(c => ({ ...c, [accountId]: msgs }));
+        }
+        refreshSentEmails(accountId);
       } else if (targetFolder === "trash") {
         msgs = await api.getTrashedEmails(accountId, PAGE_SIZE, 0);
       } else if (targetFolder === "archive") {

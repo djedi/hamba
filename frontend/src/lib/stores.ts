@@ -87,6 +87,9 @@ export const emailLabelsCache = writable<Map<string, Label[]>>(new Map());
 // Drafts store
 export const drafts = writable<Draft[]>([]);
 
+// Sent emails cache keyed by account ID (for instant folder switch)
+export const sentEmails = writable<Record<string, Email[]>>({});
+
 // Scheduled emails store
 export const scheduledEmails = writable<ScheduledEmail[]>([]);
 

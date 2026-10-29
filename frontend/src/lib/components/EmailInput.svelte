@@ -19,7 +19,7 @@
   let loading = $state(false);
   let searchQuery = $state("");
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let dropdownElement: HTMLDivElement;
+  let dropdownElement = $state<HTMLDivElement | null>(null);
 
   // Get the current token being edited (after the last comma)
   function getCurrentToken(inputValue: string, cursorPos: number): { token: string; start: number; end: number } {
