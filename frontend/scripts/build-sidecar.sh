@@ -32,7 +32,9 @@ echo "Building backend sidecar for $TARGET_TRIPLE..."
 
 cd "$BACKEND_DIR"
 
-# Build standalone executable with bun
-bun build --compile --minify ./src/index.ts --outfile "$OUTPUT_DIR/backend-$TARGET_TRIPLE"
+# Build optimized Rust binary and copy it where Tauri expects the sidecar
+cargo build --release
+mkdir -p "$OUTPUT_DIR"
+cp target/release/hamba-backend "$OUTPUT_DIR/backend-$TARGET_TRIPLE"
 
 echo "Sidecar built: $OUTPUT_DIR/backend-$TARGET_TRIPLE"

@@ -1,0 +1,37 @@
+[package]
+name = "hamba-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+regex = "1"
+futures = "0.3"
+tracing = "0.1"
+async-trait = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
+base64 = "0.22"
+mail-parser = "0.11"
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls-tls", "hostname"] }
+async-imap = { version = "0.10", default-features = false, features = ["runtime-tokio"] }
+tokio-rustls = "0.26"
+webpki-roots = "1"
+urlencoding = "2"
+chrono = "0.4"
+dotenvy = "0.15"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+memory-stats = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

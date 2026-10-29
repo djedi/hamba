@@ -53,11 +53,16 @@ run_backend() {
     cd "$SCRIPT_DIR/backend"
 
     if [ "$report" = true ]; then
-        bun run test:coverage
-        echo -e "${GREEN}Coverage report generated.${NC}"
-        # Bun coverage outputs to console by default, HTML reports need additional setup
+        if cargo llvm-cov --version >/dev/null 2>&1; then
+            cargo llvm-cov --html
+            echo -e "${GREEN}Opening coverage report...${NC}"
+            open target/llvm-cov/html/index.html 2>/dev/null || xdg-open target/llvm-cov/html/index.html 2>/dev/null || echo "Coverage report at: backend/target/llvm-cov/html/index.html"
+        else
+            echo -e "${RED}Coverage needs cargo-llvm-cov: cargo install cargo-llvm-cov${NC}"
+            cargo test
+        fi
     else
-        bun run test
+        cargo test
     fi
 }
 

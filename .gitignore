@@ -36,3 +36,6 @@ frontend/src-tauri/target/
 *.log
 npm-debug.log*
 frontend/coverage/
+
+# Tauri sidecar binaries (built by frontend/scripts/build-sidecar.sh)
+frontend/src-tauri/binaries/

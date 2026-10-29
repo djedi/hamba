@@ -1,41 +1,39 @@
 # Backend Dockerfile
-# Uses Bun runtime for running the Elysia API server
+# Builds the Rust (axum) API server
 
-FROM oven/bun:1 AS base
+FROM rust:1-slim-bookworm AS builder
 WORKDIR /app
 
-# Install dependencies
-FROM base AS deps
-COPY package.json bun.lock ./
-RUN bun install
+# Cache dependencies separately from sources
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src
+
+COPY . .
+RUN touch src/main.rs && cargo build --release
+
+# Development image: run with hot rebuild via `cargo run` (see docker-compose.dev.yml)
+FROM builder AS dev
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+CMD ["cargo", "run"]
 
 # Production image
-FROM base AS runner
+FROM debian:bookworm-slim AS runner
 WORKDIR /app
 
-# Create non-root user for security
-RUN groupadd --system --gid 1001 nodejs && \
-    useradd --system --uid 1001 --gid nodejs hamba
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* && \
+    groupadd --system --gid 1001 hamba && \
+    useradd --system --uid 1001 --gid hamba hamba && \
+    mkdir -p /app/data && chown -R hamba:hamba /app/data
 
-# Copy dependencies and source
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-
-# Create data directory for SQLite database
-RUN mkdir -p /app/data && chown -R hamba:nodejs /app/data
+COPY --from=builder /app/target/release/hamba-backend /usr/local/bin/hamba-backend
 
 USER hamba
 
-# Expose API port
-EXPOSE 3001
-
-# Default environment variables
-ENV NODE_ENV=production
-ENV PORT=3001
+EXPOSE 8877
+ENV PORT=8877
 
 # The database file will be stored in /app/data
 # Mount a volume to persist it: -v ./data:/app/data
 ENV DATABASE_PATH=/app/data/hamba.db
 
-# Start the server
-CMD ["bun", "run", "src/index.ts"]
+CMD ["hamba-backend"]

@@ -10,7 +10,7 @@ Hamba is a keyboard-driven email client (Superhuman alternative). It supports bo
 
 **Development (run both):**
 ```bash
-cd backend && bun run dev     # API at localhost:8877
+cd backend && cargo run       # API at localhost:8877 (loads ../.env)
 cd frontend && bun run dev    # Web at localhost:8878
 ```
 
@@ -37,11 +37,12 @@ cd frontend && bun run check
 
 ### Provider Abstraction
 
-Email operations are abstracted via `EmailProvider` interface (`backend/src/services/providers/types.ts`). Two implementations exist:
-- `GmailProvider` - Uses Gmail API with OAuth tokens
-- `ImapSmtpProvider` - Uses imapflow/nodemailer for self-hosted email
+The backend is Rust (axum + tokio + rusqlite) in `backend/`. Email operations are abstracted via the `EmailProvider` trait (`backend/src/providers/mod.rs`). Implementations:
+- `GmailProvider` - Gmail API with OAuth tokens
+- `MicrosoftProvider` - Microsoft Graph with OAuth tokens
+- `ImapSmtpProvider` / `YahooProvider` - IMAP (async-imap) + SMTP (lettre); shared logic lives in `providers/imap_common.rs`
 
-The factory `getProvider(accountId)` returns the correct provider based on `account.provider_type`.
+The factory `get_provider(&state, account_id)` returns the correct provider based on `accounts.provider_type`. Shared DB writes (email/label/draft upserts) live in `backend/src/emails_db.rs`. `state.db.conn()` returns a mutex guard — never hold it across an `.await`.
 
 ### Frontend State
 
@@ -61,17 +62,14 @@ Email HTML is rendered in a sandboxed iframe (`EmailView.svelte`) for CSS isolat
 
 ### Database
 
-SQLite via `bun:sqlite`. Tables: `accounts`, `emails`, `attachments`, `drafts`, `labels`, `snippets`, `contacts`, `signatures`, etc. FTS5 virtual table `emails_fts` for search.
+SQLite via `rusqlite` (bundled, WAL mode). Tables: `accounts`, `emails`, `attachments`, `drafts`, `labels`, `snippets`, `contacts`, `signatures`, etc. FTS5 virtual table `emails_fts` for search.
 
 **Migrations:**
 ```bash
-cd backend && bun run migrate              # Run pending migrations
-cd backend && bun run migrate:status       # Show migration status
-cd backend && bun run migrate:rollback     # Rollback last migration
-cd backend && bun run migrate:create name  # Create new migration
+cd backend && cargo run -- migrate        # Apply pending migrations and show status
 ```
 
-Migration files live in `backend/src/db/migrations/`. Each migration exports `up()` and `down()` functions. The system automatically bootstraps existing databases when first run.
+Migrations run automatically on startup. They are SQL files in `backend/src/migrations/`, registered in the `MIGRATIONS` list in `backend/src/db.rs` (versions are tracked in the `_migrations` table, compatible with databases created by the old TypeScript backend). To add one, create `NNN_name.sql` and append it to that list. Pre-migration databases are bootstrapped automatically.
 
 ## Environment
 
@@ -110,7 +108,7 @@ SENTRY_DSN=...          # Optional: Error tracking via Sentry
 
 ### IMAP Accounts
 IMAP accounts use **IDLE** for instant notifications. When new mail arrives:
-1. IMAP server notifies the persistent connection (`imap-idle.ts`)
+1. IMAP server notifies the persistent connection (`backend/src/services/imap_idle.rs`)
 2. Backend triggers a quick sync and notifies via WebSocket
 3. Frontend receives WebSocket message and refreshes email list
 
@@ -128,10 +126,8 @@ Gmail uses polling (every 60s) as fallback. For true push notifications:
 
 ## Testing
 
-Unit tests live alongside the files they test (e.g., `stores.ts` → `stores.test.ts`).
-
-- **Frontend**: Vitest with jsdom, `@testing-library/svelte`
-- **Backend**: Bun's built-in test runner
+- **Frontend**: Vitest with jsdom, `@testing-library/svelte`; tests live alongside files (`stores.ts` → `stores.test.ts`)
+- **Backend**: `cargo test`; unit tests in `#[cfg(test)]` modules, HTTP tests against an in-memory DB in `backend/src/api_tests.rs`. CI also runs `cargo clippy --all-targets -- -D warnings`.
 
 Run `./test --help` for all options.
 
@@ -144,7 +140,7 @@ OpenAPI/Swagger documentation is available at `http://localhost:8877/docs` when 
 
 ## Logging & Monitoring
 
-The backend uses structured logging via `backend/src/services/logger.ts`. Key features:
+The backend uses `tracing` for structured logging; request metrics and the error buffer live in `backend/src/services/metrics.rs`. Key features:
 
 **Structured Logging:**
 - JSON output in production (`LOG_FORMAT=json`), human-readable in development
@@ -159,27 +155,13 @@ The backend uses structured logging via `backend/src/services/logger.ts`. Key fe
 - `GET /errors/recent` - Recent error log for debugging
 
 **Usage in Code:**
-```typescript
-import { logger, metrics, errorTracking } from "./services/logger";
+```rust
+tracing::info!(service = "sync", account_id, count = 5, "Operation completed");
+tracing::error!(error = %e, "Operation failed");
 
-// Basic logging
-logger.info("Operation completed", { accountId, count: 5 });
-logger.error("Operation failed", error, { context: "sync" });
-
-// Child logger with default context
-const syncLogger = logger.child({ service: "sync" });
-syncLogger.info("Starting sync");
-
-// Performance metrics
-const result = await metrics.measure("db.query", async () => {
-  return await db.query(...);
-});
-
-// Manual timing
-metrics.timing("operation.duration", durationMs, { type: "sync" });
-
-// Error tracking
-errorTracking.captureException(error, { userId, action });
+// Metrics and the /errors/recent buffer
+crate::services::metrics::timing("operation.duration", duration_ms, json!({ "type": "sync" }));
+crate::services::metrics::record_error("Operation failed", json!({ "context": "sync" }));
 ```
 
 ## Docker Deployment
@@ -230,7 +212,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 ### Docker Architecture
 
-- **backend/Dockerfile**: Bun-based API server (Elysia framework)
+- **backend/Dockerfile**: Rust API server (multi-stage: `dev` target runs `cargo run`, `runner` is a slim image with the release binary)
 - **frontend/Dockerfile**: SvelteKit static build served by nginx
 - **docker-compose.yml**: Production configuration
 - **docker-compose.dev.yml**: Development override with hot reload
@@ -286,7 +268,7 @@ GitHub Actions workflows are configured in `.github/workflows/`:
 ### CI Workflow (ci.yml)
 Runs on all pushes and pull requests to master:
 - **Lint & Typecheck**: Runs `bun run check` on frontend
-- **Backend Tests**: Runs `bun test` in backend
+- **Backend Tests**: Runs `cargo clippy` and `cargo test` in backend
 - **Frontend Tests**: Runs `bun run test` in frontend
 - **Build**: Builds frontend after all checks pass
 

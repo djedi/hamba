@@ -79,21 +79,21 @@
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | SvelteKit + Svelte 5 |
-| Backend | Bun + Elysia |
-| Database | SQLite (bun:sqlite) |
-| Desktop | Tauri |
-| Email | Gmail API, Microsoft Graph, IMAP/SMTP |
-| AI | Anthropic Claude API |
+| Layer    | Technology                            |
+| -------- | ------------------------------------- |
+| Frontend | SvelteKit + Svelte 5                  |
+| Backend  | Rust (axum + tokio)                   |
+| Database | SQLite (rusqlite)                     |
+| Desktop  | Tauri                                 |
+| Email    | Gmail API, Microsoft Graph, IMAP/SMTP |
+| AI       | Anthropic Claude API                  |
 
 ## Installation
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) v1.0 or later
-- [Rust](https://rustup.rs) (only for Tauri desktop builds)
+- [Bun](https://bun.sh) v1.0 or later (frontend)
+- [Rust](https://rustup.rs) stable (backend and Tauri desktop builds)
 
 ### Quick Start
 
@@ -104,8 +104,7 @@ cd hamba
 
 # Install dependencies
 bun install
-cd backend && bun install
-cd ../frontend && bun install
+cd frontend && bun install
 cd ..
 
 # Configure environment (see Configuration section)
@@ -113,7 +112,7 @@ cp backend/.env.example .env
 # Edit .env with your OAuth credentials
 
 # Start development servers
-cd backend && bun run dev     # Terminal 1: API at localhost:8877
+cd backend && cargo run       # Terminal 1: API at localhost:8877
 cd frontend && bun run dev    # Terminal 2: Web at localhost:8878
 ```
 
@@ -135,6 +134,7 @@ A `dev` script is provided for easy Docker Compose management:
 ```
 
 **Ports:**
+
 - Frontend: http://localhost:8878
 - Backend API: http://localhost:8877
 
@@ -172,6 +172,7 @@ REDIRECT_URI=http://localhost:8877/auth/callback
 ```
 
 **Setup steps:**
+
 1. Go to [Google Cloud Console](https://console.cloud.google.com)
 2. Create or select a project
 3. Enable the Gmail API
@@ -188,6 +189,7 @@ MICROSOFT_REDIRECT_URI=http://localhost:8877/auth/microsoft/callback
 ```
 
 **Setup steps:**
+
 1. Register new application at Azure Portal
 2. Select "Accounts in any organizational directory and personal Microsoft accounts"
 3. Add Web redirect URI: `http://localhost:8877/auth/microsoft/callback`
@@ -254,49 +256,49 @@ SENTRY_DSN=your_sentry_dsn  # Error tracking
 
 ### Navigation
 
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Navigate down / up |
-| `o` / `Enter` | Open email |
-| `u` / `Escape` | Back to inbox |
-| `g` | Go to top |
-| `Shift+G` | Go to bottom |
-| `/` | Focus search |
-| `Cmd+K` | Command palette |
-| `?` | Show all shortcuts |
+| Key            | Action             |
+| -------------- | ------------------ |
+| `j` / `k`      | Navigate down / up |
+| `o` / `Enter`  | Open email         |
+| `u` / `Escape` | Back to inbox      |
+| `g`            | Go to top          |
+| `Shift+G`      | Go to bottom       |
+| `/`            | Focus search       |
+| `Cmd+K`        | Command palette    |
+| `?`            | Show all shortcuts |
 
 ### Actions
 
-| Key | Action |
-|-----|--------|
-| `e` / `y` | Archive |
-| `#` | Move to trash |
-| `s` | Star / unstar |
+| Key       | Action               |
+| --------- | -------------------- |
+| `e` / `y` | Archive              |
+| `#`       | Move to trash        |
+| `s`       | Star / unstar        |
 | `Shift+I` | Toggle read / unread |
-| `h` | Snooze |
-| `l` | Apply label |
+| `h`       | Snooze               |
+| `l`       | Apply label          |
 
 ### Compose
 
-| Key | Action |
-|-----|--------|
-| `c` | Compose new |
-| `r` | Reply |
-| `a` | Reply all |
-| `f` | Forward |
-| `Cmd+J` | AI compose |
-| `Cmd+Enter` | Send |
-| `Cmd+Shift+C` | Add Cc |
-| `Cmd+Shift+B` | Add Bcc |
+| Key           | Action      |
+| ------------- | ----------- |
+| `c`           | Compose new |
+| `r`           | Reply       |
+| `a`           | Reply all   |
+| `f`           | Forward     |
+| `Cmd+J`       | AI compose  |
+| `Cmd+Enter`   | Send        |
+| `Cmd+Shift+C` | Add Cc      |
+| `Cmd+Shift+B` | Add Bcc     |
 
 ### View
 
-| Key | Action |
-|-----|--------|
-| `Space` | Scroll down (95%) |
-| `Shift+Space` | Scroll up (95%) |
-| `Shift+R` | Sync emails |
-| `Cmd+1-9` | Switch accounts |
+| Key           | Action            |
+| ------------- | ----------------- |
+| `Space`       | Scroll down (95%) |
+| `Shift+Space` | Scroll up (95%)   |
+| `Shift+R`     | Sync emails       |
+| `Cmd+1-9`     | Switch accounts   |
 
 ## API Documentation
 
@@ -331,15 +333,13 @@ Tests live alongside source files (e.g., `stores.ts` → `stores.test.ts`).
 
 ```
 hamba/
-├── backend/
+├── backend/                      # Rust API server
 │   └── src/
-│       ├── index.ts              # Elysia server entry point
-│       ├── db/                   # SQLite database & migrations
-│       ├── routes/               # API routes
-│       └── services/
-│           ├── providers/        # Gmail, IMAP, Microsoft, Yahoo
-│           ├── logger.ts         # Structured logging
-│           └── ai.ts             # AI features
+│       ├── main.rs               # axum server entry point
+│       ├── db.rs, migrations/    # SQLite database & migrations
+│       ├── routes/               # API routes (emails, auth, ai, ...)
+│       ├── providers/            # Gmail, IMAP, Microsoft, Yahoo
+│       └── services/             # IMAP IDLE, send queues, tokens, metrics
 ├── frontend/
 │   ├── src/
 │   │   ├── lib/
@@ -358,20 +358,11 @@ hamba/
 ## Database Migrations
 
 ```bash
-cd backend
-
-# Run pending migrations
-bun run migrate
-
-# Check migration status
-bun run migrate:status
-
-# Rollback last migration
-bun run migrate:rollback
-
-# Create new migration
-bun run migrate:create add_feature_table
+# Migrations run automatically on startup; this applies them and prints status
+cd backend && cargo run -- migrate
 ```
+
+To add a migration, create `backend/src/migrations/NNN_name.sql` and register it in `MIGRATIONS` in `backend/src/db.rs`.
 
 ## Contributing
 
@@ -380,13 +371,14 @@ We welcome contributions! Here's how to get started:
 ### Development Setup
 
 1. Fork and clone the repository
-2. Install dependencies: `bun install` in root, backend, and frontend
+2. Install dependencies: `bun install` in root and frontend
 3. Copy `.env.example` to `.env` and configure
 4. Start development servers (see Installation)
 
 ### Code Style
 
-- TypeScript strict mode is enabled
+- Backend: `cargo fmt` and `cargo clippy -- -D warnings` must pass
+- Frontend: TypeScript strict mode is enabled
 - Use Svelte 5 runes for frontend state
 - Follow existing patterns in the codebase
 - Write tests for new functionality
@@ -405,7 +397,7 @@ Please use [GitHub Issues](https://github.com/yourusername/hamba/issues) to repo
 
 - Steps to reproduce (for bugs)
 - Expected vs actual behavior
-- Your environment (OS, Bun version, browser)
+- Your environment (OS, Rust/Bun versions, browser)
 
 ## License
 
