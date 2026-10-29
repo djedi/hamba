@@ -266,14 +266,14 @@ The backend exposes health endpoints used by Docker:
 GitHub Actions workflows are configured in `.github/workflows/`:
 
 ### CI Workflow (ci.yml)
-Runs on all pushes and pull requests to master:
+Runs on all pushes and pull requests to main:
 - **Lint & Typecheck**: Runs `bun run check` on frontend
 - **Backend Tests**: Runs `cargo clippy` and `cargo test` in backend
 - **Frontend Tests**: Runs `bun run test` in frontend
 - **Build**: Builds frontend after all checks pass
 
 ### Deploy Workflow (deploy.yml)
-Runs on pushes to master and manual triggers:
+Runs on pushes to main and manual triggers:
 - Builds Docker images for backend and frontend
 - Pushes to GitHub Container Registry (ghcr.io)
 - Images are tagged with commit SHA and `latest`

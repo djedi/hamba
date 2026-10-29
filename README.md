@@ -385,7 +385,7 @@ We welcome contributions! Here's how to get started:
 
 ### Pull Request Process
 
-1. Create a feature branch from `master`
+1. Create a feature branch from `main`
 2. Make your changes with clear commit messages
 3. Ensure all tests pass: `./test`
 4. Ensure type checking passes: `cd frontend && bun run check`
