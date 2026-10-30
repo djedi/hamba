@@ -3,6 +3,7 @@
  */
 
 import { writable, get } from "svelte/store";
+import { API_URL } from "./api";
 
 type MessageHandler = (data: any) => void;
 
@@ -25,7 +26,16 @@ let currentReconnectDelay = INITIAL_RECONNECT_DELAY;
 // Subscriptions to re-subscribe after reconnect
 const activeSubscriptions = new Set<string>();
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8877/ws";
+// Derived from the API URL unless set explicitly; a relative API URL means same origin
+function defaultWsUrl(): string {
+  if (API_URL.startsWith("/")) {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    return `${proto}://${location.host}${API_URL}/ws`;
+  }
+  return `${API_URL.replace(/^http/, "ws")}/ws`;
+}
+
+const WS_URL = import.meta.env.VITE_WS_URL ?? defaultWsUrl();
 
 export function connect(): void {
   if (ws?.readyState === WebSocket.OPEN) {

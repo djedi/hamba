@@ -54,7 +54,7 @@
     threadError = null;
 
     try {
-      const emails = await api.getThread(threadId);
+      const emails = await api.getThread(threadId, $selectedEmail?.account_id);
       threadEmails = emails;
 
       // By default, expand only the selected email or the last email in thread

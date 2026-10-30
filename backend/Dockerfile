@@ -4,6 +4,9 @@
 FROM rust:1-slim-bookworm AS builder
 WORKDIR /app
 
+# OpenSSL is needed by webauthn-rs (passkeys)
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+
 # Cache dependencies separately from sources
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src
@@ -20,7 +23,7 @@ CMD ["cargo", "run"]
 FROM debian:bookworm-slim AS runner
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* && \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl libssl3 && rm -rf /var/lib/apt/lists/* && \
     groupadd --system --gid 1001 hamba && \
     useradd --system --uid 1001 --gid hamba hamba && \
     mkdir -p /app/data && chown -R hamba:hamba /app/data

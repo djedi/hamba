@@ -13,7 +13,6 @@ build/
 
 # Bun
 *.bun-build
-bun.lock
 
 # Database
 *.db
@@ -41,4 +40,3 @@ frontend/coverage/
 frontend/src-tauri/binaries/
 
 # Host ports chosen by `make up`
-.dev-ports

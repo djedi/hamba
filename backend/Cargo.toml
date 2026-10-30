@@ -10,6 +10,7 @@ tower-http = { version = "0.6", features = ["cors"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 uuid = { version = "1", features = ["v4"] }
 regex = "1"
 futures = "0.3"
@@ -27,6 +28,8 @@ chrono = "0.4"
 dotenvy = "0.15"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 memory-stats = "1"
+argon2 = "0.5"
+webauthn-rs = { version = "0.5", features = ["conditional-ui"] }
 
 [profile.release]
 lto = true

@@ -82,6 +82,9 @@ REDIRECT_URI=http://localhost:8877/auth/callback
 # Optional: For AI email composition (Cmd+J in compose)
 ANTHROPIC_API_KEY=...
 
+# Optional: Read receipts + link tracking (public URL of the backend, e.g. a tunnel)
+PUBLIC_URL=https://mail.example.com
+
 # Optional: Logging configuration
 LOG_LEVEL=info          # debug, info, warn, error
 LOG_FORMAT=json         # Set to 'json' for production, omit for human-readable
@@ -131,12 +134,17 @@ Gmail uses polling (every 60s) as fallback. For true push notifications:
 
 Run `./test --help` for all options.
 
+## App Login
+
+The app itself requires a login (`backend/src/routes/session.rs`): username/password (argon2) plus optional passkeys (webauthn-rs; relying party derived from `FRONTEND_URL`, so passkeys need https or localhost). Sessions are an HttpOnly `hamba_session` cookie. Middleware `require_auth` guards every route except `/health`, `/session/{status,setup,login,logout,passkeys/login/*}`, `/api/v1/*` (Bearer keys), `/docs*`, and `/t/*` (tracking). With no user yet, the frontend shows a setup screen. Reset a password with `hamba-backend set-password <username>` (password from `HAMBA_PASSWORD` or stdin). `HAMBA_AUTH=off` disables it (the Tauri sidecar does this). Tests build `AppState { auth: false }`.
+
+Production web builds use `VITE_API_URL=/api`: the reverse proxy serves the frontend at `/` and the backend at `/api/*` with the prefix stripped (except `/api/v1/*`, passed through as-is). Set `FRONTEND_URL=https://<host>`, `REDIRECT_URI=https://<host>/api/auth/callback`, `PUBLIC_URL=https://<host>/api`.
+
 ## API Documentation
 
-OpenAPI/Swagger documentation is available at `http://localhost:8877/docs` when the backend is running. The documentation includes:
-- All API endpoints organized by tags (Auth, Emails, Drafts, Labels, Contacts, AI, Snippets, Signatures)
-- Request/response schemas
-- Interactive "Try it out" functionality via Swagger UI
+The public read-only API lives under `/api/v1` (`backend/src/routes/v1.rs`) and requires `Authorization: Bearer hamba_...`. Keys are created/revoked in Settings -> API (management routes at `/api-keys`, `routes/api_keys.rs`; only a SHA-256 hash is stored). Endpoints: accounts, emails (list/get/attachments), threads, search.
+
+Scalar docs are served at `http://localhost:8877/docs`; the hand-written OpenAPI 3.1 spec is `backend/openapi_v1.json` (served at `/docs/openapi.json`). Update it whenever `/api/v1` changes. The internal app API (everything else) is undocumented.
 
 ## Logging & Monitoring
 
@@ -171,7 +179,7 @@ The application can be run in Docker containers for production deployment or con
 ### Makefile (Recommended)
 
 ```bash
-make up                  # Start in background on free ports, wait, open the browser
+make up                  # Start in background, wait, open the browser
 make down                # Stop and remove containers
 make restart             # Restart (backend recompiles)
 make logs                # Follow logs (SERVICE=backend|frontend for one)
@@ -182,7 +190,7 @@ make clean               # Remove containers and volumes (asks first)
 make help                # All targets
 ```
 
-**Ports:** `make up` picks free host ports on first run and saves them to `.dev-ports` (gitignored), so they don't collide with other Docker services and stay stable between runs. `make status` prints the URLs. Pin them with `BACKEND_PORT=8877 FRONTEND_PORT=8878 make up` (OAuth redirect URIs are registered against a fixed port), or run `make reset-ports` to pick new ones. The backend gets `FRONTEND_URL` (CORS and post-login redirect) and the frontend gets `VITE_API_URL`/`VITE_WS_URL` from these ports.
+**Ports:** the dev stack uses fixed, uncommon host ports (backend `56003`, frontend `5273`) so it doesn't collide with other local services. `make status` prints the URLs. Override with `BACKEND_PORT=8877 FRONTEND_PORT=8878 make up` (e.g. when OAuth redirect URIs are registered against a specific port). The backend gets `FRONTEND_URL` (CORS and post-login redirect) and the frontend gets `VITE_API_URL`/`VITE_WS_URL` from these ports.
 
 ### Quick Start (Production)
 

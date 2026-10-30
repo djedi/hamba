@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 
 # Install dependencies
-RUN bun install
+RUN bun install --frozen-lockfile
 
 # Copy source files
 COPY . .
@@ -22,6 +22,9 @@ CMD ["bun", "run", "dev", "--host", "0.0.0.0", "--port", "8878"]
 
 # Builder stage - builds static site for production
 FROM dev AS builder
+
+# Call the API on the same origin under /api (the reverse proxy strips the prefix)
+ENV VITE_API_URL=/api
 
 # Build the static site
 RUN bun run build

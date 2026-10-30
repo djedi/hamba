@@ -119,7 +119,7 @@ cd frontend && bun run dev    # Terminal 2: Web at localhost:8878
 ### Docker Development
 
 ```bash
-make up                  # Start in background on free ports, wait, open the browser
+make up                  # Start in background, wait, open the browser
 make down                # Stop and remove containers
 make restart             # Restart (backend recompiles)
 make logs                # Follow logs (SERVICE=backend|frontend for one)
@@ -130,7 +130,7 @@ make clean               # Remove containers and volumes (asks first)
 make help                # All targets
 ```
 
-**Ports:** `make up` picks free host ports on first run and saves them to `.dev-ports` (gitignored), so they don't collide with other Docker services and stay stable between runs. `make status` prints the URLs. Pin them with `BACKEND_PORT=8877 FRONTEND_PORT=8878 make up` (OAuth redirect URIs are registered against a fixed port), or run `make reset-ports` to pick new ones. The backend gets `FRONTEND_URL` (CORS and post-login redirect) and the frontend gets `VITE_API_URL`/`VITE_WS_URL` from these ports.
+**Ports:** the dev stack uses fixed, uncommon host ports (backend `56003`, frontend `5273`) so it doesn't collide with other local services. `make status` prints the URLs. Override with `BACKEND_PORT=8877 FRONTEND_PORT=8878 make up` (e.g. when OAuth redirect URIs are registered against a specific port). The backend gets `FRONTEND_URL` (CORS and post-login redirect) and the frontend gets `VITE_API_URL`/`VITE_WS_URL` from these ports.
 
 ### Docker Production Deployment
 
@@ -298,7 +298,7 @@ SENTRY_DSN=your_sentry_dsn  # Error tracking
 
 When the backend is running, interactive API documentation is available at:
 
-- **Swagger UI**: http://localhost:8877/docs
+- **API docs (Scalar)**: http://localhost:8877/docs
 - **Health Check**: http://localhost:8877/health
 - **Metrics**: http://localhost:8877/metrics
 

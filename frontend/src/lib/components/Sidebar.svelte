@@ -1,18 +1,17 @@
 <script lang="ts">
-  import { Inbox, Star, Send, FilePen, AlarmClock, Bell, CalendarClock, Trash2, Archive, Settings, Hourglass, RefreshCw } from "@lucide/svelte";
-  import { accounts, selectedAccountId, unreadCount, unreadCounts, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions, scheduledEmails, isSettingsOpen } from "$lib/stores";
+  import { Inbox, Star, Send, FilePen, AlarmClock, Bell, CalendarClock, Trash2, Archive, Settings, Hourglass, RefreshCw, Sun, Monitor, Moon, Keyboard } from "@lucide/svelte";
+  import { unreadCount, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions, scheduledEmails, isSettingsOpen, isShortcutOverlayOpen } from "$lib/stores";
   import { isOnline, pendingActionsCount, syncNow } from "$lib/offline";
+  import { themePreference, type ThemePreference } from "$lib/theme";
   import ConnectionStatus from "./ConnectionStatus.svelte";
-  import AccountAvatar from "./AccountAvatar.svelte";
 
   interface Props {
     onSync: () => void;
-    onAddAccount: () => void;
     onManageLabels?: () => void;
     onManageSnippets?: () => void;
   }
 
-  let { onSync, onAddAccount, onManageLabels, onManageSnippets }: Props = $props();
+  let { onSync, onManageLabels, onManageSnippets }: Props = $props();
 
   function goToInbox() {
     currentFolder.set("inbox");
@@ -104,11 +103,17 @@
     url.searchParams.delete("email");
     window.history.pushState({}, "", url);
   }
+
+  const themeOptions: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
+    { value: "light", label: "Light", icon: Sun },
+    { value: "system", label: "System", icon: Monitor },
+    { value: "dark", label: "Dark", icon: Moon },
+  ];
 </script>
 
 <aside class="sidebar">
   <div class="logo">
-    <img src="/favicon-16x16.png" alt="Hamba" class="logo-icon" width="16" height="16" />
+    <img src="/favicon-96x96.png" alt="Hamba" class="logo-icon" width="22" height="22" />
     <span class="logo-text">Hamba</span>
   </div>
 
@@ -184,30 +189,6 @@
     </div>
   {/if}
 
-  <div class="accounts">
-    <h3>Accounts</h3>
-    {#each $accounts as account, i}
-      <button
-        class="account"
-        class:active={account.id === $selectedAccountId}
-        onclick={() => selectedAccountId.set(account.id)}
-        title={`${account.email} (⌘${i + 1})`}
-      >
-        <span class="account-indicator" class:active={account.id === $selectedAccountId}></span>
-        <AccountAvatar {account} size={28} />
-        <span class="account-email">{account.email}</span>
-        {#if ($unreadCounts[account.id] ?? account.unread_count ?? 0) > 0}
-          <span class="badge account-badge">{$unreadCounts[account.id] ?? account.unread_count}</span>
-        {/if}
-      </button>
-    {/each}
-    <button class="account add" onclick={onAddAccount}>
-      <span class="account-indicator"></span>
-      <span class="account-avatar">+</span>
-      <span class="account-email">Add account</span>
-    </button>
-  </div>
-
   <div class="snippets-section">
     <div class="snippets-header">
       <h4>Snippets</h4>
@@ -218,34 +199,9 @@
     <div class="snippet-hint">Type <code>;shortcut</code> in compose</div>
   </div>
 
-  <div class="shortcuts">
-    <h4>Shortcuts</h4>
-    <div class="shortcut"><kbd>j</kbd><kbd>k</kbd> navigate</div>
-    <div class="shortcut"><kbd>o</kbd> open</div>
-    <div class="shortcut"><kbd>gi</kbd> inbox</div>
-    <div class="shortcut"><kbd>gs</kbd> starred</div>
-    <div class="shortcut"><kbd>gt</kbd> sent</div>
-    <div class="shortcut"><kbd>gd</kbd> drafts</div>
-    <div class="shortcut"><kbd>gx</kbd> trash</div>
-    <div class="shortcut"><kbd>ga</kbd> archive</div>
-    <div class="shortcut"><kbd>gh</kbd> snoozed</div>
-    <div class="shortcut"><kbd>gr</kbd> reminders</div>
-    <div class="shortcut"><kbd>gl</kbd> scheduled</div>
-    <div class="shortcut"><kbd>␣</kbd> scroll</div>
-    <div class="shortcut"><kbd>e</kbd><kbd>y</kbd> archive</div>
-    <div class="shortcut"><kbd>s</kbd> star</div>
-    <div class="shortcut"><kbd>h</kbd> snooze</div>
-    <div class="shortcut"><kbd>⇧H</kbd> remind</div>
-    <div class="shortcut"><kbd>!</kbd> important</div>
-    <div class="shortcut"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> inbox tabs</div>
-    <div class="shortcut"><kbd>#</kbd><kbd>⌫</kbd> trash</div>
-    <div class="shortcut"><kbd>⇧R</kbd> sync</div>
-    <div class="shortcut"><kbd>⌘K</kbd> command</div>
-    <div class="shortcut"><kbd>⌘,</kbd> settings</div>
-    <div class="shortcut"><kbd>⌘1</kbd><kbd>⌘2</kbd><kbd>⌘3</kbd> accounts</div>
-    <div class="shortcut"><kbd>@</kbd> switch account</div>
-    <div class="shortcut"><kbd>gn</kbd><kbd>gp</kbd> next/prev account</div>
-  </div>
+  <button class="shortcuts-hint" onclick={() => isShortcutOverlayOpen.set(true)} title="Show all keyboard shortcuts">
+    <Keyboard size={14} /> Keyboard shortcuts <kbd>?</kbd>
+  </button>
   </div>
 
   <div class="sidebar-footer">
@@ -268,6 +224,21 @@
         {/if}
       </button>
     </div>
+    <div class="theme-toggle" role="radiogroup" aria-label="Theme">
+      {#each themeOptions as opt (opt.value)}
+        <button
+          class="theme-opt"
+          class:active={$themePreference === opt.value}
+          role="radio"
+          aria-checked={$themePreference === opt.value}
+          aria-label="{opt.label} theme"
+          title="{opt.label} theme (⇧T to cycle)"
+          onclick={() => themePreference.set(opt.value)}
+        >
+          <opt.icon size={13} />
+        </button>
+      {/each}
+    </div>
   </div>
 </aside>
 
@@ -278,7 +249,7 @@
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    padding: 16px;
+    padding: 12px;
     height: 100%;
     overflow: hidden;
   }
@@ -300,8 +271,8 @@
   }
 
   .logo-icon {
-    width: 16px;
-    height: 16px;
+    width: 22px;
+    height: 22px;
     object-fit: contain;
   }
 
@@ -400,10 +371,10 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
+    padding: 5px 10px;
     background: transparent;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--r-md);
     text-align: left;
     color: var(--text-secondary);
     cursor: pointer;
@@ -415,8 +386,21 @@
   }
 
   .nav-item.active {
-    background: var(--bg-tertiary);
+    background: var(--bg-selected);
     color: var(--text-primary);
+  }
+
+  .nav-item:hover .nav-icon {
+    filter: drop-shadow(0 0 3px var(--account-glow));
+  }
+
+  .nav-item.active .nav-icon {
+    color: var(--account-color);
+    filter: drop-shadow(0 0 5px var(--account-glow));
+  }
+
+  .nav-item.active {
+    box-shadow: inset 2px 0 0 var(--account-color);
   }
 
   .nav-icon {
@@ -433,99 +417,19 @@
     background: var(--accent);
     color: white;
     font-size: 11px;
-    padding: 2px 6px;
+    padding: 1px 6px;
     border-radius: 10px;
     font-weight: 600;
-  }
-
-  .accounts {
-    margin-bottom: 24px;
-  }
-
-  .accounts h3 {
-    font-size: 11px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-    padding: 0 8px;
-    letter-spacing: 0.5px;
-  }
-
-  .account {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px;
-    padding-left: 4px;
-    width: 100%;
-    background: transparent;
-    border: none;
-    border-radius: 6px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    text-align: left;
-    position: relative;
-  }
-
-  .account:hover {
-    background: var(--bg-hover);
-  }
-
-  .account.active {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-
-  .account.add {
-    color: var(--accent);
-  }
-
-  .account-indicator {
-    width: 3px;
-    height: 20px;
-    border-radius: 2px;
-    background: transparent;
-    flex-shrink: 0;
-    transition: background 0.15s ease;
-  }
-
-  .account-indicator.active {
-    background: var(--accent);
-  }
-
-  .account-badge {
-    font-size: 10px;
-    padding: 1px 5px;
-    margin-left: auto;
-  }
-
-  .account-avatar {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: var(--bg-tertiary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .account-email {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 13px;
+    font-variant-numeric: tabular-nums;
   }
 
   .sidebar-footer {
     flex-shrink: 0;
-    padding-top: 16px;
+    padding-top: 10px;
     border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
 
   .sync-pending-btn {
@@ -585,6 +489,38 @@
     cursor: not-allowed;
   }
 
+  .theme-toggle {
+    display: flex;
+    height: 24px;
+    padding: 2px;
+    gap: 2px;
+    background: var(--bg-tertiary);
+    border-radius: var(--r-md);
+  }
+
+  .theme-opt {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: var(--r-sm);
+  }
+
+  .theme-opt:hover {
+    background: transparent;
+    color: var(--text-primary);
+  }
+
+  .theme-opt.active {
+    background: var(--bg-primary);
+    color: var(--accent);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+
   .spinner {
     width: 14px;
     height: 14px;
@@ -600,27 +536,28 @@
     }
   }
 
-  .shortcuts {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border);
-  }
-
-  .shortcuts h4 {
-    font-size: 11px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-    letter-spacing: 0.5px;
-  }
-
-  .shortcut {
+  .shortcuts-hint {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
+    width: 100%;
+    margin-top: 12px;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 6px;
+    background: none;
     font-size: 12px;
     color: var(--text-muted);
-    margin-bottom: 4px;
+    cursor: pointer;
+  }
+
+  .shortcuts-hint:hover {
+    background: var(--bg-hover, var(--bg-tertiary));
+    color: var(--text-secondary, var(--text-primary));
+  }
+
+  .shortcuts-hint kbd {
+    margin-left: auto;
   }
 
   .snippets-section {

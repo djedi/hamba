@@ -109,9 +109,8 @@
   // Extract search terms from the current search query
   const searchTerms = $derived(extractSearchTerms($searchQuery));
 
-  // Row height: 12px padding top + 12px padding bottom + ~21px content + 1px border = ~46px
-  // Measured more precisely: the rows are approximately 46px tall
-  const ROW_HEIGHT = 46;
+  // Row height must match --row-h in app.css (40px, border included via border-box)
+  const ROW_HEIGHT = 40;
 
   // Reference to virtual list for scrolling
   let virtualList: ReturnType<typeof VirtualList<Email>> | null = $state(null);

@@ -424,3 +424,25 @@ describe('api', () => {
 		});
 	});
 });
+
+describe('api keys', () => {
+	beforeEach(() => mockFetch.mockReset());
+
+	it('creates a key and returns the secret', async () => {
+		mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: true, key: 'hamba_abc', id: '1' }) });
+		const res = await api.createApiKey('agent');
+		expect(res.key).toBe('hamba_abc');
+		const [url, init] = mockFetch.mock.calls[0];
+		expect(url).toContain('/api-keys');
+		expect(JSON.parse(init.body)).toEqual({ name: 'agent' });
+	});
+
+	it('revokes a key and surfaces failures', async () => {
+		mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ success: false, error: 'Key not found' }) });
+		await expect(api.revokeApiKey('x')).rejects.toThrow('Key not found');
+	});
+
+	it('builds the docs URL from the API base', () => {
+		expect(api.getApiDocsUrl()).toMatch(/\/docs$/);
+	});
+});

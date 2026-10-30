@@ -58,7 +58,8 @@ export type ShortcutAction =
   | "settings"
   | "search"
   | "show_shortcuts"
-  | "sync";
+  | "sync"
+  | "cycle_theme";
 
 export interface ShortcutDefinition {
   action: ShortcutAction;
@@ -132,6 +133,7 @@ export const defaultShortcuts: ShortcutDefinition[] = [
   { action: "search", defaultKey: "/", description: "Search", category: "Other" },
   { action: "show_shortcuts", defaultKey: "?", description: "Show shortcuts", category: "Other" },
   { action: "sync", defaultKey: "Shift+r", description: "Sync", category: "Other" },
+  { action: "cycle_theme", defaultKey: "Shift+t", description: "Cycle theme (light/system/dark)", category: "Other" },
 ];
 
 const STORAGE_KEY = "settings.keyboardShortcuts";

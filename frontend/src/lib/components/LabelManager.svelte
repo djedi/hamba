@@ -103,7 +103,7 @@
       {/if}
 
       <div class="create-label">
-        <input
+        <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
           type="text"
           placeholder="New label name"
           bind:value={newLabelName}
@@ -131,7 +131,7 @@
           <div class="label-row">
             {#if editingId === label.id}
               <div class="label-edit">
-                <input type="text" bind:value={editName} />
+                <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" type="text" bind:value={editName} />
                 <div class="color-picker small">
                   {#each colorOptions as color}
                     <button

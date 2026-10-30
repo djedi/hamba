@@ -34,7 +34,9 @@ export function mergeEmails(newEmails: Email[]): { added: number; updated: numbe
         existing.is_trashed !== newEmail.is_trashed ||
         existing.labels !== newEmail.labels ||
         existing.snoozed_until !== newEmail.snoozed_until ||
-        existing.remind_at !== newEmail.remind_at;
+        existing.remind_at !== newEmail.remind_at ||
+        existing.tracking?.opens !== newEmail.tracking?.opens ||
+        existing.tracking?.clicks !== newEmail.tracking?.clicks;
 
       if (hasChanged) {
         mergedList.push(newEmail);

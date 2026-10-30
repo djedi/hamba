@@ -2,6 +2,7 @@ use super::*;
 use crate::providers::{get_provider, EmailProvider, ProgressCallback, SendResult, SyncOptions};
 use crate::routes::contacts::add_contact_from_receive;
 use crate::services::send::{self, OutgoingEmail};
+use crate::services::tracking;
 use crate::{db, AppState};
 use axum::body::Body;
 use axum::extract::{Path, State};
@@ -32,6 +33,8 @@ pub fn router() -> Router<AppState> {
             get(get_scheduled).put(update_scheduled).delete(cancel_scheduled),
         )
         .route("/thread/{thread_id}", get(thread))
+        .route("/tracking/config", get(tracking_config))
+        .route("/{id}/tracking", get(tracking_events))
         .route("/sync/{account_id}", post(sync))
         .route("/sync-sent/{account_id}", post(sync_sent))
         .route("/send", post(send_now))
@@ -88,8 +91,14 @@ fn paged(state: &AppState, q: &HashMap<String, String>, sql: &str) -> JsonResult
         return ok(json!({ "error": "accountId required" }));
     };
     let (limit, offset) = (parse_i64(q, "limit", 50), parse_i64(q, "offset", 0));
-    match db::query_all(&state.db.conn(), sql, (account_id, limit, offset)) {
-        Ok(rows) => ok(json!(rows)),
+    let conn = state.db.conn();
+    match db::query_all(&conn, sql, (account_id, limit, offset)) {
+        Ok(mut rows) => {
+            if sql.contains("folder = 'sent'") {
+                tracking::attach(&conn, &mut rows);
+            }
+            ok(json!(rows))
+        }
         Err(e) => ok(json!({ "error": e.to_string() })),
     }
 }
@@ -107,16 +116,42 @@ async fn unread_counts(State(s): State<AppState>) -> JsonResult {
 }
 
 async fn get_one(State(s): State<AppState>, Path(id): Path<String>) -> JsonResult {
-    opt(find_email(&s, &id))
+    let Some(row) = find_email(&s, &id) else { return opt(None) };
+    let mut rows = [row];
+    tracking::attach(&s.db.conn(), &mut rows);
+    let [row] = rows;
+    opt(Some(row))
 }
 
-async fn thread(State(s): State<AppState>, Path(thread_id): Path<String>) -> JsonResult {
-    match db::query_all(
-        &s.db.conn(),
-        "SELECT * FROM emails WHERE thread_id = ? ORDER BY received_at ASC",
-        [thread_id],
-    ) {
-        Ok(rows) => ok(json!(rows)),
+/// Whether tracking can be used (needs a public URL)
+async fn tracking_config() -> JsonResult {
+    ok(json!({ "available": tracking::public_url().is_some() }))
+}
+
+async fn tracking_events(State(s): State<AppState>, Path(id): Path<String>) -> JsonResult {
+    ok(json!(tracking::events(&s.db.conn(), &id)))
+}
+
+/// Messages in a thread. Pass `accountId` to scope it to one account: a message sent
+/// between two local accounts exists once per account (sent copy + received copy).
+async fn thread(State(s): State<AppState>, Path(thread_id): Path<String>, Query(q): QueryMap) -> JsonResult {
+    let res = match q.get("accountId") {
+        Some(account_id) => db::query_all(
+            &s.db.conn(),
+            "SELECT * FROM emails WHERE thread_id = ? AND account_id = ? ORDER BY received_at ASC",
+            [thread_id.as_str(), account_id.as_str()],
+        ),
+        None => db::query_all(
+            &s.db.conn(),
+            "SELECT * FROM emails WHERE thread_id = ? ORDER BY received_at ASC",
+            [thread_id.as_str()],
+        ),
+    };
+    match res {
+        Ok(mut rows) => {
+            tracking::attach(&s.db.conn(), &mut rows);
+            ok(json!(rows))
+        }
         Err(e) => ok(json!({ "error": e.to_string() })),
     }
 }
@@ -233,7 +268,7 @@ pub fn parse_search(q: &str) -> SearchOperators {
 
 /// Turn free text into a safe FTS5 query: every word becomes a quoted phrase (so `@`, `:`, `-`
 /// etc. can't be parsed as FTS syntax) and the last word is a prefix match for search-as-you-type.
-fn fts_query(text: &str) -> String {
+pub fn fts_query(text: &str) -> String {
     let words: Vec<String> = text
         .split_whitespace()
         .map(|w| format!("\"{}\"", w.replace('"', "\"\"")))
@@ -704,13 +739,22 @@ async fn send_now(State(s): State<AppState>, Json(body): Json<Value>) -> JsonRes
     if !validate_outgoing(&email) {
         return ok(json!({ "error": "accountId, to, and subject are required" }));
     }
-    let Some(params) = send::build_send_params(&s, &email) else {
+    let Some(mut params) = send::build_send_params(&s, &email) else {
         return ok(json!({ "error": "Account not found" }));
     };
+    let tracking_id = tracking::prepare(&s, &email, &mut params);
     let result: SendResult = match get_provider(&s, &email.account_id) {
         Ok(p) => p.send(params).await,
-        Err(e) => return ok(json!({ "error": e, "success": false })),
+        Err(e) => {
+            if let Some(t) = &tracking_id {
+                tracking::finish(&s, t, None, false);
+            }
+            return ok(json!({ "error": e, "success": false }));
+        }
     };
+    if let Some(t) = &tracking_id {
+        tracking::finish(&s, t, result.message_id.as_deref(), result.success);
+    }
     ok(json!(result))
 }
 

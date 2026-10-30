@@ -47,6 +47,8 @@
         { key: "f", description: "Forward" },
         { key: "Cmd + J", description: "AI compose" },
         { key: "Cmd + Enter", description: "Send email" },
+        { key: "Cmd + Shift + Enter", description: "Send later (1-5 presets, or type \"fri 3pm\")" },
+        { key: "Cmd + Alt + T", description: "Toggle read receipts + link tracking" },
       ],
     },
     {

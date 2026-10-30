@@ -597,7 +597,7 @@
   <div class="palette slide-up">
     <div class="input-wrapper">
       <span class="icon">⌘</span>
-      <input
+      <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
         bind:this={inputRef}
         type="text"
         placeholder="Search commands, emails, contacts, labels..."

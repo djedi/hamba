@@ -1,4 +1,13 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8877";
+import type { TrackingSummary, TrackingEvent } from "./tracking";
+
+// Production web builds set VITE_API_URL=/api (same origin, behind a reverse proxy)
+export const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:8877";
+
+/** Called on any 401: the app login session is missing or expired */
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  onUnauthorized = fn;
+}
 
 export class AuthError extends Error {
   needsReauth: boolean;
@@ -20,6 +29,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     },
   });
 
+  if (res.status === 401) {
+    onUnauthorized?.();
+  }
   if (!res.ok) {
     throw new Error(`API error: ${res.status}`);
   }
@@ -63,6 +75,16 @@ export const api = {
   accountAvatarUrl: (id: string, version?: number | null) =>
     `${API_URL}/auth/accounts/${id}/avatar?v=${version ?? 0}`,
   deleteAccount: (id: string) => request(`/auth/accounts/${id}`, { method: "DELETE" }),
+  // API keys (public read-only API)
+  getApiKeys: () => request<ApiKey[]>("/api-keys"),
+  createApiKey: (name: string) =>
+    request<{ success: boolean; error?: string; key?: string } & Partial<ApiKey>>("/api-keys", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  revokeApiKey: (id: string) => action(`/api-keys/${id}`, { method: "DELETE" }),
+  getApiDocsUrl: () => `${API_URL}/docs`,
+
   getLoginUrl: () => `${API_URL}/auth/login`,
   getMicrosoftLoginUrl: () => `${API_URL}/auth/login/microsoft`,
   getYahooLoginUrl: () => `${API_URL}/auth/login/yahoo`,
@@ -93,7 +115,8 @@ export const api = {
 
   getEmail: (id: string) => request<Email>(`/emails/${id}`),
 
-  getThread: (threadId: string) => request<Email[]>(`/emails/thread/${threadId}`),
+  getThread: (threadId: string, accountId?: string) =>
+    request<Email[]>(`/emails/thread/${encodeURIComponent(threadId)}${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`),
 
   searchEmails: (query: string, limit = 50, accountId?: string) =>
     request<Email[]>(`/emails/search?q=${encodeURIComponent(query)}&limit=${limit}${accountId ? `&accountId=${accountId}` : ''}`),
@@ -199,6 +222,8 @@ export const api = {
       mimeType: string;
       content: string; // base64 encoded
     }>;
+    trackOpens?: boolean;
+    trackLinks?: boolean;
   }) =>
     request<{ success: boolean; pendingId?: string; sendAt?: number; undoWindowSeconds?: number; error?: string }>("/emails/queue-send", {
       method: "POST",
@@ -287,6 +312,10 @@ export const api = {
       method: "DELETE",
     }),
 
+  // Read receipts / link tracking
+  getTrackingConfig: () => request<{ available: boolean }>("/emails/tracking/config"),
+  getTrackingEvents: (emailId: string) => request<TrackingEvent[]>(`/emails/${emailId}/tracking`),
+
   // Scheduled emails (send later)
   getScheduledEmails: (accountId: string) =>
     request<ScheduledEmail[]>(`/emails/scheduled?accountId=${accountId}`),
@@ -307,6 +336,8 @@ export const api = {
       content: string;
     }>;
     sendAt: number;
+    trackOpens?: boolean;
+    trackLinks?: boolean;
   }) =>
     request<{ success: boolean; scheduledId?: string; sendAt?: number; error?: string }>("/emails/schedule", {
       method: "POST",
@@ -326,6 +357,8 @@ export const api = {
       content: string;
     }>;
     sendAt?: number;
+    trackOpens?: boolean;
+    trackLinks?: boolean;
   }) =>
     request<{ success: boolean; error?: string }>(`/emails/scheduled/${id}`, {
       method: "PUT",
@@ -537,6 +570,8 @@ export interface Email {
   summary_generated_at: number | null;
   ai_importance_score: number | null;
   ai_classified_at: number | null;
+  // Present on sent messages sent with tracking enabled
+  tracking?: TrackingSummary;
 }
 
 export interface Draft {
@@ -576,6 +611,8 @@ export interface ScheduledEmail {
   attachments: string | null;
   send_at: number;
   created_at: number;
+  track_opens?: number;
+  track_links?: number;
 }
 
 export interface Snippet {
@@ -596,6 +633,62 @@ export interface Contact {
   last_contacted: number;
   contact_count: number;
   created_at: number;
+}
+
+export interface SessionStatus {
+  authEnabled: boolean;
+  authenticated: boolean;
+  setupRequired: boolean;
+  username: string | null;
+  passkeysSupported: boolean;
+  hasPasskeys: boolean;
+}
+
+export interface AppPasskey {
+  id: string;
+  name: string;
+  createdAt: number;
+  lastUsedAt: number | null;
+}
+
+type SessionResult = { success: boolean; error?: string; username?: string };
+// WebAuthn options/credentials are passed through as JSON (see webauthn.ts)
+type Ceremony = { ceremonyId?: string; options?: unknown; success?: boolean; error?: string };
+
+export const sessionApi = {
+  status: () => request<SessionStatus>("/session/status"),
+  setup: (username: string, password: string) =>
+    request<SessionResult>("/session/setup", { method: "POST", body: JSON.stringify({ username, password }) }),
+  login: (username: string, password: string) =>
+    request<SessionResult>("/session/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  logout: () => request<SessionResult>("/session/logout", { method: "POST" }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<SessionResult>("/session/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  listPasskeys: () => request<AppPasskey[]>("/session/passkeys"),
+  deletePasskey: (id: string) => action(`/session/passkeys/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  registerStart: () => request<Ceremony>("/session/passkeys/register/start", { method: "POST" }),
+  registerFinish: (ceremonyId: string, credential: unknown, name: string) =>
+    request<SessionResult>("/session/passkeys/register/finish", {
+      method: "POST",
+      body: JSON.stringify({ ceremonyId, credential, name }),
+    }),
+  passkeyLoginStart: () => request<Ceremony>("/session/passkeys/login/start", { method: "POST" }),
+  passkeyLoginFinish: (ceremonyId: string, credential: unknown) =>
+    request<SessionResult>("/session/passkeys/login/finish", {
+      method: "POST",
+      body: JSON.stringify({ ceremonyId, credential }),
+    }),
+};
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  createdAt: number;
+  lastUsedAt: number | null;
 }
 
 export interface Signature {

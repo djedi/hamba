@@ -175,11 +175,11 @@
         <div class="date-row">
           <label>
             <span>Date</span>
-            <input type="date" bind:value={customDate} />
+            <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" type="date" bind:value={customDate} />
           </label>
           <label>
             <span>Time</span>
-            <input type="time" bind:value={customTime} />
+            <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" type="time" bind:value={customTime} />
           </label>
         </div>
         <div class="custom-actions">

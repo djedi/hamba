@@ -7,7 +7,8 @@
 			// Apply saved theme and font size immediately to prevent flash of unstyled content
 			(function() {
 				try {
-					const theme = localStorage.getItem('settings.theme') || 'dark';
+					let theme = localStorage.getItem('settings.theme') || 'dark';
+					if (theme === 'system') theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 					const fontSize = localStorage.getItem('settings.fontSize') || '14';
 					const accentColor = localStorage.getItem('settings.accentColor');
 

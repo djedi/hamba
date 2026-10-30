@@ -6,6 +6,7 @@
   import { registerSyncCallback } from "$lib/keyboard";
   import { connect, disconnect, onMessage, subscribe } from "$lib/realtime";
   import { showNewMailNotification } from "$lib/notifications";
+  import { trackingToast } from "$lib/tracking";
   import {
     listKey,
     getSnapshot,
@@ -58,6 +59,7 @@
   import SearchBar from "$lib/components/SearchBar.svelte";
   import Compose from "$lib/components/Compose.svelte";
   import AddAccountModal from "$lib/components/AddAccountModal.svelte";
+  import AccountRail from "$lib/components/AccountRail.svelte";
   import Toasts from "$lib/components/Toasts.svelte";
   import DraftList from "$lib/components/DraftList.svelte";
   import LabelManager from "$lib/components/LabelManager.svelte";
@@ -289,6 +291,23 @@
       if (data.accountId === $selectedAccountId) {
         api.getDrafts(data.accountId).then(d => drafts.set(d)).catch(() => {});
       }
+      return;
+    }
+    if (data.type === "tracking") {
+      const text = trackingToast(data);
+      if (text) showToast(text, "success");
+      // Refresh sent lists so the eye icon / activity line update live
+      api.getSentEmails(data.accountId)
+        .then((msgs) => {
+          writeListCache(listKey(data.accountId, "sent"), msgs);
+          if ($selectedAccountId === data.accountId && $currentFolder === "sent") mergeEmails(msgs);
+        })
+        .catch(() => {});
+      return;
+    }
+    if (data.type === "unsnoozed") {
+      showToast(`Back in your inbox: "${data.subject || "(No subject)"}"`, "success");
+      showNewMailNotification({ from: "Snoozed email", subject: data.subject || "(No subject)", isImportant: false });
       return;
     }
     if (data.type === "new_mail" || data.type === "sync_complete") {
@@ -668,7 +687,10 @@
 </script>
 
 <div class="app">
-  <Sidebar onSync={syncEmails} onAddAccount={() => (showAddAccountModal = true)} onManageLabels={() => (showLabelManager = true)} onManageSnippets={() => (showSnippetManager = true)} />
+  {#if $accounts.length > 0}
+    <AccountRail onAddAccount={() => (showAddAccountModal = true)} />
+  {/if}
+  <Sidebar onSync={syncEmails} onManageLabels={() => (showLabelManager = true)} onManageSnippets={() => (showSnippetManager = true)} />
 
   <main class="main">
     {#if needsReauth}
@@ -698,7 +720,7 @@
       {#if $currentFolder === "drafts"}
         <DraftList loading={$isLoading} onOpenDraft={openDraft} />
       {:else if $currentFolder === "scheduled"}
-        <ScheduledList loading={$isLoading} />
+        <ScheduledList loading={$isLoading} onEdit={openDraft} />
       {:else}
         <BulkActionToolbar />
         <EmailList bind:this={emailList} loading={$isLoading} onLoadMore={loadMoreEmails} folder={$currentFolder} />

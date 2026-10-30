@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { Check } from "@lucide/svelte";
+  import { Check, Copy, ExternalLink } from "@lucide/svelte";
   import AccountAvatar from "./AccountAvatar.svelte";
   import { ACCOUNT_COLORS } from "$lib/accountAppearance";
   import { onMount } from "svelte";
   import { accounts, selectedAccountId, isSettingsOpen, showToast } from "$lib/stores";
   import { invalidateAccount } from "$lib/listCache";
-  import { api, type Signature } from "$lib/api";
+  import { api, sessionApi, type ApiKey, type AppPasskey, type SessionStatus, type Signature } from "$lib/api";
+  import { createPasskey, passkeysAvailable } from "$lib/webauthn";
+  import { getTrackingPrefs, setTrackingPref, PRIVACY_NOTE, TRACKING_UNAVAILABLE } from "$lib/tracking";
   import {
     type ShortcutAction,
     getShortcutsByCategory,
@@ -27,11 +29,12 @@
   let { onClose }: Props = $props();
 
   // Settings tabs
-  type SettingsTab = "account" | "appearance" | "keyboard" | "notifications" | "ai" | "signatures";
+  type SettingsTab = "account" | "appearance" | "keyboard" | "notifications" | "ai" | "signatures" | "api" | "security";
   let activeTab = $state<SettingsTab>("account");
 
   // Appearance settings (stored in localStorage)
-  let theme = $state<"dark" | "light">("dark");
+  import { themePreference, resolveTheme } from "$lib/theme";
+  let theme = $derived(resolveTheme($themePreference));
   let fontSize = $state<"12" | "14" | "16">("14");
   let accentColor = $state<string>("#6366f1");
 
@@ -51,6 +54,12 @@
   let notificationsEnabled = $state(false);
   let notifyImportantOnly = $state(false);
   let soundEnabled = $state(true);
+
+  // Read receipts / link tracking defaults for new messages (stored in localStorage)
+  const initialTracking = getTrackingPrefs();
+  let trackOpensDefault = $state(initialTracking.opens);
+  let trackLinksDefault = $state(initialTracking.links);
+  let trackingAvailable = $state(false);
 
   // AI status
   let aiConfigured = $state(false);
@@ -196,13 +205,16 @@
   onMount(async () => {
     // Load saved preferences from localStorage
     if (typeof localStorage !== "undefined") {
-      theme = (localStorage.getItem("settings.theme") as "dark" | "light") || "dark";
       fontSize = (localStorage.getItem("settings.fontSize") as "12" | "14" | "16") || "14";
       accentColor = localStorage.getItem("settings.accentColor") || "#6366f1";
       notificationsEnabled = localStorage.getItem("settings.notifications") === "true";
       notifyImportantOnly = localStorage.getItem("settings.notifyImportantOnly") === "true";
       soundEnabled = localStorage.getItem("settings.sound") !== "false";
     }
+
+    api.getTrackingConfig()
+      .then((c) => (trackingAvailable = !!c.available))
+      .catch(() => {});
 
     // Check AI status
     try {
@@ -218,9 +230,6 @@
   // Save preferences when they change
   $effect(() => {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("settings.theme", theme);
-      // Apply theme to document
-      document.documentElement.setAttribute("data-theme", theme);
     }
   });
 
@@ -269,6 +278,9 @@
       localStorage.setItem("settings.sound", String(soundEnabled));
     }
   });
+
+  $effect(() => setTrackingPref("opens", trackOpensDefault));
+  $effect(() => setTrackingPref("links", trackLinksDefault));
 
   function handleKeydown(e: KeyboardEvent) {
     // If recording a shortcut, handle it separately
@@ -445,6 +457,155 @@
     return option?.label || `${limit} emails`;
   }
 
+  // API keys
+  let apiKeys = $state<ApiKey[]>([]);
+  let apiKeysLoading = $state(false);
+  let newKeyName = $state("");
+  let creatingKey = $state(false);
+  let revealedKey = $state<string | null>(null);
+
+  // Security: app login (password + passkeys)
+  let sessionStatus = $state<SessionStatus | null>(null);
+  let passkeys = $state<AppPasskey[]>([]);
+  let currentPassword = $state("");
+  let newPassword = $state("");
+  let confirmNewPassword = $state("");
+  let changingPassword = $state(false);
+  let newPasskeyName = $state("");
+  let addingPasskey = $state(false);
+
+  async function loadSecurity() {
+    try {
+      sessionStatus = await sessionApi.status();
+      passkeys = sessionStatus.authEnabled ? await sessionApi.listPasskeys() : [];
+    } catch (e) {
+      console.error("Failed to load security settings:", e);
+    }
+  }
+
+  async function changePassword() {
+    if (newPassword !== confirmNewPassword) {
+      showToast("New passwords don't match", "error");
+      return;
+    }
+    changingPassword = true;
+    try {
+      const res = await sessionApi.changePassword(currentPassword, newPassword);
+      if (!res.success) throw new Error(res.error);
+      currentPassword = newPassword = confirmNewPassword = "";
+      showToast("Password changed", "success");
+    } catch (e) {
+      showToast(e instanceof Error && e.message ? e.message : "Failed to change password", "error");
+    } finally {
+      changingPassword = false;
+    }
+  }
+
+  async function addPasskey() {
+    addingPasskey = true;
+    try {
+      const start = await sessionApi.registerStart();
+      if (!start.ceremonyId) throw new Error(start.error || "Passkeys unavailable");
+      const credential = await createPasskey(start.options);
+      const res = await sessionApi.registerFinish(start.ceremonyId, credential, newPasskeyName.trim() || "Passkey");
+      if (!res.success) throw new Error(res.error);
+      newPasskeyName = "";
+      showToast("Passkey added", "success");
+      await loadSecurity();
+    } catch (e) {
+      // NotAllowedError = user dismissed the browser prompt
+      if (!(e instanceof DOMException && e.name === "NotAllowedError")) {
+        showToast(e instanceof Error && e.message ? e.message : "Failed to add passkey", "error");
+      }
+    } finally {
+      addingPasskey = false;
+    }
+  }
+
+  async function removePasskey(pk: AppPasskey) {
+    if (!confirm(`Remove passkey "${pk.name}"?`)) return;
+    try {
+      await sessionApi.deletePasskey(pk.id);
+      passkeys = passkeys.filter((p) => p.id !== pk.id);
+    } catch {
+      showToast("Failed to remove passkey", "error");
+    }
+  }
+
+  async function signOut() {
+    try {
+      await sessionApi.logout();
+    } finally {
+      location.reload();
+    }
+  }
+
+  $effect(() => {
+    if (activeTab === "security") loadSecurity();
+  });
+  let keyCopied = $state(false);
+
+  async function loadApiKeys() {
+    apiKeysLoading = true;
+    try {
+      apiKeys = await api.getApiKeys();
+    } catch (e) {
+      showToast("Failed to load API keys", "error");
+    } finally {
+      apiKeysLoading = false;
+    }
+  }
+
+  async function createApiKey() {
+    const name = newKeyName.trim();
+    if (!name || creatingKey) return;
+    creatingKey = true;
+    try {
+      const result = await api.createApiKey(name);
+      if (result.success && result.key) {
+        revealedKey = result.key;
+        keyCopied = false;
+        newKeyName = "";
+        await loadApiKeys();
+      } else {
+        showToast(result.error || "Failed to create key", "error");
+      }
+    } catch (e) {
+      showToast("Failed to create key", "error");
+    } finally {
+      creatingKey = false;
+    }
+  }
+
+  async function copyApiKey() {
+    if (!revealedKey) return;
+    try {
+      await navigator.clipboard.writeText(revealedKey);
+      keyCopied = true;
+    } catch (e) {
+      showToast("Copy failed - select the key and copy it manually", "error");
+    }
+  }
+
+  async function revokeApiKey(key: ApiKey) {
+    if (!confirm(`Revoke "${key.name}"? Anything using it will stop working.`)) return;
+    try {
+      await api.revokeApiKey(key.id);
+      apiKeys = apiKeys.filter((k) => k.id !== key.id);
+    } catch (e) {
+      showToast("Failed to revoke key", "error");
+    }
+  }
+
+  function formatKeyDate(ts: number | null): string {
+    return ts ? new Date(ts * 1000).toLocaleString() : "Never";
+  }
+
+  $effect(() => {
+    if (activeTab === "api") loadApiKeys();
+    else revealedKey = null;
+  });
+
   // Signature management functions
   async function loadSignatures() {
     if (!$selectedAccountId) return;
@@ -614,6 +775,12 @@
         <button class="tab" class:active={activeTab === "signatures"} onclick={() => (activeTab = "signatures")}>
           Signatures
         </button>
+        <button class="tab" class:active={activeTab === "api"} onclick={() => (activeTab = "api")}>
+          API
+        </button>
+        <button class="tab" class:active={activeTab === "security"} onclick={() => (activeTab = "security")}>
+          Security
+        </button>
       </nav>
 
       <div class="tab-content">
@@ -675,7 +842,7 @@
 
                       <div class="form-row">
                         <label for="display-name">Display Name</label>
-                        <input
+                        <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
                           id="display-name"
                           type="text"
                           bind:value={editDisplayName}
@@ -793,9 +960,10 @@
             <h3>Theme</h3>
             <div class="setting-row">
               <label for="theme-select">Color theme</label>
-              <select id="theme-select" bind:value={theme}>
+              <select id="theme-select" bind:value={$themePreference}>
                 <option value="dark">Dark</option>
                 <option value="light">Light</option>
+                <option value="system">System</option>
               </select>
             </div>
           </div>
@@ -926,6 +1094,21 @@
               />
             </div>
           </div>
+          <div class="section">
+            <h3>Read Receipts &amp; Link Tracking</h3>
+            {#if !trackingAvailable}
+              <p class="loading">{TRACKING_UNAVAILABLE}</p>
+            {/if}
+            <div class="setting-row">
+              <label for="track-opens-default">Track opens by default</label>
+              <input type="checkbox" id="track-opens-default" bind:checked={trackOpensDefault} />
+            </div>
+            <div class="setting-row">
+              <label for="track-links-default">Track link clicks by default</label>
+              <input type="checkbox" id="track-links-default" bind:checked={trackLinksDefault} />
+            </div>
+            <p class="loading">{PRIVACY_NOTE} Toggle per message in compose with Cmd/Ctrl+Alt+T.</p>
+          </div>
         {:else if activeTab === "ai"}
           <div class="section">
             <h3>AI Features</h3>
@@ -975,7 +1158,7 @@
                 <div class="signature-form">
                   <div class="form-row">
                     <label for="sig-name">Name</label>
-                    <input
+                    <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
                       id="sig-name"
                       type="text"
                       bind:value={signatureName}
@@ -984,7 +1167,7 @@
                   </div>
                   <div class="form-row">
                     <label for="sig-content">Signature Content</label>
-                    <textarea
+                    <textarea autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
                       id="sig-content"
                       bind:value={signatureContent}
                       placeholder="Enter your signature text here..."
@@ -1078,6 +1261,116 @@
             <p class="help-text signatures-help">
               Your default signature will be automatically appended to new emails and replies.
             </p>
+          </div>
+        {:else if activeTab === "api"}
+          <div class="section">
+            <div class="signatures-header">
+              <h3>API Access</h3>
+              <a class="action-btn docs-link" href={api.getApiDocsUrl()} target="_blank" rel="noopener noreferrer">
+                <ExternalLink size={12} /> Open API docs
+              </a>
+            </div>
+            <p class="help-text">
+              API keys give scripts and AI agents read-only access to your email via <code>/api/v1</code>.
+              Send a key as <code>Authorization: Bearer &lt;key&gt;</code>.
+            </p>
+
+            {#if revealedKey}
+              <div class="key-reveal">
+                <strong>Copy your new key now. It won't be shown again.</strong>
+                <div class="key-row">
+                  <code class="key-value">{revealedKey}</code>
+                  <button class="action-btn" onclick={copyApiKey}>
+                    {#if keyCopied}<Check size={12} /> Copied{:else}<Copy size={12} /> Copy{/if}
+                  </button>
+                </div>
+                <button class="action-btn" onclick={() => (revealedKey = null)}>Done</button>
+              </div>
+            {/if}
+
+            <form class="key-create" onsubmit={(e) => { e.preventDefault(); createApiKey(); }}>
+              <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" type="text" bind:value={newKeyName} placeholder="Key name, e.g. My agent" maxlength="100" />
+              <button class="primary small" type="submit" disabled={!newKeyName.trim() || creatingKey}>
+                Create key
+              </button>
+            </form>
+
+            {#if apiKeysLoading && apiKeys.length === 0}
+              <p class="loading">Loading keys...</p>
+            {:else if apiKeys.length === 0}
+              <p class="help-text">No API keys yet.</p>
+            {:else}
+              <div class="signatures-list">
+                {#each apiKeys as key (key.id)}
+                  <div class="signature-item">
+                    <div class="signature-info">
+                      <span class="signature-name">{key.name}</span>
+                      <span class="signature-type">
+                        <code>{key.keyPrefix}...</code> · Created {formatKeyDate(key.createdAt)} · Last used {formatKeyDate(key.lastUsedAt)}
+                      </span>
+                    </div>
+                    <div class="signature-actions">
+                      <button class="action-btn danger" onclick={() => revokeApiKey(key)}>Revoke</button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {:else if activeTab === "security"}
+          <div class="section">
+            {#if sessionStatus && !sessionStatus.authEnabled}
+              <h3>Login</h3>
+              <p class="help-text">App login is turned off for this install (<code>HAMBA_AUTH=off</code>).</p>
+            {:else}
+              <div class="signatures-header">
+                <h3>Login</h3>
+                <button class="action-btn" onclick={signOut}>Sign out</button>
+              </div>
+              {#if sessionStatus?.username}
+                <p class="help-text">Signed in as <strong>{sessionStatus.username}</strong>.</p>
+              {/if}
+
+              <h3>Change password</h3>
+              <form class="password-form" onsubmit={(e) => { e.preventDefault(); changePassword(); }}>
+                <input type="password" bind:value={currentPassword} placeholder="Current password" autocomplete="current-password" required />
+                <input type="password" bind:value={newPassword} placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required />
+                <input type="password" bind:value={confirmNewPassword} placeholder="Confirm new password" autocomplete="new-password" minlength="8" required />
+                <button class="primary small" type="submit" disabled={changingPassword || !currentPassword || newPassword.length < 8}>
+                  Change password
+                </button>
+              </form>
+
+              <h3>Passkeys</h3>
+              {#if !sessionStatus?.passkeysSupported || !passkeysAvailable()}
+                <p class="help-text">
+                  Passkeys need Hamba to be served over HTTPS (or from localhost). Open it from its public domain to add one.
+                </p>
+              {:else}
+                <p class="help-text">Sign in with Touch ID, Face ID, Windows Hello, or a security key instead of your password.</p>
+                <form class="key-create" onsubmit={(e) => { e.preventDefault(); addPasskey(); }}>
+                  <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" type="text" bind:value={newPasskeyName} placeholder="Name, e.g. MacBook Touch ID" maxlength="100" />
+                  <button class="primary small" type="submit" disabled={addingPasskey}>Add passkey</button>
+                </form>
+                {#if passkeys.length === 0}
+                  <p class="help-text">No passkeys yet.</p>
+                {:else}
+                  <div class="signatures-list">
+                    {#each passkeys as pk (pk.id)}
+                      <div class="signature-item">
+                        <div class="signature-info">
+                          <span class="signature-name">{pk.name}</span>
+                          <span class="signature-type">Added {formatKeyDate(pk.createdAt)} · Last used {formatKeyDate(pk.lastUsedAt)}</span>
+                        </div>
+                        <div class="signature-actions">
+                          <button class="action-btn danger" onclick={() => removePasskey(pk)}>Remove</button>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
+            {/if}
           </div>
         {/if}
       </div>
@@ -2059,6 +2352,67 @@
 
   .checkbox-help {
     margin-left: 24px;
+  }
+
+  .docs-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+  }
+
+  .key-create {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 16px;
+  }
+
+  .password-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 320px;
+    margin: 8px 0 20px;
+  }
+
+  .password-form input,
+  .key-create input {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .key-reveal {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px;
+    margin: 12px 0;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .key-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .key-value {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    user-select: all;
+    font-size: 12px;
   }
 
   .signatures-help {

@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { Star } from "@lucide/svelte";
+  import { Star, Eye } from "@lucide/svelte";
   import type { Email } from "$lib/api";
   import { selectedEmailId, selectedIndex, view, emailActions, prefetchEmail, emailLabelsCache, labelActions, selectionActions } from "$lib/stores";
   import { formatRelativeDate, formatDateTooltip } from "$lib/dateUtils";
   import { onMount } from "svelte";
   import HighlightText from "./HighlightText.svelte";
+  import { trackingBadge } from "$lib/tracking";
 
   interface Props {
     email: Email;
@@ -15,6 +16,8 @@
   }
 
   let { email, selected, index, searchTerms = [], checked = false }: Props = $props();
+
+  const badge = $derived(trackingBadge(email.tracking));
 
   // Get labels for this email from cache
   const emailLabels = $derived($emailLabelsCache.get(email.id) || []);
@@ -106,7 +109,7 @@
     role="button"
     tabindex="-1"
   >
-    <Star size={16} fill={email.is_starred ? "currentColor" : "none"} />
+    <Star size={14} fill={email.is_starred ? "currentColor" : "none"} />
   </span>
 
   <div class="sender">
@@ -147,6 +150,12 @@
     </span>
   </div>
 
+  {#if badge}
+    <span class="tracked" class:opened={badge.opened} title={badge.title}>
+      <Eye size={13} />{#if badge.opened}<span class="count">{badge.count}</span>{/if}
+    </span>
+  {/if}
+
   <div class="date" title={formatDateTooltip(email.received_at)}>{formatRelativeDate(email.received_at)}</div>
 </div>
 
@@ -154,38 +163,56 @@
   .email-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: 10px;
+    height: var(--row-h);
+    padding: 0 12px 0 14px;
     background: transparent;
     border: none;
     border-bottom: 1px solid var(--border);
+    border-radius: 0;
     text-align: left;
     cursor: pointer;
-    transition: background 0.1s ease;
     width: 100%;
+    font-size: 13px;
+    position: relative;
   }
 
   .email-row:hover {
     background: var(--bg-hover);
   }
 
-  .email-row.selected {
-    background: var(--bg-secondary);
-    border-left: 4px solid var(--accent);
-    padding-left: 12px;
-    box-shadow:
-      0 -1px 3px rgba(0, 0, 0, 0.1),
-      0 1px 3px rgba(0, 0, 0, 0.1);
-    position: relative;
-    z-index: 1;
+  .email-row.selected,
+  .email-row.unread.selected {
+    background: var(--bg-selected);
+  }
+
+  .email-row.selected::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent);
   }
 
   .email-row.unread {
-    background: var(--bg-secondary);
+    background: var(--bg-unread);
   }
 
-  .email-row.unread.selected {
-    background: var(--bg-selected);
+  .email-row.unread:hover {
+    background: var(--bg-hover);
+  }
+
+  .email-row.unread .sender::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--unread);
+    vertical-align: 1px;
   }
 
   .email-row.unread .sender,
@@ -216,7 +243,7 @@
     background: none;
     border: none;
     padding: 0;
-    font-size: 16px;
+    font-size: 14px;
     color: var(--text-muted);
     cursor: pointer;
     line-height: 1;
@@ -231,7 +258,7 @@
   }
 
   .sender {
-    width: 180px;
+    width: 170px;
     flex-shrink: 0;
     color: var(--text-secondary);
     overflow: hidden;
@@ -254,7 +281,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     flex-shrink: 0;
-    max-width: 40%;
+    max-width: 50%;
   }
 
   .separator {
@@ -279,7 +306,7 @@
   .label-chip {
     font-size: 10px;
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     border: 1px solid;
     white-space: nowrap;
     font-weight: 500;
@@ -291,11 +318,29 @@
     font-weight: 500;
   }
 
+  .tracked {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.6;
+  }
+
+  .tracked.opened {
+    color: var(--accent);
+    opacity: 1;
+    font-weight: 600;
+  }
+
   .date {
     flex-shrink: 0;
     color: var(--text-muted);
     font-size: 12px;
-    width: 70px;
+    font-variant-numeric: tabular-nums;
+    width: 64px;
     text-align: right;
   }
 

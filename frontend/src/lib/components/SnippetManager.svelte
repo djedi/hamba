@@ -114,7 +114,7 @@
         <div class="form-row">
           <div class="form-field">
             <label for="snippet-name">Name</label>
-            <input
+            <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
               id="snippet-name"
               type="text"
               placeholder="e.g., Meeting Follow-up"
@@ -125,7 +125,7 @@
             <label for="snippet-shortcut">Shortcut</label>
             <div class="shortcut-input">
               <span class="shortcut-prefix">;</span>
-              <input
+              <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
                 id="snippet-shortcut"
                 type="text"
                 placeholder="e.g., followup"
@@ -137,7 +137,7 @@
         </div>
         <div class="form-field">
           <label for="snippet-content">Content</label>
-          <textarea
+          <textarea autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
             id="snippet-content"
             placeholder="The text that will be inserted when you use this snippet..."
             bind:value={newContent}
@@ -157,19 +157,19 @@
                 <div class="form-row">
                   <div class="form-field">
                     <label for="edit-name-{snippet.id}">Name</label>
-                    <input id="edit-name-{snippet.id}" type="text" bind:value={editName} />
+                    <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" id="edit-name-{snippet.id}" type="text" bind:value={editName} />
                   </div>
                   <div class="form-field shortcut-field">
                     <label for="edit-shortcut-{snippet.id}">Shortcut</label>
                     <div class="shortcut-input">
                       <span class="shortcut-prefix">;</span>
-                      <input id="edit-shortcut-{snippet.id}" type="text" bind:value={editShortcut} />
+                      <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" id="edit-shortcut-{snippet.id}" type="text" bind:value={editShortcut} />
                     </div>
                   </div>
                 </div>
                 <div class="form-field">
                   <label for="edit-content-{snippet.id}">Content</label>
-                  <textarea id="edit-content-{snippet.id}" bind:value={editContent} rows="4"></textarea>
+                  <textarea autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" id="edit-content-{snippet.id}" bind:value={editContent} rows="4"></textarea>
                 </div>
                 <div class="edit-actions">
                   <button class="save" onclick={saveEdit}>Save</button>

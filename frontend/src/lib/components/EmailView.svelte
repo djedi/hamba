@@ -1,10 +1,12 @@
 <script lang="ts">
+  import TrackingActivity from "./TrackingActivity.svelte";
+  import { stripTrackingPixels } from "$lib/tracking";
   import { ArrowLeft, ArchiveRestore, Trash2, Inbox, Archive, Reply, ReplyAll, Forward, Star } from "@lucide/svelte";
   import { selectedEmail, view, emails, composeMode, replyToEmail, emailActions, selectedIndex, selectedEmailId, currentFolder, searchQuery } from "$lib/stores";
   import { get } from "svelte/store";
   import { extractSearchTerms, highlightHTMLContent, getHighlightCSS } from "$lib/search";
   import { formatDateFull } from "$lib/dateUtils";
-  import { api } from "$lib/api";
+  import { api, API_URL } from "$lib/api";
   import HighlightText from "./HighlightText.svelte";
   import SmartReplySuggestions from "./SmartReplySuggestions.svelte";
 
@@ -79,11 +81,11 @@
       .replace(/'/g, "&#039;");
   }
 
-  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8877";
 
   // Sanitize HTML and replace cid: URLs with API URLs
   function sanitizeEmailHtml(html: string, emailId: string): string {
-    let sanitized = html;
+    // Never load our own tracking pixel, so viewing a sent message doesn't count as an open
+    let sanitized = stripTrackingPixels(html);
 
     // Replace cid: image references with API endpoint URLs
     sanitized = sanitized.replace(
@@ -401,6 +403,8 @@
           {/if}
         </div>
       {/if}
+
+      <TrackingActivity email={$selectedEmail} />
 
       <div class="body">
         {#if $selectedEmail.body_html || $selectedEmail.body_text}

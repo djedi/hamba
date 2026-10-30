@@ -38,12 +38,12 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 20px;
-    border-radius: 8px;
-    font-size: 14px;
+    padding: 8px 14px;
+    border-radius: var(--r-md);
+    font-size: 13px;
     font-weight: 500;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    animation: slideIn 0.2s ease-out;
+    animation: slideIn 0.1s ease-out;
   }
 
   .toast-message {

@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { X, Paperclip, CalendarClock, Bell, Sparkles } from "@lucide/svelte";
+  import { X, Paperclip, CalendarClock, Bell, Sparkles, Eye, MousePointerClick } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
   import { api, type Email, type Draft, type Signature } from "$lib/api";
   import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails, snippets, snippetActions, composePrefillBody } from "$lib/stores";
   import { listKey, writeFirstPage } from "$lib/listCache";
   import EmailInput from "./EmailInput.svelte";
+  import WhenPicker from "./WhenPicker.svelte";
+  import { getTrackingPrefs, setTrackingPref, PRIVACY_NOTE, TRACKING_UNAVAILABLE } from "$lib/tracking";
   import { htmlToText, quoteText, plainTextToHtml } from "$lib/composeText";
   import { get } from "svelte/store";
 
@@ -55,8 +57,36 @@
   let attachments = $state<AttachmentFile[]>([]);
   let isDragging = $state(false);
   let showSchedulePicker = $state(false);
-  let customScheduleDate = $state("");
-  let customScheduleTime = $state("");
+  // Read receipts / link tracking (needs PUBLIC_URL on the backend)
+  const trackingPrefs = getTrackingPrefs();
+  let trackOpens = $state(trackingPrefs.opens);
+  let trackLinks = $state(trackingPrefs.links);
+  let trackingAvailable = $state(false);
+  const sendTrackOpens = $derived(trackingAvailable && trackOpens);
+  const sendTrackLinks = $derived(trackingAvailable && trackLinks);
+
+  function toggleTracking(kind: "opens" | "links") {
+    if (!trackingAvailable) {
+      showToast(TRACKING_UNAVAILABLE, "error");
+      return;
+    }
+    if (kind === "opens") trackOpens = !trackOpens;
+    else trackLinks = !trackLinks;
+    setTrackingPref(kind, kind === "opens" ? trackOpens : trackLinks);
+  }
+
+  // Cmd/Ctrl+Alt+T flips both: off if anything is on, otherwise on
+  function toggleAllTracking() {
+    if (!trackingAvailable) {
+      showToast(TRACKING_UNAVAILABLE, "error");
+      return;
+    }
+    const next = !(trackOpens || trackLinks);
+    trackOpens = trackLinks = next;
+    setTrackingPref("opens", next);
+    setTrackingPref("links", next);
+    showToast(next ? "Tracking on: opens and links" : "Tracking off", "success");
+  }
   let snippetQuery = $state("");
   let showSnippetSuggestions = $state(false);
   let selectedSnippetIndex = $state(0);
@@ -248,6 +278,10 @@
 
   onMount(async () => {
     const accountId = get(selectedAccountId);
+
+    api.getTrackingConfig()
+      .then((c) => (trackingAvailable = !!c.available))
+      .catch(() => {});
 
     // Load default signature for appending to new compositions
     let defaultSignature: Signature | null = null;
@@ -532,6 +566,8 @@ ${originalText(email)}`;
             content: a.content,
           }))
         : undefined,
+      trackOpens: sendTrackOpens,
+      trackLinks: sendTrackLinks,
     };
 
     // Store reminder setting
@@ -626,9 +662,21 @@ ${originalText(email)}`;
     }
 
     // Cmd/Ctrl + Enter to send
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === "Enter") {
       e.preventDefault();
       handleSend();
+    }
+
+    // Cmd/Ctrl + Shift + Enter to send later
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "Enter") {
+      e.preventDefault();
+      if (!sending) showSchedulePicker = true;
+    }
+
+    // Cmd/Ctrl + Alt + T to toggle read receipts + link tracking
+    if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === "KeyT") {
+      e.preventDefault();
+      toggleAllTracking();
     }
 
     // Cmd/Ctrl + Shift + C to toggle/focus Cc field
@@ -670,42 +718,6 @@ ${originalText(email)}`;
     }
   }
 
-  // Schedule presets (returns Unix timestamp)
-  function getSchedulePreset(preset: string): number {
-    const now = new Date();
-    const date = new Date();
-
-    switch (preset) {
-      case "tomorrow-morning":
-        date.setDate(now.getDate() + 1);
-        date.setHours(9, 0, 0, 0);
-        break;
-      case "tomorrow-afternoon":
-        date.setDate(now.getDate() + 1);
-        date.setHours(14, 0, 0, 0);
-        break;
-      case "monday-morning": {
-        const dayOfWeek = now.getDay();
-        const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek);
-        date.setDate(now.getDate() + daysUntilMonday);
-        date.setHours(9, 0, 0, 0);
-        break;
-      }
-      default:
-        return 0;
-    }
-
-    return Math.floor(date.getTime() / 1000);
-  }
-
-  function formatPresetLabel(preset: string): string {
-    const timestamp = getSchedulePreset(preset);
-    if (!timestamp) return "";
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) +
-           " at " + date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }
-
   async function handleSchedule(sendAt: number) {
     const accountId = get(selectedAccountId);
     if (!accountId) {
@@ -744,6 +756,8 @@ ${originalText(email)}`;
             }))
           : undefined,
         sendAt,
+        trackOpens: sendTrackOpens,
+        trackLinks: sendTrackLinks,
       });
 
       if (result.error) {
@@ -777,25 +791,6 @@ ${originalText(email)}`;
       error = err instanceof Error ? err.message : "Failed to schedule";
       sending = false;
     }
-  }
-
-  function handleCustomSchedule() {
-    if (!customScheduleDate || !customScheduleTime) {
-      error = "Please select date and time";
-      return;
-    }
-
-    const dateTime = new Date(`${customScheduleDate}T${customScheduleTime}`);
-    const sendAt = Math.floor(dateTime.getTime() / 1000);
-
-    // Ensure it's in the future
-    const now = Math.floor(Date.now() / 1000);
-    if (sendAt <= now) {
-      error = "Scheduled time must be in the future";
-      return;
-    }
-
-    handleSchedule(sendAt);
   }
 
   function openAiModal() {
@@ -947,7 +942,7 @@ ${originalText(email)}`;
 
     <div class="field">
       <label for="subject">Subject</label>
-      <input id="subject" type="text" bind:value={subject} placeholder="Subject" />
+      <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" id="subject" type="text" bind:value={subject} placeholder="Subject" />
     </div>
   </div>
 
@@ -958,7 +953,7 @@ ${originalText(email)}`;
     ondragleave={handleDragLeave}
     ondrop={handleDrop}
   >
-    <textarea
+    <textarea autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
       class="compose-body"
       bind:this={bodyTextarea}
       bind:value={body}
@@ -1039,38 +1034,29 @@ ${originalText(email)}`;
         onclick={() => showSchedulePicker = !showSchedulePicker}
         disabled={sending}
       >
-        <CalendarClock size={16} /> Schedule
+        <CalendarClock size={16} /> Send later <kbd>⌘⇧↵</kbd>
       </button>
-      {#if showSchedulePicker}
-        <div class="schedule-dropdown">
-          <div class="schedule-section">
-            <button onclick={() => handleSchedule(getSchedulePreset('tomorrow-morning'))}>
-              <span class="schedule-label">Tomorrow morning</span>
-              <span class="schedule-time">{formatPresetLabel('tomorrow-morning')}</span>
-            </button>
-            <button onclick={() => handleSchedule(getSchedulePreset('tomorrow-afternoon'))}>
-              <span class="schedule-label">Tomorrow afternoon</span>
-              <span class="schedule-time">{formatPresetLabel('tomorrow-afternoon')}</span>
-            </button>
-            <button onclick={() => handleSchedule(getSchedulePreset('monday-morning'))}>
-              <span class="schedule-label">Monday morning</span>
-              <span class="schedule-time">{formatPresetLabel('monday-morning')}</span>
-            </button>
-          </div>
-          <div class="schedule-divider"></div>
-          <div class="schedule-custom">
-            <span class="schedule-custom-label">Custom time</span>
-            <div class="schedule-custom-inputs">
-              <input type="date" bind:value={customScheduleDate} min={new Date().toISOString().split('T')[0]} />
-              <input type="time" bind:value={customScheduleTime} />
-            </div>
-            <button class="schedule-custom-btn" onclick={handleCustomSchedule}>
-              Schedule
-            </button>
-          </div>
-        </div>
-      {/if}
     </div>
+    <button
+      class="track-btn"
+      class:active={sendTrackOpens}
+      onclick={() => toggleTracking("opens")}
+      title={trackingAvailable ? `Track opens (read receipt). ${PRIVACY_NOTE}  Toggle both: ⌘⌥T` : TRACKING_UNAVAILABLE}
+      aria-pressed={sendTrackOpens}
+      class:unavailable={!trackingAvailable}
+    >
+      <Eye size={16} /> Opens
+    </button>
+    <button
+      class="track-btn"
+      class:active={sendTrackLinks}
+      onclick={() => toggleTracking("links")}
+      title={trackingAvailable ? "Track link clicks. Toggle both: ⌘⌥T" : TRACKING_UNAVAILABLE}
+      aria-pressed={sendTrackLinks}
+      class:unavailable={!trackingAvailable}
+    >
+      <MousePointerClick size={16} /> Links
+    </button>
     <div class="reminder-picker">
       <button
         class="reminder-btn"
@@ -1134,6 +1120,16 @@ ${originalText(email)}`;
   </div>
 {/if}
 
+{#if showSchedulePicker}
+  <WhenPicker
+    title="Send later"
+    icon={CalendarClock}
+    confirmLabel="Schedule"
+    onPick={handleSchedule}
+    onClose={() => (showSchedulePicker = false)}
+  />
+{/if}
+
 {#if showAiModal}
   <div class="ai-modal-overlay" onclick={closeAiModal}>
     <div class="ai-modal" onclick={(e) => e.stopPropagation()} onkeydown={handleAiKeydown}>
@@ -1143,7 +1139,7 @@ ${originalText(email)}`;
       </div>
       <div class="ai-modal-body">
         <label for="ai-prompt">What would you like to write?</label>
-        <textarea
+        <textarea autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
           id="ai-prompt"
           class="ai-modal-input"
           bind:value={aiPrompt}
@@ -1513,98 +1509,31 @@ ${originalText(email)}`;
     cursor: not-allowed;
   }
 
-  .schedule-dropdown {
-    position: absolute;
-    bottom: 100%;
-    left: 0;
-    margin-bottom: 4px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    overflow: hidden;
-    z-index: 10;
-    min-width: 250px;
-  }
-
-  .schedule-section button {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    padding: 10px 14px;
+  .track-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: transparent;
-    border: none;
-    text-align: left;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text-secondary);
     cursor: pointer;
-    gap: 2px;
-  }
-
-  .schedule-section button:hover {
-    background: var(--bg-hover);
-  }
-
-  .schedule-label {
-    color: var(--text-primary);
     font-size: 13px;
   }
 
-  .schedule-time {
-    color: var(--text-muted);
-    font-size: 11px;
-  }
-
-  .schedule-divider {
-    height: 1px;
-    background: var(--border);
-    margin: 4px 0;
-  }
-
-  .schedule-custom {
-    padding: 12px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .schedule-custom-label {
-    font-size: 12px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .schedule-custom-inputs {
-    display: flex;
-    gap: 8px;
-  }
-
-  .schedule-custom-inputs input {
-    flex: 1;
-    padding: 6px 8px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
+  .track-btn:hover {
+    background: var(--bg-hover);
     color: var(--text-primary);
-    font-size: 12px;
   }
 
-  .schedule-custom-inputs input:focus {
-    outline: none;
+  .track-btn.active {
+    color: var(--accent);
     border-color: var(--accent);
   }
 
-  .schedule-custom-btn {
-    padding: 8px 12px;
-    background: var(--accent);
-    border: none;
-    border-radius: 6px;
-    color: white;
-    font-size: 13px;
-    cursor: pointer;
-  }
-
-  .schedule-custom-btn:hover {
-    filter: brightness(1.1);
+  .track-btn.unavailable {
+    opacity: 0.45;
   }
 
   .snippet-suggestions {
@@ -1724,6 +1653,7 @@ ${originalText(email)}`;
     cursor: not-allowed;
   }
 
+  .schedule-btn kbd,
   .ai-btn kbd {
     opacity: 0.7;
     font-size: 11px;

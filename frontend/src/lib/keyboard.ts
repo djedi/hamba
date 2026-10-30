@@ -26,6 +26,7 @@ import {
   loadCustomBindings,
   buildKeyMaps,
 } from "./keyboardShortcuts";
+import { cycleTheme } from "./theme";
 
 // Sync callback - registered by the main page
 let syncCallback: (() => void) | null = null;
@@ -436,6 +437,8 @@ const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
   show_shortcuts: () => {
     isShortcutOverlayOpen.update((v) => !v);
   },
+
+  cycle_theme: () => cycleTheme(),
 
   sync: () => {
     if (syncCallback) {

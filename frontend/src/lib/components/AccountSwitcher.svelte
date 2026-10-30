@@ -122,7 +122,7 @@
   <div class="switcher slide-up" role="dialog" aria-modal="true" aria-label="Switch account">
     <div class="input-wrapper">
       <span class="icon">@</span>
-      <input
+      <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
         bind:this={inputRef}
         type="text"
         placeholder="Switch account..."

@@ -63,7 +63,7 @@
     border-radius: 6px;
     font-size: 13px;
     font-weight: 500;
-    transition: all 0.2s ease;
+    transition: background-color 0.1s ease-out;
   }
 
   .connection-status.offline {

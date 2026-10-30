@@ -1,5 +1,5 @@
 //! Real-time notification hub: WebSocket clients subscribe to account IDs and
-//! receive `new_mail`, `sync_complete`, `send_failed` and `background_sync_progress` messages.
+//! receive `new_mail`, `sync_complete`, `send_failed`, `tracking` and `background_sync_progress` messages.
 
 use axum::extract::ws::{Message, WebSocket};
 use futures::{SinkExt, StreamExt};
@@ -85,6 +85,20 @@ impl Realtime {
         self.broadcast(
             account_id,
             json!({ "type": "send_failed", "accountId": account_id, "subject": subject, "error": error, "draftId": draft_id }),
+        );
+    }
+
+    pub fn notify_tracking(&self, account_id: &str, email_id: &str, subject: &str, event: &str, count: i64, url: Option<&str>) {
+        self.broadcast(
+            account_id,
+            json!({ "type": "tracking", "accountId": account_id, "emailId": email_id, "subject": subject, "event": event, "count": count, "url": url }),
+        );
+    }
+
+    pub fn notify_unsnoozed(&self, account_id: &str, email_id: &str, subject: &str) {
+        self.broadcast(
+            account_id,
+            json!({ "type": "unsnoozed", "accountId": account_id, "emailId": email_id, "subject": subject }),
         );
     }
 

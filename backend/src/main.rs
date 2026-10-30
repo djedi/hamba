@@ -21,6 +21,8 @@ use tracing_subscriber::EnvFilter;
 pub struct AppState {
     pub db: db::Db,
     pub realtime: realtime::Realtime,
+    /// Require an app login (see `routes/session.rs`)
+    pub auth: bool,
 }
 
 async fn ws_handler(State(state): State<AppState>, ws: WebSocketUpgrade) -> Response {
@@ -73,10 +75,15 @@ pub fn build_app(state: AppState) -> Router {
         .nest("/contacts", routes::contacts::router())
         .nest("/drafts", routes::drafts::router())
         .nest("/emails", routes::emails::router())
+        .nest("/api-keys", routes::api_keys::router())
+        .nest("/api/v1", routes::v1::router(state.clone()))
+        .nest("/t", services::tracking::router())
         .nest("/ai", routes::ai::router())
         .nest("/auth", routes::auth::router())
+        .nest("/session", routes::session::router())
         .merge(services::metrics::router())
         .merge(openapi::router())
+        .layer(axum::middleware::from_fn_with_state(state.clone(), routes::session::require_auth))
         .layer(axum::middleware::from_fn(services::metrics::logging_middleware))
         .layer(cors)
         .with_state(state)
@@ -108,7 +115,30 @@ async fn main() {
     let state = AppState {
         db,
         realtime: realtime::Realtime::default(),
+        auth: routes::session::auth_enabled(),
     };
+
+    // `hamba-backend set-password <username>`: create the login or reset its password
+    // (password from HAMBA_PASSWORD or stdin)
+    if std::env::args().nth(1).as_deref() == Some("set-password") {
+        let Some(username) = std::env::args().nth(2) else {
+            eprintln!("usage: hamba-backend set-password <username>");
+            std::process::exit(2);
+        };
+        let password = std::env::var("HAMBA_PASSWORD").unwrap_or_else(|_| {
+            let mut line = String::new();
+            std::io::stdin().read_line(&mut line).expect("Failed to read password");
+            line.trim_end_matches(['\r', '\n']).to_string()
+        });
+        match routes::session::set_password(&state, &username, &password).await {
+            Ok(_) => println!("Password set for {username}"),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
 
     let app = build_app(state.clone());
 

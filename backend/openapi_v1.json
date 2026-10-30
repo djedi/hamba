@@ -1,0 +1,844 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hamba Email API",
+    "version": "1.0.0",
+    "description": "Read-only access to your Hamba mailbox, designed for AI agents and scripts.\n\n## Getting an API key\n\n1. Open Hamba and go to **Settings -> API**.\n2. Click **Create key**, give it a name (for example \"my agent\") and copy the key. It starts with `hamba_` and is shown **only once**.\n3. Send it on every request as `Authorization: Bearer <key>`. Revoke it from the same screen at any time.\n\n## Example\n\n```bash\nexport HAMBA=http://localhost:8877\nexport KEY=hamba_xxxxxxxx\n\n# Unread mail from the last day\ncurl -H \"Authorization: Bearer $KEY\" \\\n  \"$HAMBA/api/v1/emails?unread=true&since=$(date -u -v-1d +%Y-%m-%dT%H:%M:%SZ)&limit=20\"\n\n# Read one message in full, then search\ncurl -H \"Authorization: Bearer $KEY\" \"$HAMBA/api/v1/emails/<id>\"\ncurl -H \"Authorization: Bearer $KEY\" \"$HAMBA/api/v1/search?q=invoice\"\n```\n\n## Conventions\n\n- All responses are JSON with camelCase fields (except attachment downloads).\n- List endpoints return `{ data, pagination }`. `limit` defaults to 25 and is capped at 100; page with `offset` until `hasMore` is false.\n- Timestamps are ISO 8601 UTC (`receivedAt`) with a Unix-seconds twin (`receivedAtUnix`).\n- Errors are `{ \"error\": { \"code\", \"message\" } }`.\n- The API is read-only. It never changes mail state (reading a message does not mark it read)."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "This server"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Accounts"
+    },
+    {
+      "name": "Emails"
+    },
+    {
+      "name": "Threads"
+    },
+    {
+      "name": "Search"
+    }
+  ],
+  "paths": {
+    "/api/v1/accounts": {
+      "get": {
+        "tags": [
+          "Accounts"
+        ],
+        "operationId": "listAccounts",
+        "summary": "List connected accounts",
+        "description": "Connected mail accounts with their unread inbox counts. Credentials are never exposed.",
+        "responses": {
+          "200": {
+            "description": "Accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Account"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": "acct-1",
+                      "email": "me@example.com",
+                      "displayName": "Me",
+                      "providerType": "gmail",
+                      "unreadCount": 12
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/emails": {
+      "get": {
+        "tags": [
+          "Emails"
+        ],
+        "operationId": "listEmails",
+        "summary": "List emails",
+        "description": "Newest first. Trashed mail is excluded unless `folder=trash`.",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "description": "Only this account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "folder",
+            "in": "query",
+            "description": "Folder: `inbox`, `sent`, `archive`, `starred`, `trash` (or any provider folder name). Default: all non-trashed mail.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "inbox"
+          },
+          {
+            "name": "unread",
+            "in": "query",
+            "description": "Only unread mail when `true`",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Words that must all appear in subject, sender or body",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Only mail received at or after this time (ISO 8601 or Unix seconds)",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2025-01-01"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size (1-100)",
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of emails",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailList"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": "7f3c2a1e-0b4d-4c55-9a51-2f1d7b9e8c10",
+                      "accountId": "acct-1",
+                      "threadId": "thread-42",
+                      "subject": "Quarterly report",
+                      "from": {
+                        "name": "Alice",
+                        "email": "alice@example.com"
+                      },
+                      "to": [
+                        "me@example.com"
+                      ],
+                      "cc": [],
+                      "snippet": "Hi, attached is the report...",
+                      "receivedAt": "2025-01-15T09:30:00Z",
+                      "receivedAtUnix": 1736933400,
+                      "isRead": false,
+                      "isStarred": false,
+                      "labels": [
+                        "INBOX"
+                      ],
+                      "folder": "inbox",
+                      "hasAttachments": true
+                    }
+                  ],
+                  "pagination": {
+                    "limit": 25,
+                    "offset": 0,
+                    "hasMore": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/emails/{id}": {
+      "get": {
+        "tags": [
+          "Emails"
+        ],
+        "operationId": "getEmail",
+        "summary": "Get an email",
+        "description": "Full message including bodies and attachment metadata.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Email id",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7f3c2a1e-0b4d-4c55-9a51-2f1d7b9e8c10"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The email",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/emails/{id}/attachments/{attachmentId}": {
+      "get": {
+        "tags": [
+          "Emails"
+        ],
+        "operationId": "getAttachment",
+        "summary": "Download an attachment",
+        "description": "Raw attachment bytes with the stored content type. Use the ids from `attachments` on the email.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Email id",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7f3c2a1e-0b4d-4c55-9a51-2f1d7b9e8c10"
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "description": "Attachment id",
+            "schema": {
+              "type": "string"
+            },
+            "example": "att-1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachment bytes",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}": {
+      "get": {
+        "tags": [
+          "Threads"
+        ],
+        "operationId": "getThread",
+        "summary": "Get a thread",
+        "description": "All non-trashed messages in a conversation, oldest first.",
+        "parameters": [
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "description": "Thread id (`threadId` on an email)",
+            "schema": {
+              "type": "string"
+            },
+            "example": "thread-42"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The thread",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Thread"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "operationId": "searchEmails",
+        "summary": "Search emails",
+        "description": "Full-text search over subject, sender and body. Uses the FTS index when it has matches and falls back to substring matching otherwise.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search text (required)",
+            "schema": {
+              "type": "string"
+            },
+            "example": "invoice"
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "description": "Only this account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max results (1-100)",
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailList"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": "7f3c2a1e-0b4d-4c55-9a51-2f1d7b9e8c10",
+                      "accountId": "acct-1",
+                      "threadId": "thread-42",
+                      "subject": "Quarterly report",
+                      "from": {
+                        "name": "Alice",
+                        "email": "alice@example.com"
+                      },
+                      "to": [
+                        "me@example.com"
+                      ],
+                      "cc": [],
+                      "snippet": "Hi, attached is the report...",
+                      "receivedAt": "2025-01-15T09:30:00Z",
+                      "receivedAtUnix": 1736933400,
+                      "isRead": false,
+                      "isStarred": false,
+                      "labels": [
+                        "INBOX"
+                      ],
+                      "folder": "inbox",
+                      "hasAttachments": true
+                    }
+                  ],
+                  "pagination": {
+                    "limit": 25,
+                    "offset": 0,
+                    "hasMore": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing q",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or revoked API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API key created in Settings -> API (starts with `hamba_`)."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "examples": [
+                  "unauthorized"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "Account": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "unreadCount"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "providerType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "gmail, microsoft, yahoo or imap"
+          },
+          "unreadCount": {
+            "type": "integer",
+            "description": "Unread messages in the inbox"
+          }
+        }
+      },
+      "Sender": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "EmailSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "accountId",
+          "subject",
+          "from",
+          "to",
+          "cc",
+          "snippet",
+          "receivedAt",
+          "receivedAtUnix",
+          "isRead",
+          "isStarred",
+          "labels",
+          "folder",
+          "hasAttachments"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "accountId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject": {
+            "type": "string"
+          },
+          "from": {
+            "$ref": "#/components/schemas/Sender"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Recipients as written in the header, e.g. `Name <a@b.c>`"
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "receivedAtUnix": {
+            "type": "integer"
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "isStarred": {
+            "type": "boolean"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "folder": {
+            "type": "string"
+          },
+          "hasAttachments": {
+            "type": "boolean"
+          },
+          "tracking": {
+            "$ref": "#/components/schemas/Tracking"
+          }
+        }
+      },
+      "Attachment": {
+        "type": "object",
+        "required": [
+          "id",
+          "url"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mimeType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "contentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "description": "Path to download the bytes"
+          }
+        }
+      },
+      "EmailDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EmailSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "bcc",
+              "bodyText",
+              "bodyHtml",
+              "attachments"
+            ],
+            "properties": {
+              "bcc": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "bodyText": {
+                "type": "string"
+              },
+              "bodyHtml": {
+                "type": "string"
+              },
+              "attachments": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Pagination": {
+        "type": "object",
+        "required": [
+          "limit",
+          "offset",
+          "hasMore"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EmailList": {
+        "type": "object",
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailSummary"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "Thread": {
+        "type": "object",
+        "required": [
+          "threadId",
+          "messages"
+        ],
+        "properties": {
+          "threadId": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailDetail"
+            }
+          }
+        }
+      },
+      "Tracking": {
+        "type": "object",
+        "description": "Read-receipt and link-tracking activity for a sent message. Present only when tracking was enabled. Opens can be unreliable (Apple Mail Privacy Protection and image proxies).",
+        "properties": {
+          "opens": {
+            "type": "integer"
+          },
+          "clicks": {
+            "type": "integer"
+          },
+          "firstOpenedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastOpenedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastClickedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}

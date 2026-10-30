@@ -5,6 +5,7 @@
 
 use crate::providers::{get_provider, Attachment, SendParams};
 use crate::routes::contacts::add_contact_from_send;
+use crate::services::tracking;
 use crate::{db, AppState};
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -45,6 +46,8 @@ pub struct OutgoingEmail {
     pub reply_to_id: Option<String>,
     /// JSON array of `{ filename, mimeType, content }`, stored verbatim
     pub attachments: Option<Value>,
+    pub track_opens: bool,
+    pub track_links: bool,
 }
 
 impl OutgoingEmail {
@@ -59,6 +62,8 @@ impl OutgoingEmail {
             body: body["body"].as_str().unwrap_or("").to_string(),
             reply_to_id: s("replyToId"),
             attachments: body.get("attachments").filter(|a| a.is_array()).cloned(),
+            track_opens: body["trackOpens"].as_bool().unwrap_or(false),
+            track_links: body["trackLinks"].as_bool().unwrap_or(false),
         }
     }
 }
@@ -73,8 +78,8 @@ fn account_exists(state: &AppState, account_id: &str) -> bool {
 fn insert(state: &AppState, queue: Queue, email: &OutgoingEmail, send_at: i64) -> Result<String, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let sql = format!(
-        "INSERT INTO {} (id, account_id, to_addresses, cc_addresses, bcc_addresses, subject, body, reply_to_id, attachments, send_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO {} (id, account_id, to_addresses, cc_addresses, bcc_addresses, subject, body, reply_to_id, attachments, send_at, track_opens, track_links)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         queue.table()
     );
     state
@@ -92,7 +97,9 @@ fn insert(state: &AppState, queue: Queue, email: &OutgoingEmail, send_at: i64) -
                 email.body,
                 email.reply_to_id,
                 email.attachments.as_ref().map(Value::to_string),
-                send_at
+                send_at,
+                email.track_opens,
+                email.track_links
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -203,7 +210,8 @@ pub fn update_scheduled_email(state: &AppState, id: &str, body: &Value) -> Value
     };
     match state.db.conn().execute(
         "UPDATE scheduled_emails
-         SET to_addresses = ?, cc_addresses = ?, bcc_addresses = ?, subject = ?, body = ?, reply_to_id = ?, attachments = ?, send_at = ?
+         SET to_addresses = ?, cc_addresses = ?, bcc_addresses = ?, subject = ?, body = ?, reply_to_id = ?, attachments = ?, send_at = ?,
+             track_opens = ?, track_links = ?
          WHERE id = ?",
         rusqlite::params![
             or_existing("to", "to_addresses"),
@@ -214,6 +222,8 @@ pub fn update_scheduled_email(state: &AppState, id: &str, body: &Value) -> Value
             nullable("replyToId", "reply_to_id"),
             attachments,
             send_at.or(existing["send_at"].as_i64()),
+            body["trackOpens"].as_bool().unwrap_or(existing["track_opens"].as_i64().unwrap_or(0) != 0),
+            body["trackLinks"].as_bool().unwrap_or(existing["track_links"].as_i64().unwrap_or(0) != 0),
             id
         ],
     ) {
@@ -273,6 +283,7 @@ pub fn build_send_params(state: &AppState, email: &OutgoingEmail) -> Option<Send
         references,
         thread_id,
         attachments,
+        local_body: None,
     })
 }
 
@@ -287,6 +298,8 @@ fn row_to_outgoing(row: &Value) -> OutgoingEmail {
         body: s("body").unwrap_or_default(),
         reply_to_id: s("reply_to_id"),
         attachments: row["attachments"].as_str().and_then(|a| serde_json::from_str(a).ok()),
+        track_opens: row["track_opens"].as_i64().unwrap_or(0) != 0,
+        track_links: row["track_links"].as_i64().unwrap_or(0) != 0,
     }
 }
 
@@ -329,20 +342,27 @@ pub async fn process_queue(state: &AppState, queue: Queue) -> (i64, i64) {
         // Remove first so a slow send can't be picked up again by the next tick
         let _ = state.db.conn().execute(&delete_sql, [&id]);
 
-        let Some(params) = build_send_params(state, &email) else {
+        let Some(mut params) = build_send_params(state, &email) else {
             tracing::error!(service = queue.label(), account_id = %email.account_id, id = %id, "Account not found, removing queued email");
             errors += 1;
             continue;
         };
+        let tracking_id = tracking::prepare(state, &email, &mut params);
         let result = match get_provider(state, &email.account_id) {
             Ok(provider) => provider.send(params).await,
             Err(e) => {
+                if let Some(t) = &tracking_id {
+                    tracking::finish(state, t, None, false);
+                }
                 tracing::error!(service = queue.label(), id = %id, error = %e, "Error processing queued email");
                 send_failed(state, &email, &e.to_string());
                 errors += 1;
                 continue;
             }
         };
+        if let Some(t) = &tracking_id {
+            tracking::finish(state, t, result.message_id.as_deref(), result.success);
+        }
         if result.success {
             tracing::info!(service = queue.label(), id = %id, to = %email.to, "Email sent successfully");
             add_contact_from_send(

@@ -1177,7 +1177,8 @@ impl ImapCore {
     pub fn save_sent(&self, params: &SendParams, message_id: &str) {
         let email_id = format!("{}:sent:{}", self.account_id, chrono_millis());
         let (from_name, from_email) = parse_from_address(&params.from);
-        let body_text = emails_db::html_to_text(&params.body);
+        let local_body = params.local_body.as_deref().unwrap_or(&params.body);
+        let body_text = emails_db::html_to_text(local_body);
         let row = EmailRow {
             id: email_id,
             account_id: self.account_id.clone(),
@@ -1197,7 +1198,7 @@ impl ImapCore {
             cc_addresses: params.cc.clone().filter(|s| !s.is_empty()),
             bcc_addresses: params.bcc.clone().filter(|s| !s.is_empty()),
             body_text,
-            body_html: params.body.clone(),
+            body_html: local_body.to_string(),
             labels: "[]".into(),
             is_read: true,
             is_starred: false,

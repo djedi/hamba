@@ -91,6 +91,9 @@ pub struct SendParams {
     pub thread_id: Option<String>,
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    /// Body to keep in the local Sent copy when `body` was rewritten for tracking
+    #[serde(default, skip)]
+    pub local_body: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

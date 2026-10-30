@@ -27,7 +27,9 @@ fn main() {
 
                 let sidecar = _app.shell().sidecar("backend")
                     .expect("Failed to create sidecar command")
-                    .env("DATABASE_PATH", &db_path_str);
+                    .env("DATABASE_PATH", &db_path_str)
+                    // Local desktop app: no app login
+                    .env("HAMBA_AUTH", "off");
 
                 let (_rx, child) = sidecar.spawn()
                     .expect("Failed to spawn backend sidecar");

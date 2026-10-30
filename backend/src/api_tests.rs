@@ -20,6 +20,7 @@ fn state() -> AppState {
     AppState {
         db,
         realtime: realtime::Realtime::default(),
+        auth: false,
     }
 }
 
@@ -554,4 +555,381 @@ async fn account_avatar_upload_get_delete() {
 
     assert_eq!(call(&s, Method::DELETE, url, None).await["success"], true);
     assert_eq!(get(&s).await.unwrap().status(), 404);
+}
+
+// ---------- Public API (/api/v1) ----------
+
+async fn raw(state: &AppState, method: Method, uri: &str, key: Option<&str>, body: Option<Value>) -> (u16, Value) {
+    let mut req = Request::builder().method(method).uri(uri);
+    if let Some(k) = key {
+        req = req.header("authorization", format!("Bearer {k}"));
+    }
+    let body = match body {
+        Some(b) => {
+            req = req.header("content-type", "application/json");
+            Body::from(b.to_string())
+        }
+        None => Body::empty(),
+    };
+    let res = build_app(state.clone()).oneshot(req.body(body).unwrap()).await.unwrap();
+    let status = res.status().as_u16();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+}
+
+async fn make_key(s: &AppState, name: &str) -> Value {
+    call(s, Method::POST, "/api-keys", Some(json!({ "name": name }))).await
+}
+
+#[tokio::test]
+async fn api_keys_shown_once_and_never_listed() {
+    let s = state();
+    let created = make_key(&s, "agent").await;
+    let key = created["key"].as_str().unwrap();
+    assert!(key.starts_with("hamba_") && key.len() >= 38);
+    assert_eq!(created["keyPrefix"], &key[..12]);
+
+    let list = call(&s, Method::GET, "/api-keys", None).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    assert_eq!(list[0]["name"], "agent");
+    assert!(!list.to_string().contains(key));
+    assert!(list[0].get("key").is_none() && list[0].get("keyHash").is_none() && list[0].get("key_hash").is_none());
+
+    // Only the hash is stored
+    let stored: String = s.db.conn().query_row("SELECT key_hash FROM api_keys", [], |r| r.get(0)).unwrap();
+    assert_ne!(stored, key);
+    assert_eq!(make_key(&s, " ").await["success"], false);
+}
+
+#[tokio::test]
+async fn v1_requires_valid_key() {
+    let s = state();
+    let (st, body) = raw(&s, Method::GET, "/api/v1/accounts", None, None).await;
+    assert_eq!(st, 401);
+    assert_eq!(body["error"]["code"], "unauthorized");
+    assert_eq!(raw(&s, Method::GET, "/api/v1/accounts", Some("hamba_nope"), None).await.0, 401);
+
+    let created = make_key(&s, "k").await;
+    let key = created["key"].as_str().unwrap();
+    assert_eq!(raw(&s, Method::GET, "/api/v1/accounts", Some(key), None).await.0, 200);
+    let used: Option<i64> = s.db.conn().query_row("SELECT last_used_at FROM api_keys", [], |r| r.get(0)).unwrap();
+    assert!(used.is_some());
+
+    let id = created["id"].as_str().unwrap();
+    assert_eq!(call(&s, Method::DELETE, &format!("/api-keys/{id}"), None).await["success"], true);
+    assert_eq!(raw(&s, Method::GET, "/api/v1/accounts", Some(key), None).await.0, 401);
+    assert_eq!(raw(&s, Method::GET, "/api/v1/emails", Some(key), None).await.0, 401);
+    assert_eq!(call(&s, Method::GET, "/api-keys", None).await, json!([]));
+}
+
+#[tokio::test]
+async fn v1_reads_accounts_emails_threads_search() {
+    let s = state();
+    insert_email(&s, "e1", "Quarterly report", "");
+    insert_email(&s, "e2", "Lunch plans", "");
+    {
+        let c = s.db.conn();
+        c.execute(
+            "UPDATE emails SET thread_id = 't1', to_addresses = '\"Doe, Me\" <me@example.com>, b@x.com', labels = '[\"INBOX\"]' WHERE id = 'e1'",
+            [],
+        )
+        .unwrap();
+        c.execute("UPDATE emails SET thread_id = 't1', received_at = 1700000500 WHERE id = 'e2'", []).unwrap();
+        crate::emails_db::insert_attachment(&c, "att1", "e1", None, "a.txt", "text/plain", b"hi").unwrap();
+    }
+    let key = make_key(&s, "k").await["key"].as_str().unwrap().to_string();
+    let k = Some(key.as_str());
+
+    let (_, accts) = raw(&s, Method::GET, "/api/v1/accounts", k, None).await;
+    assert_eq!(accts["data"][0]["email"], "me@example.com");
+    assert_eq!(accts["data"][0]["unreadCount"], 2);
+    assert!(!accts.to_string().contains("token"));
+
+    let (st, list) = raw(&s, Method::GET, "/api/v1/emails?unread=true&limit=1", k, None).await;
+    assert_eq!(st, 200);
+    assert_eq!(list["data"].as_array().unwrap().len(), 1);
+    assert_eq!(list["pagination"]["hasMore"], true);
+    assert_eq!(list["data"][0]["id"], "e2");
+    assert_eq!(list["data"][0]["receivedAt"], "2023-11-14T22:21:40Z");
+
+    let (_, list) = raw(&s, Method::GET, "/api/v1/emails?q=quarterly&since=2023-01-01", k, None).await;
+    assert_eq!(list["data"][0]["id"], "e1");
+    assert_eq!(list["data"][0]["to"], json!(["\"Doe, Me\" <me@example.com>", "b@x.com"]));
+    assert_eq!(list["data"][0]["hasAttachments"], true);
+    assert_eq!(list["data"][0]["labels"], json!(["INBOX"]));
+    assert_eq!(raw(&s, Method::GET, "/api/v1/emails?since=garbage", k, None).await.0, 400);
+
+    let (st, one) = raw(&s, Method::GET, "/api/v1/emails/e1", k, None).await;
+    assert_eq!(st, 200);
+    assert_eq!(one["bodyText"], "hello world");
+    assert_eq!(one["attachments"][0]["filename"], "a.txt");
+    assert_eq!(raw(&s, Method::GET, "/api/v1/emails/nope", k, None).await.0, 404);
+
+    let (_, th) = raw(&s, Method::GET, "/api/v1/threads/t1", k, None).await;
+    let ids: Vec<&str> = th["messages"].as_array().unwrap().iter().map(|m| m["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, ["e1", "e2"]);
+    assert_eq!(raw(&s, Method::GET, "/api/v1/threads/zzz", k, None).await.0, 404);
+
+    // FTS index is empty here, so this exercises the LIKE fallback
+    let (_, found) = raw(&s, Method::GET, "/api/v1/search?q=lunch&accountId=acct-1", k, None).await;
+    assert_eq!(found["data"].as_array().unwrap().len(), 1);
+    assert_eq!(found["data"][0]["id"], "e2");
+    assert_eq!(raw(&s, Method::GET, "/api/v1/search", k, None).await.0, 400);
+
+    let res = build_app(s.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/emails/e1/attachments/att1")
+                .header("authorization", format!("Bearer {key}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.into_body().collect().await.unwrap().to_bytes().as_ref(), b"hi");
+}
+
+#[tokio::test]
+async fn docs_serve_scalar_and_spec() {
+    let s = state();
+    let (st, spec) = raw(&s, Method::GET, "/docs/openapi.json", None, None).await;
+    assert_eq!(st, 200);
+    assert_eq!(spec["openapi"], "3.1.0");
+}
+
+#[tokio::test]
+async fn thread_scoped_to_account() {
+    let s = state();
+    {
+        let conn = s.db.conn();
+        conn.execute(
+            "INSERT INTO accounts (id, email, name, provider_type) VALUES ('acct-b', 'b@example.com', 'B', 'imap')",
+            [],
+        )
+        .unwrap();
+        // Same message seen by two local accounts: sent copy and received copy
+        for (id, acct, folder) in [("t-sent", ACCOUNT, "sent"), ("t-recv", "acct-b", "inbox")] {
+            conn.execute(
+                "INSERT INTO emails (id, account_id, message_id, thread_id, subject, received_at, folder)
+                 VALUES (?, ?, '<m1@x>', '<m1@x>', 'Hi', 1700000000, ?)",
+                (id, acct, folder),
+            )
+            .unwrap();
+        }
+    }
+    let all = call(&s, Method::GET, "/emails/thread/%3Cm1%40x%3E", None).await;
+    assert_eq!(all.as_array().unwrap().len(), 2);
+    let scoped = call(&s, Method::GET, "/emails/thread/%3Cm1%40x%3E?accountId=acct-b", None).await;
+    assert_eq!(scoped.as_array().unwrap().len(), 1);
+    assert_eq!(scoped[0]["id"], "t-recv");
+}
+
+// ---------- Tracking ----------
+
+async fn raw_get(state: &AppState, uri: &str) -> (u16, axum::http::HeaderMap, Vec<u8>) {
+    let req = Request::builder().method(Method::GET).uri(uri).body(Body::empty()).unwrap();
+    let res = build_app(state.clone()).oneshot(req).await.unwrap();
+    let (status, headers) = (res.status().as_u16(), res.headers().clone());
+    (status, headers, res.into_body().collect().await.unwrap().to_bytes().to_vec())
+}
+
+fn seed_tracking(state: &AppState, email_id: &str, age_secs: i64) {
+    let conn = state.db.conn();
+    conn.execute(
+        "INSERT INTO email_tracking (id, token, account_id, email_id, subject, recipients, created_at)
+         VALUES ('trk1', 'tok1', ?, ?, 'Hello', 'bob@example.com', unixepoch() - ?)",
+        (ACCOUNT, email_id, age_secs),
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO tracking_links (id, tracking_id, url) VALUES ('lnk1', 'trk1', 'https://example.org/page?a=1')",
+        [],
+    )
+    .unwrap();
+}
+
+fn event_count(state: &AppState, kind: &str) -> i64 {
+    state
+        .db
+        .conn()
+        .query_row("SELECT COUNT(*) FROM tracking_events WHERE type = ?", [kind], |r| r.get(0))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn open_pixel_records_event_and_returns_gif() {
+    let s = state();
+    insert_email(&s, "sent1", "Hello", "sent");
+    seed_tracking(&s, "sent1", 3600);
+
+    let (status, headers, body) = raw_get(&s, "/t/o/tok1.gif").await;
+    assert_eq!(status, 200);
+    assert_eq!(headers["content-type"], "image/gif");
+    assert!(headers["cache-control"].to_str().unwrap().contains("no-store"));
+    assert_eq!(&body[..6], b"GIF89a");
+    assert_eq!(event_count(&s, "open"), 1);
+
+    // Unknown token still gets the GIF but records nothing
+    let (status, _, body) = raw_get(&s, "/t/o/nope.gif").await;
+    assert_eq!((status, &body[..3]), (200, &b"GIF"[..]));
+    assert_eq!(event_count(&s, "open"), 1);
+}
+
+#[tokio::test]
+async fn opens_right_after_sending_are_ignored() {
+    let s = state();
+    insert_email(&s, "sent1", "Hello", "sent");
+    seed_tracking(&s, "sent1", 2);
+    raw_get(&s, "/t/o/tok1.gif").await;
+    assert_eq!(event_count(&s, "open"), 0);
+}
+
+#[tokio::test]
+async fn click_redirects_only_to_stored_url() {
+    let s = state();
+    insert_email(&s, "sent1", "Hello", "sent");
+    seed_tracking(&s, "sent1", 3600);
+
+    let (status, headers, _) = raw_get(&s, "/t/c/lnk1").await;
+    assert_eq!(status, 302);
+    assert_eq!(headers["location"], "https://example.org/page?a=1");
+    assert_eq!(event_count(&s, "click"), 1);
+
+    // Not an open redirect: arbitrary tokens/URLs are rejected
+    let (status, headers, _) = raw_get(&s, "/t/c/https%3A%2F%2Fevil.com").await;
+    assert_eq!(status, 404);
+    assert!(headers.get("location").is_none());
+    assert_eq!(raw_get(&s, "/t/c/unknown").await.0, 404);
+    assert_eq!(event_count(&s, "click"), 1);
+}
+
+#[tokio::test]
+async fn sent_list_includes_tracking_summary() {
+    let s = state();
+    insert_email(&s, "sent1", "Hello", "sent");
+    insert_email(&s, "sent2", "Untracked", "sent");
+    seed_tracking(&s, "sent1", 3600);
+    raw_get(&s, "/t/o/tok1.gif").await;
+    raw_get(&s, "/t/o/tok1.gif").await;
+    raw_get(&s, "/t/c/lnk1").await;
+
+    let sent = call(&s, Method::GET, &format!("/emails/sent?accountId={ACCOUNT}"), None).await;
+    let tracked = sent.as_array().unwrap().iter().find(|e| e["id"] == "sent1").unwrap();
+    assert_eq!(tracked["tracking"]["opens"], 2);
+    assert_eq!(tracked["tracking"]["clicks"], 1);
+    assert!(tracked["tracking"]["lastOpenedAt"].is_i64());
+    let plain = sent.as_array().unwrap().iter().find(|e| e["id"] == "sent2").unwrap();
+    assert!(plain.get("tracking").is_none());
+
+    let events = call(&s, Method::GET, "/emails/sent1/tracking", None).await;
+    assert_eq!(events.as_array().unwrap().len(), 3);
+    let one = call(&s, Method::GET, "/emails/sent1", None).await;
+    assert_eq!(one["tracking"]["opens"], 2);
+}
+
+#[tokio::test]
+async fn prepare_rewrites_body_and_keeps_local_copy() {
+    use crate::providers::SendParams;
+    use crate::services::{send::OutgoingEmail, tracking};
+    std::env::set_var("PUBLIC_URL", "https://mail.example.com/");
+    let s = state();
+    let email = OutgoingEmail {
+        account_id: ACCOUNT.into(),
+        to: "bob@example.com".into(),
+        subject: "Hi".into(),
+        track_opens: true,
+        track_links: true,
+        ..Default::default()
+    };
+    let original = r#"<p><a href="https://example.org/x">x</a> <a href="mailto:a@b.c">m</a></p>"#;
+    let mut params = SendParams {
+        body: original.into(),
+        ..Default::default()
+    };
+    let id = tracking::prepare(&s, &email, &mut params).expect("tracking enabled");
+    assert_eq!(params.local_body.as_deref(), Some(original));
+    assert!(params.body.contains("https://mail.example.com/t/c/"));
+    assert!(!params.body.contains("https://example.org/x"));
+    assert!(params.body.contains("mailto:a@b.c"));
+    assert!(params.body.contains("https://mail.example.com/t/o/") && params.body.contains(".gif"));
+    let links: i64 = s
+        .db
+        .conn()
+        .query_row("SELECT COUNT(*) FROM tracking_links WHERE tracking_id = ?", [&id], |r| r.get(0))
+        .unwrap();
+    assert_eq!(links, 1);
+
+    // Nothing enabled -> body untouched
+    let off = OutgoingEmail { track_opens: false, track_links: false, ..email };
+    let mut p2 = SendParams { body: original.into(), ..Default::default() };
+    assert!(tracking::prepare(&s, &off, &mut p2).is_none());
+    assert_eq!(p2.body, original);
+}
+
+async fn auth_call(state: &AppState, method: Method, uri: &str, body: Option<Value>, cookie: Option<&str>) -> (u16, Option<String>, Value) {
+    let mut req = Request::builder().method(method).uri(uri);
+    if let Some(c) = cookie {
+        req = req.header("cookie", c);
+    }
+    let body = match body {
+        Some(b) => {
+            req = req.header("content-type", "application/json");
+            Body::from(b.to_string())
+        }
+        None => Body::empty(),
+    };
+    let res = build_app(state.clone()).oneshot(req.body(body).unwrap()).await.unwrap();
+    let status = res.status().as_u16();
+    let set_cookie = res
+        .headers()
+        .get("set-cookie")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.split(';').next().unwrap().to_string());
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (status, set_cookie, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+}
+
+#[tokio::test]
+async fn app_login_flow() {
+    let s = AppState { auth: true, ..state() };
+
+    // Locked before setup; public routes stay open
+    assert_eq!(auth_call(&s, Method::GET, "/auth/accounts", None, None).await.0, 401);
+    assert_eq!(auth_call(&s, Method::GET, "/health", None, None).await.0, 200);
+    let (_, _, st) = auth_call(&s, Method::GET, "/session/status", None, None).await;
+    assert_eq!(st["setupRequired"], true);
+
+    // Setup rejects short passwords, then signs in
+    let (_, _, r) = auth_call(&s, Method::POST, "/session/setup", Some(json!({"username":"dustin","password":"short"})), None).await;
+    assert_eq!(r["success"], false);
+    let (_, cookie, r) = auth_call(&s, Method::POST, "/session/setup", Some(json!({"username":"dustin","password":"correct horse"})), None).await;
+    assert_eq!(r["success"], true);
+    let cookie = cookie.unwrap();
+    assert_eq!(auth_call(&s, Method::GET, "/auth/accounts", None, Some(&cookie)).await.0, 200);
+
+    // Second setup refused
+    let (_, _, r) = auth_call(&s, Method::POST, "/session/setup", Some(json!({"username":"evil","password":"whatever123"})), None).await;
+    assert_eq!(r["success"], false);
+
+    // Wrong password fails; right one (any case username) works
+    let (_, c, r) = auth_call(&s, Method::POST, "/session/login", Some(json!({"username":"dustin","password":"nope nope"})), None).await;
+    assert!(c.is_none());
+    assert_eq!(r["success"], false);
+    let (_, c, r) = auth_call(&s, Method::POST, "/session/login", Some(json!({"username":"Dustin","password":"correct horse"})), None).await;
+    assert_eq!(r["success"], true);
+    let c2 = c.unwrap();
+
+    // Logout invalidates that session only
+    auth_call(&s, Method::POST, "/session/logout", None, Some(&c2)).await;
+    assert_eq!(auth_call(&s, Method::GET, "/auth/accounts", None, Some(&c2)).await.0, 401);
+    assert_eq!(auth_call(&s, Method::GET, "/auth/accounts", None, Some(&cookie)).await.0, 200);
+
+    // Change password
+    let (_, _, r) = auth_call(&s, Method::POST, "/session/password", Some(json!({"currentPassword":"wrong one","newPassword":"new password 1"})), Some(&cookie)).await;
+    assert_eq!(r["success"], false);
+    let (_, _, r) = auth_call(&s, Method::POST, "/session/password", Some(json!({"currentPassword":"correct horse","newPassword":"new password 1"})), Some(&cookie)).await;
+    assert_eq!(r["success"], true);
+    let (_, _, r) = auth_call(&s, Method::POST, "/session/login", Some(json!({"username":"dustin","password":"new password 1"})), None).await;
+    assert_eq!(r["success"], true);
 }

@@ -159,7 +159,7 @@
         <div class="form-section">
           <div class="field">
             <label for="email">Email Address</label>
-            <input
+            <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
               id="email"
               type="email"
               bind:value={email}
@@ -171,17 +171,17 @@
 
           <div class="field">
             <label for="name">Display Name</label>
-            <input id="name" type="text" bind:value={name} placeholder="Optional" />
+            <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" id="name" type="text" bind:value={name} placeholder="Optional" />
           </div>
 
           <div class="field">
             <label for="username">Username</label>
-            <input id="username" type="text" bind:value={username} placeholder="Optional - if different from email" />
+            <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" id="username" type="text" bind:value={username} placeholder="Optional - if different from email" />
           </div>
 
           <div class="field">
             <label for="password">Password / App Password</label>
-            <input id="password" type="password" bind:value={password} required />
+            <input autocomplete="new-password" data-1p-ignore data-lpignore="true" data-form-type="other" id="password" type="password" bind:value={password} required />
           </div>
         </div>
 
@@ -190,7 +190,7 @@
           <div class="row">
             <div class="field flex-1">
               <label for="imapHost">Server</label>
-              <input
+              <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
                 id="imapHost"
                 type="text"
                 bind:value={imapHost}
@@ -200,7 +200,7 @@
             </div>
             <div class="field port-field">
               <label for="imapPort">Port</label>
-              <input id="imapPort" type="number" bind:value={imapPort} />
+              <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" id="imapPort" type="number" bind:value={imapPort} />
             </div>
           </div>
         </div>
@@ -210,7 +210,7 @@
           <div class="row">
             <div class="field flex-1">
               <label for="smtpHost">Server</label>
-              <input
+              <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"
                 id="smtpHost"
                 type="text"
                 bind:value={smtpHost}
@@ -220,7 +220,7 @@
             </div>
             <div class="field port-field">
               <label for="smtpPort">Port</label>
-              <input id="smtpPort" type="number" bind:value={smtpPort} />
+              <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" id="smtpPort" type="number" bind:value={smtpPort} />
             </div>
           </div>
         </div>
