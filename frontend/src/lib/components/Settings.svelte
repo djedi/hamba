@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { Check } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { accounts, selectedAccountId, isSettingsOpen, showToast } from "$lib/stores";
+  import { invalidateAccount } from "$lib/listCache";
   import { api, type Signature } from "$lib/api";
   import {
     type ShortcutAction,
@@ -301,6 +303,7 @@
     deletingAccountId = accountId;
     try {
       await api.deleteAccount(accountId);
+      invalidateAccount(accountId);
       accounts.update(($accounts) => $accounts.filter((a) => a.id !== accountId));
 
       // If this was the selected account, select another one
@@ -838,7 +841,7 @@
               <p class="loading">Checking AI status...</p>
             {:else if aiConfigured}
               <div class="ai-status configured">
-                <span class="status-icon">✓</span>
+                <span class="status-icon"><Check size={14} /></span>
                 <div class="status-text">
                   <strong>AI is configured</strong>
                   <p>AI-powered features are available:</p>

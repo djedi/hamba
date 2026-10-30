@@ -72,6 +72,15 @@
       ],
     },
     {
+      name: "Accounts",
+      shortcuts: [
+        { key: "@", description: "Search accounts" },
+        { key: "g then n", description: "Next account" },
+        { key: "g then p", description: "Previous account" },
+        { key: "Cmd + 1 to 9", description: "Switch to account" },
+      ],
+    },
+    {
       name: "Other",
       shortcuts: [
         { key: "/", description: "Search" },

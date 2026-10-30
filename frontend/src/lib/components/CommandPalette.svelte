@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { Archive, Bell, CalendarClock, Eye, FilePen, Inbox, Keyboard, Mail, MailOpen, Moon, Pencil, RefreshCw, Search, Send, Star, Tag, Trash2, User } from "@lucide/svelte";
   import { onMount, tick } from "svelte";
   import { get } from "svelte/store";
+  import type { Component } from "svelte";
   import {
     isCommandPaletteOpen,
     view,
@@ -13,6 +15,9 @@
     replyToEmail,
     selectedLabelId,
     emailActions,
+    accounts,
+    accountActions,
+    unreadCounts,
   } from "$lib/stores";
   import { api } from "$lib/api";
   import type { Contact, Email, Label } from "$lib/api";
@@ -31,14 +36,15 @@
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Result item types
-  type ResultType = "command" | "email" | "contact" | "label";
+  type IconComp = Component<{ size?: number | string }>;
+  type ResultType = "command" | "email" | "contact" | "label" | "account";
 
   interface ResultItem {
     id: string;
     type: ResultType;
     label: string;
     sublabel?: string;
-    icon: string;
+    icon: IconComp;
     shortcut?: string;
     action: () => void;
     score: number;
@@ -93,7 +99,7 @@
   const commands: Array<{
     id: string;
     label: string;
-    icon: string;
+    icon: IconComp;
     shortcut?: string;
     keywords?: string[];
     action: () => void;
@@ -101,7 +107,7 @@
     {
       id: "inbox",
       label: "Go to Inbox",
-      icon: "📥",
+      icon: Inbox,
       shortcut: "g i",
       keywords: ["home", "main"],
       action: () => {
@@ -113,7 +119,7 @@
     {
       id: "compose",
       label: "Compose new email",
-      icon: "✏️",
+      icon: Pencil,
       shortcut: "c",
       keywords: ["new", "write", "create"],
       action: () => {
@@ -126,7 +132,7 @@
     {
       id: "starred",
       label: "Go to Starred",
-      icon: "⭐",
+      icon: Star,
       shortcut: "g s",
       keywords: ["favorites", "important"],
       action: () => {
@@ -138,7 +144,7 @@
     {
       id: "sent",
       label: "Go to Sent",
-      icon: "📤",
+      icon: Send,
       shortcut: "g t",
       keywords: ["outbox"],
       action: () => {
@@ -150,7 +156,7 @@
     {
       id: "drafts",
       label: "Go to Drafts",
-      icon: "📝",
+      icon: FilePen,
       shortcut: "g d",
       action: () => {
         currentFolder.set("drafts");
@@ -161,7 +167,7 @@
     {
       id: "trash",
       label: "Go to Trash",
-      icon: "🗑️",
+      icon: Trash2,
       shortcut: "g x",
       keywords: ["deleted", "bin"],
       action: () => {
@@ -173,7 +179,7 @@
     {
       id: "archive",
       label: "Go to Archive",
-      icon: "📦",
+      icon: Archive,
       shortcut: "g a",
       keywords: ["all mail"],
       action: () => {
@@ -185,7 +191,7 @@
     {
       id: "snoozed",
       label: "Go to Snoozed",
-      icon: "😴",
+      icon: Moon,
       shortcut: "g h",
       keywords: ["later", "remind"],
       action: () => {
@@ -197,7 +203,7 @@
     {
       id: "reminders",
       label: "Go to Reminders",
-      icon: "🔔",
+      icon: Bell,
       shortcut: "g r",
       keywords: ["follow up"],
       action: () => {
@@ -209,7 +215,7 @@
     {
       id: "scheduled",
       label: "Go to Scheduled",
-      icon: "🕐",
+      icon: CalendarClock,
       shortcut: "g l",
       keywords: ["send later"],
       action: () => {
@@ -221,7 +227,7 @@
     {
       id: "archive-email",
       label: "Archive selected email",
-      icon: "📦",
+      icon: Archive,
       shortcut: "e",
       keywords: ["remove", "hide"],
       action: () => {
@@ -235,7 +241,7 @@
     {
       id: "star-email",
       label: "Star/unstar selected email",
-      icon: "⭐",
+      icon: Star,
       shortcut: "s",
       keywords: ["favorite"],
       action: () => {
@@ -249,7 +255,7 @@
     {
       id: "trash-email",
       label: "Move to trash",
-      icon: "🗑️",
+      icon: Trash2,
       shortcut: "#",
       keywords: ["delete", "remove"],
       action: () => {
@@ -263,7 +269,7 @@
     {
       id: "mark-read",
       label: "Toggle read/unread",
-      icon: "👁️",
+      icon: Eye,
       shortcut: "Shift+I",
       keywords: ["seen", "unseen"],
       action: () => {
@@ -277,7 +283,7 @@
     {
       id: "search",
       label: "Search emails",
-      icon: "🔍",
+      icon: Search,
       shortcut: "/",
       keywords: ["find", "filter"],
       action: () => {
@@ -291,7 +297,7 @@
     {
       id: "refresh",
       label: "Refresh / Sync emails",
-      icon: "🔄",
+      icon: RefreshCw,
       shortcut: "Shift+R",
       keywords: ["reload", "update", "fetch"],
       action: () => {
@@ -304,7 +310,7 @@
     {
       id: "shortcuts",
       label: "Show keyboard shortcuts",
-      icon: "⌨️",
+      icon: Keyboard,
       shortcut: "?",
       keywords: ["help", "keys", "hotkeys"],
       action: () => {
@@ -383,6 +389,31 @@
       }
     }
 
+    // Switch to other accounts (the current one is omitted)
+    const currentAccountId = get(selectedAccountId);
+    const allUnread = get(unreadCounts);
+    get(accounts).forEach((acct, i) => {
+      if (acct.id === currentAccountId) return;
+      const score = query
+        ? Math.max(fuzzyScore(query, acct.email), fuzzyScore(query, acct.display_name || acct.name || ""))
+        : 25;
+      if (query && score <= 0) return;
+      const unread = allUnread[acct.id] ?? acct.unread_count ?? 0;
+      results.push({
+        id: `account-${acct.id}`,
+        type: "account",
+        label: `Switch to ${acct.email}`,
+        sublabel: unread > 0 ? `${unread} unread` : undefined,
+        icon: User,
+        shortcut: i < 9 ? `⌘${i + 1}` : undefined,
+        action: () => {
+          accountActions.switchTo(acct.id);
+          close();
+        },
+        score,
+      });
+    });
+
     // Add labels
     const allLabels = get(labels);
     for (const label of allLabels) {
@@ -392,7 +423,7 @@
           id: `label-${label.id}`,
           type: "label",
           label: `Go to label: ${label.name}`,
-          icon: "🏷️",
+          icon: Tag,
           action: () => {
             selectedLabelId.set(label.id);
             currentFolder.set("label");
@@ -414,7 +445,7 @@
           type: "email",
           label: email.subject || "(No subject)",
           sublabel: email.from_name || email.from_email,
-          icon: email.is_read ? "📧" : "📬",
+          icon: email.is_read ? MailOpen : Mail,
           action: () => {
             selectedEmailId.set(email.id);
             view.set("email");
@@ -433,7 +464,7 @@
         type: "email",
         label: email.subject || "(No subject)",
         sublabel: email.from_name || email.from_email,
-        icon: email.is_read ? "📧" : "📬",
+        icon: email.is_read ? MailOpen : Mail,
         action: () => {
           selectedEmailId.set(email.id);
           view.set("email");
@@ -451,7 +482,7 @@
         type: "contact",
         label: contact.name || contact.email,
         sublabel: contact.name ? contact.email : undefined,
-        icon: "👤",
+        icon: User,
         action: () => {
           // Open compose with this contact
           composeMode.set("new");
@@ -552,6 +583,7 @@
       case "email": return "Email";
       case "contact": return "Contact";
       case "label": return "Label";
+      case "account": return "Account";
     }
   }
 
@@ -585,7 +617,7 @@
           onclick={() => result.action()}
           onmouseenter={() => (currentIndex = index)}
         >
-          <span class="result-icon">{result.icon}</span>
+          <span class="result-icon"><result.icon size={16} /></span>
           <div class="result-content">
             <span class="result-label">{result.label}</span>
             {#if result.sublabel}
@@ -715,9 +747,10 @@
   }
 
   .result-icon {
-    font-size: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 24px;
-    text-align: center;
     flex-shrink: 0;
   }
 

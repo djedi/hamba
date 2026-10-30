@@ -87,9 +87,6 @@ export const emailLabelsCache = writable<Map<string, Label[]>>(new Map());
 // Drafts store
 export const drafts = writable<Draft[]>([]);
 
-// Sent emails cache keyed by account ID (for instant folder switch)
-export const sentEmails = writable<Record<string, Email[]>>({});
-
 // Scheduled emails store
 export const scheduledEmails = writable<ScheduledEmail[]>([]);
 
@@ -106,6 +103,9 @@ export const composePrefillBody = writable<string | null>(null);
 
 // Command palette
 export const isCommandPaletteOpen = writable(false);
+
+// Account switcher (opened with @)
+export const isAccountSwitcherOpen = writable(false);
 
 // Snooze modal
 export const isSnoozeModalOpen = writable(false);
@@ -162,6 +162,70 @@ export function dismissToast(id: string) {
   toasts.update((t) => t.filter((toast) => toast.id !== id));
 }
 
+// Which list (account + folder) is on screen, so an undo doesn't insert into a different one
+function listContext(): string {
+  return `${get(selectedAccountId)}:${get(currentFolder)}:${get(selectedLabelId)}`;
+}
+
+// Undo of a removal: put the email back in the visible list (if the user is still on the
+// list it was removed from) and revert on the server
+function undoRemoval(email: Email | undefined, context: string, revert: () => Promise<unknown>, failMsg: string) {
+  if (email && listContext() !== context) {
+    if (isInboxUnread(email)) adjustUnread(email.account_id, 1);
+    revert().catch(() => {
+      if (isInboxUnread(email)) adjustUnread(email.account_id, -1);
+      showToast(failMsg);
+    });
+    return;
+  }
+  if (email) {
+    emails.update(($emails) =>
+      $emails.some((e) => e.id === email.id)
+        ? $emails
+        : [...$emails, email].sort((a, b) => b.received_at - a.received_at)
+    );
+    if (isInboxUnread(email)) adjustUnread(email.account_id, 1);
+  }
+  revert().catch(() => {
+    if (email) emails.update(($emails) => $emails.filter((e) => e.id !== email.id));
+    if (email && isInboxUnread(email)) adjustUnread(email.account_id, -1);
+    showToast(failMsg);
+  });
+}
+
+// Unread counts per account (inbox only, same definition as the backend). Kept current by
+// optimistic deltas in emailActions and by accountActions.refreshUnreadCounts.
+export const unreadCounts = writable<Record<string, number>>({});
+
+export function adjustUnread(accountId: string, delta: number) {
+  unreadCounts.update((counts) => {
+    if (!(accountId in counts)) return counts;
+    return { ...counts, [accountId]: Math.max(0, counts[accountId] + delta) };
+  });
+}
+
+// Whether an email currently counts toward its account's inbox unread badge
+function isInboxUnread(email: Email): boolean {
+  return (
+    (email.folder ?? "inbox") === "inbox" &&
+    !email.is_read &&
+    !email.is_archived &&
+    !email.is_trashed &&
+    email.snoozed_until == null
+  );
+}
+
+// Adjust the unread badge for applying `patch` to `email` (sign -1 reverts the change)
+function applyInboxUnread(email: Email | undefined, patch: Partial<Email>, sign: 1 | -1 = 1) {
+  if (!email) return;
+  const delta = (isInboxUnread({ ...email, ...patch }) ? 1 : 0) - (isInboxUnread(email) ? 1 : 0);
+  if (delta !== 0) adjustUnread(email.account_id, delta * sign);
+}
+
+function applyInboxUnreadToAll(list: Email[], patch: Partial<Email>, sign: 1 | -1 = 1) {
+  for (const email of list) applyInboxUnread(email, patch, sign);
+}
+
 // Optimistic email actions
 export const emailActions = {
   star: (emailId: string) => {
@@ -216,24 +280,30 @@ export const emailActions = {
   },
 
   markRead: (emailId: string) => {
+    const email = get(emails).find((e) => e.id === emailId);
     emails.update(($emails) =>
       $emails.map((e) => (e.id === emailId ? { ...e, is_read: 1 } : e))
     );
+    applyInboxUnread(email, { is_read: 1 });
     api.markRead(emailId).catch(() => {
       emails.update(($emails) =>
         $emails.map((e) => (e.id === emailId ? { ...e, is_read: 0 } : e))
       );
+      applyInboxUnread(email, { is_read: 1 }, -1);
     });
   },
 
   markUnread: (emailId: string) => {
+    const email = get(emails).find((e) => e.id === emailId);
     emails.update(($emails) =>
       $emails.map((e) => (e.id === emailId ? { ...e, is_read: 0 } : e))
     );
+    applyInboxUnread(email, { is_read: 0 });
     api.markUnread(emailId).catch(() => {
       emails.update(($emails) =>
         $emails.map((e) => (e.id === emailId ? { ...e, is_read: 1 } : e))
       );
+      applyInboxUnread(email, { is_read: 0 }, -1);
       showToast("Failed to mark as unread");
     });
   },
@@ -251,15 +321,17 @@ export const emailActions = {
   archive: (emailId: string) => {
     const $emails = get(emails);
     const email = $emails.find((e) => e.id === emailId);
+    const context = listContext();
 
     // Optimistic remove from list
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
+    applyInboxUnread(email, { is_archived: 1 });
     api.archive(emailId).then(() => {
       showToast("Email archived", "success", {
         action: {
           label: "Undo",
-          onClick: () => emailActions.unarchive(emailId),
+          onClick: () => undoRemoval(email, context, () => api.unarchive(emailId), "Failed to undo archive"),
         },
       });
     }).catch(() => {
@@ -270,6 +342,7 @@ export const emailActions = {
           return newList.sort((a, b) => b.received_at - a.received_at);
         });
       }
+      applyInboxUnread(email, { is_archived: 1 }, -1);
       showToast("Failed to archive email");
     });
   },
@@ -281,6 +354,7 @@ export const emailActions = {
     // Optimistic remove from archive view
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
+    applyInboxUnread(email, { is_archived: 0 });
     api.unarchive(emailId).then(() => {
       showToast("Moved to inbox", "success", {
         action: {
@@ -296,6 +370,7 @@ export const emailActions = {
           return newList.sort((a, b) => b.received_at - a.received_at);
         });
       }
+      applyInboxUnread(email, { is_archived: 0 }, -1);
       showToast("Failed to unarchive email");
     });
   },
@@ -303,14 +378,16 @@ export const emailActions = {
   trash: (emailId: string) => {
     const $emails = get(emails);
     const email = $emails.find((e) => e.id === emailId);
+    const context = listContext();
 
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
+    applyInboxUnread(email, { is_trashed: 1 });
     api.trash(emailId).then(() => {
       showToast("Moved to trash", "success", {
         action: {
           label: "Undo",
-          onClick: () => emailActions.untrash(emailId),
+          onClick: () => undoRemoval(email, context, () => api.untrash(emailId), "Failed to undo trash"),
         },
       });
     }).catch(() => {
@@ -320,6 +397,7 @@ export const emailActions = {
           return newList.sort((a, b) => b.received_at - a.received_at);
         });
       }
+      applyInboxUnread(email, { is_trashed: 1 }, -1);
       showToast("Failed to trash email");
     });
   },
@@ -331,6 +409,7 @@ export const emailActions = {
     // Optimistic remove from trash view
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
+    applyInboxUnread(email, { is_trashed: 0 });
     api.untrash(emailId).then(() => {
       showToast("Email restored", "success", {
         action: {
@@ -346,6 +425,7 @@ export const emailActions = {
           return newList.sort((a, b) => b.received_at - a.received_at);
         });
       }
+      applyInboxUnread(email, { is_trashed: 0 }, -1);
       showToast("Failed to restore email");
     });
   },
@@ -388,8 +468,9 @@ export const emailActions = {
       );
     }
 
+    applyInboxUnread(email, { snoozed_until: snoozedUntil });
     api.snooze(emailId, snoozedUntil).then(() => {
-      const snoozeDate = new Date(snoozedUntil);
+      const snoozeDate = new Date(snoozedUntil * 1000);
       const timeStr = snoozeDate.toLocaleString(undefined, {
         month: "short",
         day: "numeric",
@@ -410,6 +491,7 @@ export const emailActions = {
           return newList.sort((a, b) => b.received_at - a.received_at);
         });
       }
+      applyInboxUnread(email, { snoozed_until: snoozedUntil }, -1);
       showToast("Failed to snooze email");
     });
   },
@@ -421,6 +503,7 @@ export const emailActions = {
     // Optimistic remove from snoozed view
     emails.update(($emails) => $emails.filter((e) => e.id !== emailId));
 
+    applyInboxUnread(email, { snoozed_until: null });
     api.unsnooze(emailId).then(() => {
       showToast("Snooze cancelled", "success");
     }).catch(() => {
@@ -431,6 +514,7 @@ export const emailActions = {
           return newList.sort((a, b) => (a.snoozed_until || 0) - (b.snoozed_until || 0));
         });
       }
+      applyInboxUnread(email, { snoozed_until: null }, -1);
       showToast("Failed to unsnooze email");
     });
   },
@@ -448,7 +532,7 @@ export const emailActions = {
     );
 
     api.setReminder(emailId, remindAt).then(() => {
-      const reminderDate = new Date(remindAt);
+      const reminderDate = new Date(remindAt * 1000);
       const timeStr = reminderDate.toLocaleString(undefined, {
         month: "short",
         day: "numeric",
@@ -609,6 +693,45 @@ export const unreadCount = derived(emails, ($emails) =>
   $emails.filter((e) => !e.is_read).length
 );
 
+// Account switching
+function switchToAccount(accountId: string) {
+  if (get(selectedAccountId) === accountId) return;
+  if (!get(accounts).some((a) => a.id === accountId)) return;
+  selectedAccountId.set(accountId);
+}
+
+function cycleAccount(step: 1 | -1) {
+  const $accounts = get(accounts);
+  if ($accounts.length === 0) return;
+  const current = $accounts.findIndex((a) => a.id === get(selectedAccountId));
+  let next: number;
+  if (current === -1) {
+    next = step === 1 ? 0 : $accounts.length - 1;
+  } else {
+    next = (current + step + $accounts.length) % $accounts.length;
+  }
+  switchToAccount($accounts[next].id);
+}
+
+export const accountActions = {
+  switchTo: switchToAccount,
+  // 0-based index into the accounts list
+  switchByIndex: (index: number) => {
+    const account = get(accounts)[index];
+    if (account) switchToAccount(account.id);
+  },
+  switchNext: () => cycleAccount(1),
+  switchPrev: () => cycleAccount(-1),
+  // Errors are swallowed: the badge keeps its last known counts
+  refreshUnreadCounts: async (): Promise<void> => {
+    try {
+      unreadCounts.set(await api.getUnreadCounts());
+    } catch {
+      // ignore
+    }
+  },
+};
+
 // Keyboard navigation index
 export const selectedIndex = writable(0);
 
@@ -684,9 +807,20 @@ export const bulkEmailActions = {
     // Optimistic remove from list
     emails.update(($emails) => $emails.filter((e) => !emailIds.includes(e.id)));
     selectionActions.clearSelection();
+    applyInboxUnreadToAll(affectedEmails, { is_archived: 1 });
 
     try {
-      await api.batchArchive(emailIds);
+      const result = await api.batchArchive(emailIds);
+      if (!result.success && result.failed?.length) {
+        const failedIds = new Set(result.failed);
+        const failedEmails = affectedEmails.filter((e) => failedIds.has(e.id));
+        emails.update(($emails) =>
+          [...$emails, ...failedEmails].sort((a, b) => b.received_at - a.received_at)
+        );
+        applyInboxUnreadToAll(failedEmails, { is_archived: 1 }, -1);
+        showToast("Failed to archive " + failedEmails.length + " email" + (failedEmails.length > 1 ? "s" : ""));
+        return;
+      }
       showToast(`${emailIds.length} email${emailIds.length > 1 ? "s" : ""} archived`, "success", {
         action: {
           label: "Undo",
@@ -697,6 +831,7 @@ export const bulkEmailActions = {
               return newList.sort((a, b) => b.received_at - a.received_at);
             });
             // Unarchive each one
+            applyInboxUnreadToAll(affectedEmails, { is_archived: 1 }, -1);
             for (const email of affectedEmails) {
               await api.unarchive(email.id).catch(() => {});
             }
@@ -709,6 +844,7 @@ export const bulkEmailActions = {
         const newList = [...$emails, ...affectedEmails];
         return newList.sort((a, b) => b.received_at - a.received_at);
       });
+      applyInboxUnreadToAll(affectedEmails, { is_archived: 1 }, -1);
       showToast("Failed to archive emails");
     }
   },
@@ -722,9 +858,20 @@ export const bulkEmailActions = {
     // Optimistic remove from list
     emails.update(($emails) => $emails.filter((e) => !emailIds.includes(e.id)));
     selectionActions.clearSelection();
+    applyInboxUnreadToAll(affectedEmails, { is_trashed: 1 });
 
     try {
-      await api.batchTrash(emailIds);
+      const result = await api.batchTrash(emailIds);
+      if (!result.success && result.failed?.length) {
+        const failedIds = new Set(result.failed);
+        const failedEmails = affectedEmails.filter((e) => failedIds.has(e.id));
+        emails.update(($emails) =>
+          [...$emails, ...failedEmails].sort((a, b) => b.received_at - a.received_at)
+        );
+        applyInboxUnreadToAll(failedEmails, { is_trashed: 1 }, -1);
+        showToast("Failed to trash " + failedEmails.length + " email" + (failedEmails.length > 1 ? "s" : ""));
+        return;
+      }
       showToast(`${emailIds.length} email${emailIds.length > 1 ? "s" : ""} moved to trash`, "success", {
         action: {
           label: "Undo",
@@ -733,6 +880,7 @@ export const bulkEmailActions = {
               const newList = [...$emails, ...affectedEmails];
               return newList.sort((a, b) => b.received_at - a.received_at);
             });
+            applyInboxUnreadToAll(affectedEmails, { is_trashed: 1 }, -1);
             for (const email of affectedEmails) {
               await api.untrash(email.id).catch(() => {});
             }
@@ -744,6 +892,7 @@ export const bulkEmailActions = {
         const newList = [...$emails, ...affectedEmails];
         return newList.sort((a, b) => b.received_at - a.received_at);
       });
+      applyInboxUnreadToAll(affectedEmails, { is_trashed: 1 }, -1);
       showToast("Failed to move emails to trash");
     }
   },
@@ -789,9 +938,11 @@ export const bulkEmailActions = {
   markRead: async (emailIds: string[]) => {
     if (emailIds.length === 0) return;
 
+    const affected = get(emails).filter((e) => emailIds.includes(e.id));
     emails.update(($emails) =>
       $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_read: 1 } : e))
     );
+    applyInboxUnreadToAll(affected, { is_read: 1 });
 
     try {
       await api.batchMarkRead(emailIds);
@@ -800,6 +951,7 @@ export const bulkEmailActions = {
       emails.update(($emails) =>
         $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_read: 0 } : e))
       );
+      applyInboxUnreadToAll(affected, { is_read: 1 }, -1);
       showToast("Failed to mark emails as read");
     }
   },
@@ -807,9 +959,11 @@ export const bulkEmailActions = {
   markUnread: async (emailIds: string[]) => {
     if (emailIds.length === 0) return;
 
+    const affected = get(emails).filter((e) => emailIds.includes(e.id));
     emails.update(($emails) =>
       $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_read: 0 } : e))
     );
+    applyInboxUnreadToAll(affected, { is_read: 0 });
 
     try {
       await api.batchMarkUnread(emailIds);
@@ -818,17 +972,33 @@ export const bulkEmailActions = {
       emails.update(($emails) =>
         $emails.map((e) => (emailIds.includes(e.id) ? { ...e, is_read: 1 } : e))
       );
+      applyInboxUnreadToAll(affected, { is_read: 0 }, -1);
       showToast("Failed to mark emails as unread");
     }
   },
 };
 
+// Last known labels per account, so switching accounts shows labels immediately
+const labelsByAccount = new Map<string, Label[]>();
+
+// Keep the per-account cache in step with the labels store (which holds the selected account's labels)
+function rememberLabels() {
+  const accountId = get(selectedAccountId);
+  if (accountId) labelsByAccount.set(accountId, get(labels));
+}
+
 // Label actions
 export const labelActions = {
   loadLabels: async (accountId: string) => {
+    // Show this account's cached labels right away (never another account's labels)
+    labels.set(labelsByAccount.get(accountId) ?? []);
     try {
       const fetchedLabels = await api.getLabels(accountId);
-      labels.set(fetchedLabels);
+      labelsByAccount.set(accountId, fetchedLabels);
+      // Ignore the response if the user switched accounts meanwhile
+      if (get(selectedAccountId) === accountId) {
+        labels.set(fetchedLabels);
+      }
     } catch (e) {
       console.error("Failed to load labels:", e);
     }
@@ -850,6 +1020,7 @@ export const labelActions = {
             created_at: Math.floor(Date.now() / 1000),
           },
         ]);
+        rememberLabels();
       }
       return result;
     } catch (e) {
@@ -869,6 +1040,7 @@ export const labelActions = {
               : l
           )
         );
+        rememberLabels();
       }
       return result;
     } catch (e) {
@@ -882,6 +1054,7 @@ export const labelActions = {
       const result = await api.deleteLabel(id);
       if (result.success) {
         labels.update(($labels) => $labels.filter((l) => l.id !== id));
+        rememberLabels();
       }
       return result;
     } catch (e) {

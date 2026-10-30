@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { accounts, selectedAccountId, unreadCount, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions, scheduledEmails, isSettingsOpen } from "$lib/stores";
+  import { Inbox, Star, Send, FilePen, AlarmClock, Bell, CalendarClock, Trash2, Archive, Settings, Hourglass, RefreshCw } from "@lucide/svelte";
+  import { accounts, selectedAccountId, unreadCount, unreadCounts, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions, scheduledEmails, isSettingsOpen } from "$lib/stores";
   import { isOnline, pendingActionsCount, syncNow } from "$lib/offline";
   import ConnectionStatus from "./ConnectionStatus.svelte";
 
@@ -117,48 +118,48 @@
   <div class="sidebar-content">
   <nav class="nav">
     <button class="nav-item" class:active={$currentFolder === "inbox" && ($view === "inbox" || $view === "email")} onclick={goToInbox}>
-      <span class="nav-icon">📥</span>
+      <span class="nav-icon"><Inbox size={16} /></span>
       <span class="nav-label">Inbox</span>
       {#if $unreadCount > 0}
         <span class="badge">{$unreadCount}</span>
       {/if}
     </button>
     <button class="nav-item" class:active={$currentFolder === "starred" && ($view === "inbox" || $view === "email")} onclick={goToStarred}>
-      <span class="nav-icon">⭐</span>
+      <span class="nav-icon"><Star size={16} /></span>
       <span class="nav-label">Starred</span>
     </button>
     <button class="nav-item" class:active={$currentFolder === "sent" && ($view === "inbox" || $view === "email")} onclick={goToSent}>
-      <span class="nav-icon">📤</span>
+      <span class="nav-icon"><Send size={16} /></span>
       <span class="nav-label">Sent</span>
     </button>
     <button class="nav-item" class:active={$currentFolder === "drafts" && ($view === "inbox" || $view === "email")} onclick={goToDrafts}>
-      <span class="nav-icon">📝</span>
+      <span class="nav-icon"><FilePen size={16} /></span>
       <span class="nav-label">Drafts</span>
       {#if $drafts.length > 0}
         <span class="badge">{$drafts.length}</span>
       {/if}
     </button>
     <button class="nav-item" class:active={$currentFolder === "snoozed" && ($view === "inbox" || $view === "email")} onclick={goToSnoozed}>
-      <span class="nav-icon">⏰</span>
+      <span class="nav-icon"><AlarmClock size={16} /></span>
       <span class="nav-label">Snoozed</span>
     </button>
     <button class="nav-item" class:active={$currentFolder === "reminders" && ($view === "inbox" || $view === "email")} onclick={goToReminders}>
-      <span class="nav-icon">🔔</span>
+      <span class="nav-icon"><Bell size={16} /></span>
       <span class="nav-label">Reminders</span>
     </button>
     <button class="nav-item" class:active={$currentFolder === "scheduled" && ($view === "inbox" || $view === "email")} onclick={goToScheduled}>
-      <span class="nav-icon">📅</span>
+      <span class="nav-icon"><CalendarClock size={16} /></span>
       <span class="nav-label">Scheduled</span>
       {#if $scheduledEmails.length > 0}
         <span class="badge">{$scheduledEmails.length}</span>
       {/if}
     </button>
     <button class="nav-item" class:active={$currentFolder === "trash" && ($view === "inbox" || $view === "email")} onclick={goToTrash}>
-      <span class="nav-icon">🗑️</span>
+      <span class="nav-icon"><Trash2 size={16} /></span>
       <span class="nav-label">Trash</span>
     </button>
     <button class="nav-item" class:active={$currentFolder === "archive" && ($view === "inbox" || $view === "email")} onclick={goToArchive}>
-      <span class="nav-icon">📦</span>
+      <span class="nav-icon"><Archive size={16} /></span>
       <span class="nav-label">Archive</span>
     </button>
   </nav>
@@ -200,8 +201,8 @@
           {getProviderIcon(account.provider_type || "gmail")}
         </span>
         <span class="account-email">{account.email}</span>
-        {#if account.unread_count && account.unread_count > 0}
-          <span class="badge account-badge">{account.unread_count}</span>
+        {#if ($unreadCounts[account.id] ?? account.unread_count ?? 0) > 0}
+          <span class="badge account-badge">{$unreadCounts[account.id] ?? account.unread_count}</span>
         {/if}
       </button>
     {/each}
@@ -216,7 +217,7 @@
     <div class="snippets-header">
       <h4>Snippets</h4>
       {#if onManageSnippets}
-        <button class="manage-snippets-btn" onclick={onManageSnippets} title="Manage snippets">⚙</button>
+        <button class="manage-snippets-btn" onclick={onManageSnippets} title="Manage snippets" aria-label="Manage snippets"><Settings size={14} /></button>
       {/if}
     </div>
     <div class="snippet-hint">Type <code>;shortcut</code> in compose</div>
@@ -247,6 +248,8 @@
     <div class="shortcut"><kbd>⌘K</kbd> command</div>
     <div class="shortcut"><kbd>⌘,</kbd> settings</div>
     <div class="shortcut"><kbd>⌘1</kbd><kbd>⌘2</kbd><kbd>⌘3</kbd> accounts</div>
+    <div class="shortcut"><kbd>@</kbd> switch account</div>
+    <div class="shortcut"><kbd>gn</kbd><kbd>gp</kbd> next/prev account</div>
   </div>
   </div>
 
@@ -254,19 +257,19 @@
     <ConnectionStatus />
     {#if $pendingActionsCount > 0 && $isOnline}
       <button class="sync-pending-btn" onclick={() => syncNow()}>
-        <span class="pending-icon">⏳</span>
+        <span class="pending-icon"><Hourglass size={14} /></span>
         <span>Sync {$pendingActionsCount} pending</span>
       </button>
     {/if}
     <div class="footer-buttons">
-      <button class="settings-btn" onclick={() => isSettingsOpen.set(true)} title="Settings (⌘,)">
-        ⚙️
+      <button class="settings-btn" onclick={() => isSettingsOpen.set(true)} title="Settings (⌘,)" aria-label="Settings">
+        <Settings size={16} />
       </button>
       <button class="sync-btn" onclick={onSync} disabled={$isLoading || !$isOnline}>
         {#if $isLoading}
           <span class="spinner"></span> Syncing...
         {:else}
-          🔄 Sync
+          <RefreshCw size={16} /> Sync
         {/if}
       </button>
     </div>
@@ -422,7 +425,8 @@
   }
 
   .nav-icon {
-    font-size: 16px;
+    display: inline-flex;
+    align-items: center;
     width: 24px;
   }
 
@@ -559,7 +563,7 @@
   }
 
   .pending-icon {
-    font-size: 14px;
+    display: inline-flex;
   }
 
   .footer-buttons {
@@ -568,6 +572,9 @@
   }
 
   .settings-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 8px 12px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
@@ -653,6 +660,8 @@
   }
 
   .manage-snippets-btn {
+    display: inline-flex;
+    align-items: center;
     background: transparent;
     border: none;
     color: var(--text-muted);

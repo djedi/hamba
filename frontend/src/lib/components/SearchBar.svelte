@@ -27,6 +27,8 @@
       try {
         const accountId = $selectedAccountId;
         const results = await api.searchEmails(value, 50, accountId || undefined);
+        // The backend answers bad queries with { error } rather than a list
+        if (!Array.isArray(results)) throw new Error((results as { error?: string }).error);
         emails.set(results);
         // Go back to inbox view to show results (but keep in "search" state via searchQuery)
         view.set("inbox");

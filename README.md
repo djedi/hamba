@@ -118,30 +118,24 @@ cd frontend && bun run dev    # Terminal 2: Web at localhost:8878
 
 ### Docker Development
 
-A `dev` script is provided for easy Docker Compose management:
-
 ```bash
-./dev              # Start containers in foreground
-./dev up -d        # Start containers in background
-./dev logs         # Follow all container logs
-./dev logs backend # Follow backend logs only
-./dev shell        # Open shell in backend container
-./dev restart      # Restart containers
-./dev rebuild      # Full rebuild with --no-cache
-./dev status       # Show container status
-./dev clean        # Stop and remove volumes (with confirmation)
-./dev --help       # Show all commands
+make up                  # Start in background on free ports, wait, open the browser
+make down                # Stop and remove containers
+make restart             # Restart (backend recompiles)
+make logs                # Follow logs (SERVICE=backend|frontend for one)
+make status              # Container status and URLs
+make shell               # Shell in a container (SERVICE=frontend for the frontend)
+make rebuild             # Rebuild with --no-cache, then start
+make clean               # Remove containers and volumes (asks first)
+make help                # All targets
 ```
 
-**Ports:**
-
-- Frontend: http://localhost:8878
-- Backend API: http://localhost:8877
+**Ports:** `make up` picks free host ports on first run and saves them to `.dev-ports` (gitignored), so they don't collide with other Docker services and stay stable between runs. `make status` prints the URLs. Pin them with `BACKEND_PORT=8877 FRONTEND_PORT=8878 make up` (OAuth redirect URIs are registered against a fixed port), or run `make reset-ports` to pick new ones. The backend gets `FRONTEND_URL` (CORS and post-login redirect) and the frontend gets `VITE_API_URL`/`VITE_WS_URL` from these ports.
 
 ### Docker Production Deployment
 
 ```bash
-# Production deployment (without dev script)
+# Production deployment
 docker compose up -d
 
 # Frontend: http://localhost:8080

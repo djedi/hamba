@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { render } from "@testing-library/svelte";
+import VirtualList from "./VirtualList.svelte";
 
 // Unit tests for the virtual scrolling calculation logic
 // The VirtualList component uses these calculations internally
@@ -181,5 +183,45 @@ describe("VirtualList calculations", () => {
       const result = shouldLoadMore(4100, 500, 4600, true, true);
       expect(result).toBe(false);
     });
+  });
+});
+
+describe("VirtualList scroll position", () => {
+  beforeEach(() => {
+    // jsdom has no ResizeObserver; the list only needs it to track its height
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("setScrollTop restores the offset reported by getScrollTop", async () => {
+    const { component, container, unmount } = render(VirtualList as any, {
+      props: {
+        items: [],
+        itemHeight: 46,
+        getKey: (item: unknown) => String(item),
+      },
+    });
+    const list = component as unknown as {
+      getScrollTop: () => number;
+      setScrollTop: (top: number) => void;
+    };
+
+    expect(list.getScrollTop()).toBe(0);
+
+    list.setScrollTop(920);
+    expect(list.getScrollTop()).toBe(920);
+    expect((container.querySelector(".virtual-list") as HTMLElement).scrollTop).toBe(920);
+
+    unmount();
   });
 });

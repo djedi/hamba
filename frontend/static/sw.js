@@ -178,7 +178,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Handle cacheable API requests
-  if (isCacheableApi(request.url)) {
+  if (request.method === 'GET' && isCacheableApi(request.url)) {
     event.respondWith(handleCacheableApi(request));
     return;
   }

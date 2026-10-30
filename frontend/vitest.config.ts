@@ -17,6 +17,8 @@ export default defineConfig({
 		setupFiles: ['./vitest.setup.ts']
 	},
 	resolve: {
+		// Component tests need Svelte's browser build (mount), not the server build
+		conditions: ['browser'],
 		alias: {
 			$lib: '/src/lib'
 		}

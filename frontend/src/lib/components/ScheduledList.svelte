@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CalendarClock } from "@lucide/svelte";
   import { scheduledEmails, scheduledEmailActions } from "$lib/stores";
   import DraftRowSkeleton from "./DraftRowSkeleton.svelte";
   import EmptyState from "./EmptyState.svelte";
@@ -50,7 +51,7 @@
     </div>
   {:else if $scheduledEmails.length === 0}
     <EmptyState
-      icon="📅"
+      icon={CalendarClock}
       title="No scheduled emails"
       description="Emails you schedule for later will appear here. Use the schedule button in compose."
     />

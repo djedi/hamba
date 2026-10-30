@@ -290,6 +290,28 @@ fn row_to_outgoing(row: &Value) -> OutgoingEmail {
     }
 }
 
+/// The queue row is already gone, so keep the message as a draft and tell the UI (which
+/// showed "Email sent" when it was queued) that it didn't go out.
+fn send_failed(state: &AppState, email: &OutgoingEmail, error: &str) {
+    let draft_id = uuid::Uuid::new_v4().to_string();
+    if let Err(e) = crate::emails_db::upsert_draft(
+        &state.db.conn(),
+        &draft_id,
+        &email.account_id,
+        None,
+        &email.to,
+        email.cc.as_deref().unwrap_or(""),
+        email.bcc.as_deref().unwrap_or(""),
+        &email.subject,
+        &email.body,
+    ) {
+        tracing::error!(error = %e, "Failed to save unsent email as draft");
+    }
+    state
+        .realtime
+        .notify_send_failed(&email.account_id, &email.subject, error, &draft_id);
+}
+
 /// Send every ready row in the queue. Rows are removed whether or not sending succeeds
 /// (same as the TS: avoids re-sending in a loop).
 pub async fn process_queue(state: &AppState, queue: Queue) -> (i64, i64) {
@@ -316,6 +338,7 @@ pub async fn process_queue(state: &AppState, queue: Queue) -> (i64, i64) {
             Ok(provider) => provider.send(params).await,
             Err(e) => {
                 tracing::error!(service = queue.label(), id = %id, error = %e, "Error processing queued email");
+                send_failed(state, &email, &e.to_string());
                 errors += 1;
                 continue;
             }
@@ -332,6 +355,7 @@ pub async fn process_queue(state: &AppState, queue: Queue) -> (i64, i64) {
             sent += 1;
         } else {
             tracing::error!(service = queue.label(), id = %id, error = ?result.error, "Failed to send email");
+            send_failed(state, &email, result.error.as_deref().unwrap_or("Unknown error"));
             errors += 1;
         }
     }

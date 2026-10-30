@@ -72,7 +72,8 @@ pub fn encode_query(params: &[(&str, &str)]) -> String {
 
 fn success_redirect(email: &str) -> Response {
     redirect(format!(
-        "http://localhost:8878/?auth=success&email={}",
+        "{}/?auth=success&email={}",
+        crate::frontend_url(),
         urlencoding::encode(email)
     ))
 }
@@ -391,17 +392,7 @@ fn or_default(a: &Map<String, Value>, k: &str, d: Value) -> Value {
 async fn list_accounts(State(state): State<AppState>) -> JsonResult {
     let conn = state.db.conn();
     let accounts = query_all(&conn, "SELECT * FROM accounts", []).unwrap_or_default();
-    let unread: HashMap<String, i64> = conn
-        .prepare(
-            "SELECT account_id, COUNT(*) as unread_count FROM emails
-             WHERE is_read = 0 AND is_trashed = 0 AND is_archived = 0 AND snoozed_until IS NULL
-             GROUP BY account_id",
-        )
-        .and_then(|mut st| {
-            st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
-                .collect()
-        })
-        .unwrap_or_default();
+    let unread = crate::emails_db::unread_counts(&conn);
     drop(conn);
     let t = now();
     let out: Vec<Value> = accounts

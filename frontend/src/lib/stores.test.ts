@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
+import { api } from './api';
 import {
+	accountActions,
+	adjustUnread,
+	labelActions,
+	labels,
+	emailActions,
+	bulkEmailActions,
+	unreadCounts,
 	emails,
 	selectedEmailId,
 	selectedIndex,
@@ -42,7 +50,12 @@ vi.mock('./api', () => ({
 		getSnippets: vi.fn().mockResolvedValue([]),
 		createSnippet: vi.fn().mockResolvedValue({ success: true, id: 'new-snippet-id' }),
 		updateSnippet: vi.fn().mockResolvedValue({ success: true }),
-		deleteSnippet: vi.fn().mockResolvedValue({ success: true })
+		deleteSnippet: vi.fn().mockResolvedValue({ success: true }),
+		getUnreadCounts: vi.fn().mockResolvedValue({}),
+		getLabels: vi.fn().mockResolvedValue([]),
+		createLabel: vi.fn().mockResolvedValue({ success: true, id: 'new-label' }),
+		unarchive: vi.fn().mockResolvedValue({}),
+		batchArchive: vi.fn().mockResolvedValue({ success: true, count: 0, failed: [], errors: [] })
 	}
 }));
 
@@ -302,5 +315,207 @@ describe('stores', () => {
 				expect(found).toBeUndefined();
 			});
 		});
+	});
+});
+
+describe('unread counts and account switching', () => {
+	const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+	beforeEach(() => {
+		emails.set([]);
+		accounts.set([
+			{ id: 'acc-1', email: 'one@test.com' } as any,
+			{ id: 'acc-2', email: 'two@test.com' } as any,
+			{ id: 'acc-3', email: 'three@test.com' } as any
+		]);
+		selectedAccountId.set('acc-1');
+		unreadCounts.set({ 'acc-1': 3, 'acc-2': 1 });
+		vi.mocked(api.getUnreadCounts).mockReset();
+	});
+
+	describe('adjustUnread', () => {
+		it('applies deltas and clamps at zero', () => {
+			adjustUnread('acc-1', -1);
+			expect(get(unreadCounts)['acc-1']).toBe(2);
+			adjustUnread('acc-2', -5);
+			expect(get(unreadCounts)['acc-2']).toBe(0);
+		});
+
+		it('ignores accounts without a known count', () => {
+			adjustUnread('unknown', 1);
+			expect(get(unreadCounts)).toEqual({ 'acc-1': 3, 'acc-2': 1 });
+		});
+	});
+
+	describe('accountActions', () => {
+		it('switchTo selects a known account', () => {
+			accountActions.switchTo('acc-2');
+			expect(get(selectedAccountId)).toBe('acc-2');
+		});
+
+		it('switchTo ignores unknown accounts', () => {
+			accountActions.switchTo('nope');
+			expect(get(selectedAccountId)).toBe('acc-1');
+		});
+
+		it('switchByIndex is 0-based and ignores out-of-range indexes', () => {
+			accountActions.switchByIndex(2);
+			expect(get(selectedAccountId)).toBe('acc-3');
+			accountActions.switchByIndex(9);
+			expect(get(selectedAccountId)).toBe('acc-3');
+		});
+
+		it('switchNext and switchPrev wrap around', () => {
+			accountActions.switchPrev();
+			expect(get(selectedAccountId)).toBe('acc-3');
+			accountActions.switchNext();
+			expect(get(selectedAccountId)).toBe('acc-1');
+			accountActions.switchNext();
+			expect(get(selectedAccountId)).toBe('acc-2');
+		});
+
+		it('refreshUnreadCounts stores the server counts', async () => {
+			vi.mocked(api.getUnreadCounts).mockResolvedValueOnce({ 'acc-1': 7 });
+			await accountActions.refreshUnreadCounts();
+			expect(get(unreadCounts)).toEqual({ 'acc-1': 7 });
+		});
+
+		it('refreshUnreadCounts keeps the last counts on error', async () => {
+			vi.mocked(api.getUnreadCounts).mockRejectedValueOnce(new Error('offline'));
+			await expect(accountActions.refreshUnreadCounts()).resolves.toBeUndefined();
+			expect(get(unreadCounts)).toEqual({ 'acc-1': 3, 'acc-2': 1 });
+		});
+	});
+
+	describe('optimistic unread deltas', () => {
+		const unread = (id: string, overrides = {}) => ({
+			id,
+			account_id: 'acc-1',
+			is_read: 0,
+			is_archived: 0,
+			is_trashed: 0,
+			snoozed_until: null,
+			...overrides
+		}) as any;
+
+		it('markRead decrements an unread inbox email', () => {
+			emails.set([unread('e1')]);
+			emailActions.markRead('e1');
+			expect(get(unreadCounts)['acc-1']).toBe(2);
+		});
+
+		it('markRead on an archived email does not change the inbox count', () => {
+			emails.set([unread('e1', { is_archived: 1 })]);
+			emailActions.markRead('e1');
+			expect(get(unreadCounts)['acc-1']).toBe(3);
+		});
+
+		it('markUnread increments a read inbox email', () => {
+			emails.set([unread('e1', { is_read: 1 })]);
+			emailActions.markUnread('e1');
+			expect(get(unreadCounts)['acc-1']).toBe(4);
+		});
+
+		it('archive decrements and rolls back on failure', async () => {
+			emails.set([unread('e1')]);
+			vi.mocked(api.archive).mockRejectedValueOnce(new Error('fail'));
+			emailActions.archive('e1');
+			expect(get(unreadCounts)['acc-1']).toBe(2);
+			await flush();
+			expect(get(unreadCounts)['acc-1']).toBe(3);
+		});
+
+		it('trash decrements an unread inbox email', () => {
+			emails.set([unread('e1')]);
+			emailActions.trash('e1');
+			expect(get(unreadCounts)['acc-1']).toBe(2);
+		});
+
+		it('snooze decrements an unread inbox email', () => {
+			emails.set([unread('e1')]);
+			emailActions.snooze('e1', 9999999999);
+			expect(get(unreadCounts)['acc-1']).toBe(2);
+		});
+
+		it('unarchive increments an unread email', () => {
+			emails.set([unread('e1', { is_archived: 1 })]);
+			emailActions.unarchive('e1');
+			expect(get(unreadCounts)['acc-1']).toBe(4);
+		});
+
+		it('bulk archive counts only the unread affected emails', () => {
+			emails.set([unread('e1'), unread('e2', { is_read: 1 }), unread('e3')]);
+			bulkEmailActions.archive(['e1', 'e2', 'e3']);
+			expect(get(unreadCounts)['acc-1']).toBe(1);
+		});
+	});
+});
+
+describe('per-account labels', () => {
+	const label = (id: string, accountId: string) =>
+		({ id, account_id: accountId, name: `label-${id}`, color: '#000', type: 'user', remote_id: null, created_at: 0 }) as any;
+
+	beforeEach(() => {
+		accounts.set([{ id: 'acc-1' } as any, { id: 'acc-2' } as any]);
+		selectedAccountId.set('acc-1');
+		labels.set([]);
+		vi.mocked(api.getLabels).mockReset();
+	});
+
+	it('shows the cached labels synchronously when switching back to an account', async () => {
+		vi.mocked(api.getLabels).mockResolvedValueOnce([label('a', 'acc-1')]);
+		await labelActions.loadLabels('acc-1');
+		expect(get(labels).map((l) => l.id)).toEqual(['a']);
+
+		selectedAccountId.set('acc-2');
+		vi.mocked(api.getLabels).mockResolvedValueOnce([label('b', 'acc-2')]);
+		await labelActions.loadLabels('acc-2');
+		expect(get(labels).map((l) => l.id)).toEqual(['b']);
+
+		selectedAccountId.set('acc-1');
+		vi.mocked(api.getLabels).mockReturnValueOnce(new Promise(() => {}));
+		const pending = labelActions.loadLabels('acc-1');
+		// Cached labels are visible before the network responds
+		expect(get(labels).map((l) => l.id)).toEqual(['a']);
+		void pending;
+	});
+
+	it('clears another account\'s labels when the account has no cache yet', () => {
+		// acc-uncached is never loaded elsewhere in this file, so it has no cache entry
+		labels.set([label('a', 'acc-1')]);
+		selectedAccountId.set('acc-uncached');
+		vi.mocked(api.getLabels).mockReturnValueOnce(new Promise(() => {}));
+		void labelActions.loadLabels('acc-uncached');
+		expect(get(labels)).toEqual([]);
+	});
+
+	it('ignores a response for an account that is no longer selected', async () => {
+		let resolveLabels: (value: any) => void = () => {};
+		vi.mocked(api.getLabels).mockReturnValueOnce(new Promise((r) => (resolveLabels = r)));
+		selectedAccountId.set('acc-2');
+		const pending = labelActions.loadLabels('acc-2');
+
+		selectedAccountId.set('acc-1');
+		labels.set([label('a', 'acc-1')]);
+		resolveLabels([label('b', 'acc-2')]);
+		await pending;
+
+		expect(get(labels).map((l) => l.id)).toEqual(['a']);
+	});
+
+	it('keeps the cache in sync when a label is created', async () => {
+		vi.mocked(api.getLabels).mockResolvedValueOnce([label('a', 'acc-1')]);
+		await labelActions.loadLabels('acc-1');
+
+		await labelActions.createLabel('acc-1', 'New');
+
+		selectedAccountId.set('acc-2');
+		vi.mocked(api.getLabels).mockResolvedValueOnce([]);
+		await labelActions.loadLabels('acc-2');
+
+		selectedAccountId.set('acc-1');
+		vi.mocked(api.getLabels).mockReturnValueOnce(new Promise(() => {}));
+		void labelActions.loadLabels('acc-1');
+		expect(get(labels).map((l) => l.name)).toEqual(['label-a', 'New']);
 	});
 });

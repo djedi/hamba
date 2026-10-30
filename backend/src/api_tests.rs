@@ -460,3 +460,48 @@ async fn batch_validation() {
         "Maximum 100 emails per batch"
     );
 }
+
+#[tokio::test]
+async fn unread_counts_per_account() {
+    let s = state();
+    s.db.conn()
+        .execute(
+            "INSERT INTO accounts (id, email, name, provider_type) VALUES ('acct-2', 'you@example.com', 'You', 'imap')",
+            [],
+        )
+        .unwrap();
+    // (id, account, folder, is_read, is_archived)
+    let rows = [
+        ("u1", ACCOUNT, "inbox", 0, 0),
+        ("u2", ACCOUNT, "inbox", 0, 0),
+        ("r1", ACCOUNT, "inbox", 1, 0),
+        ("a1", ACCOUNT, "inbox", 0, 1),
+        ("u3", "acct-2", "inbox", 0, 0),
+    ];
+    for (id, account, folder, is_read, is_archived) in rows {
+        s.db.conn()
+            .execute(
+                "INSERT INTO emails (id, account_id, message_id, subject, snippet, from_email, from_name, to_addresses, body_text, received_at, folder, is_read, is_archived)
+                 VALUES (?, ?, ?, 's', '', 'alice@example.com', 'Alice', 'me@example.com', 'hello', 1700000000, ?, ?, ?)",
+                (id, account, format!("<{id}@x>"), folder, is_read, is_archived),
+            )
+            .unwrap();
+    }
+
+    assert_eq!(
+        call(&s, Method::GET, "/emails/unread-counts", None).await,
+        json!({ "acct-1": 2, "acct-2": 1 })
+    );
+
+    let accounts = call(&s, Method::GET, "/auth/accounts", None).await;
+    let count = |id: &str| {
+        accounts
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["id"] == id)
+            .map(|a| a["unread_count"].clone())
+    };
+    assert_eq!(count("acct-1"), Some(json!(2)));
+    assert_eq!(count("acct-2"), Some(json!(1)));
+}

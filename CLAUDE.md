@@ -168,27 +168,21 @@ crate::services::metrics::record_error("Operation failed", json!({ "context": "s
 
 The application can be run in Docker containers for production deployment or consistent development environments.
 
-### Dev Script (Recommended)
-
-A `dev` script is provided for easy Docker Compose management:
+### Makefile (Recommended)
 
 ```bash
-./dev                    # Start containers in foreground (default)
-./dev up -d              # Start containers in background
-./dev down               # Stop and remove containers
-./dev restart            # Restart containers
-./dev rebuild            # Full rebuild with --no-cache
-./dev build              # Build images without starting
-./dev logs [service]     # Follow container logs
-./dev status             # Show container status
-./dev shell [service]    # Open shell in container (default: backend)
-./dev clean              # Stop and remove volumes (with confirmation)
-./dev --help             # Show all commands
+make up                  # Start in background on free ports, wait, open the browser
+make down                # Stop and remove containers
+make restart             # Restart (backend recompiles)
+make logs                # Follow logs (SERVICE=backend|frontend for one)
+make status              # Container status and URLs
+make shell               # Shell in a container (SERVICE=frontend for the frontend)
+make rebuild             # Rebuild with --no-cache, then start
+make clean               # Remove containers and volumes (asks first)
+make help                # All targets
 ```
 
-**Development ports:**
-- Frontend: http://localhost:8878
-- Backend API: http://localhost:8877
+**Ports:** `make up` picks free host ports on first run and saves them to `.dev-ports` (gitignored), so they don't collide with other Docker services and stay stable between runs. `make status` prints the URLs. Pin them with `BACKEND_PORT=8877 FRONTEND_PORT=8878 make up` (OAuth redirect URIs are registered against a fixed port), or run `make reset-ports` to pick new ones. The backend gets `FRONTEND_URL` (CORS and post-login redirect) and the frontend gets `VITE_API_URL`/`VITE_WS_URL` from these ports.
 
 ### Quick Start (Production)
 
@@ -200,7 +194,7 @@ docker compose up -d
 # Backend API: http://localhost:8877
 ```
 
-### Manual Development (without dev script)
+### Manual Development (without make)
 
 ```bash
 # Run with hot reload support

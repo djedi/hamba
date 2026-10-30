@@ -1,16 +1,17 @@
 <script lang="ts">
+  import type { Component } from "svelte";
   interface Props {
-    icon: string;
+    icon: Component<{ size?: number | string }>;
     title: string;
     description: string;
     variant?: "default" | "success";
   }
 
-  let { icon, title, description, variant = "default" }: Props = $props();
+  let { icon: Icon, title, description, variant = "default" }: Props = $props();
 </script>
 
 <div class="empty" class:success={variant === "success"}>
-  <span class="empty-icon">{icon}</span>
+  <span class="empty-icon"><Icon size={variant === "success" ? 56 : 48} /></span>
   <h3>{title}</h3>
   <p>{description}</p>
 </div>
@@ -29,11 +30,8 @@
   }
 
   .empty-icon {
-    font-size: 48px;
-  }
-
-  .empty.success .empty-icon {
-    font-size: 56px;
+    display: inline-flex;
+    color: var(--text-muted);
   }
 
   .empty h3 {

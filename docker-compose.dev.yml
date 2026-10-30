@@ -1,5 +1,5 @@
 # Docker Compose for local development
-# Usage: ./dev or docker compose -f docker-compose.dev.yml up
+# Usage: make up (picks free host ports, see Makefile)
 #
 # This is a standalone dev configuration - does NOT require docker-compose.yml
 
@@ -10,9 +10,9 @@ services:
       dockerfile: Dockerfile
       target: dev
     ports:
-      - "8877:8877"
+      - "${BACKEND_PORT:-8877}:8877"
     volumes:
-      # Mount source code; `./dev restart backend` rebuilds with `cargo run`
+      # Mount source code; `make restart` rebuilds with `cargo run`
       - ./backend/src:/app/src:ro
       # Cache build artifacts between restarts
       - backend-target:/app/target
@@ -23,6 +23,7 @@ services:
     environment:
       - DATABASE_PATH=/app/data/hamba.db
       - LOG_LEVEL=debug
+      - FRONTEND_URL=http://localhost:${FRONTEND_PORT:-8878}
     command: ["cargo", "run"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8877/health"]
@@ -37,7 +38,7 @@ services:
       dockerfile: Dockerfile
       target: dev
     ports:
-      - "8878:8878"
+      - "${FRONTEND_PORT:-8878}:8878"
     volumes:
       # Mount only source directories for hot reload (NOT .svelte-kit)
       - ./frontend/src:/app/src
@@ -47,6 +48,9 @@ services:
       - ./frontend/tsconfig.json:/app/tsconfig.json
     environment:
       - NODE_ENV=development
+      # The browser talks to the backend through its published host port
+      - VITE_API_URL=http://localhost:${BACKEND_PORT:-8877}
+      - VITE_WS_URL=ws://localhost:${BACKEND_PORT:-8877}/ws
     depends_on:
       - backend
     # Regenerate .svelte-kit inside container before starting dev server

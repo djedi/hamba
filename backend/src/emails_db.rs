@@ -1,6 +1,7 @@
 //! Shared email persistence helpers used by every provider.
 
 use rusqlite::{Connection, OptionalExtension};
+use std::collections::HashMap;
 
 /// Row for `emails` upsert; same column order as `emailQueries.upsert` in the TS backend.
 #[derive(Debug, Clone, Default)]
@@ -25,7 +26,7 @@ pub struct EmailRow {
     pub folder: String,
 }
 
-/// Insert or update an email keyed on its RFC Message-ID.
+/// Insert or update an email keyed on (account, RFC Message-ID).
 pub fn upsert_email(conn: &Connection, e: &EmailRow) -> rusqlite::Result<usize> {
     conn.prepare_cached(
         "INSERT INTO emails (
@@ -33,7 +34,7 @@ pub fn upsert_email(conn: &Connection, e: &EmailRow) -> rusqlite::Result<usize> 
            from_name, from_email, to_addresses, cc_addresses, bcc_addresses,
            body_text, body_html, labels, is_read, is_starred, received_at, folder
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(message_id) DO UPDATE SET
+         ON CONFLICT(account_id, message_id) DO UPDATE SET
            subject = excluded.subject,
            snippet = excluded.snippet,
            labels = excluded.labels,
@@ -152,6 +153,21 @@ pub fn account_field(conn: &Connection, account_id: &str, column: &str) -> Optio
     .ok()
     .flatten()
     .flatten()
+}
+
+/// Unread inbox count per account (excludes trashed, archived and snoozed mail).
+pub fn unread_counts(conn: &Connection) -> HashMap<String, i64> {
+    conn.prepare(
+        "SELECT account_id, COUNT(*) FROM emails
+         WHERE is_read = 0 AND is_trashed = 0 AND is_archived = 0 AND snoozed_until IS NULL
+           AND folder = 'inbox'
+         GROUP BY account_id",
+    )
+    .and_then(|mut st| {
+        st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
+            .collect()
+    })
+    .unwrap_or_default()
 }
 
 /// Derive plain text from HTML and a 200-char snippet

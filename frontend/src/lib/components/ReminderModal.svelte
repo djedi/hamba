@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Bell } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { emailActions } from "$lib/stores";
 
@@ -89,7 +90,7 @@
       // Set default date to 2 days from now
       const defaultDate = new Date();
       defaultDate.setDate(defaultDate.getDate() + 2);
-      customDate = defaultDate.toISOString().split("T")[0];
+      customDate = defaultDate.toLocaleDateString("en-CA");
     } else {
       const timestamp = option.getTimestamp();
       emailActions.setReminder(emailId, timestamp);
@@ -100,7 +101,7 @@
   function confirmCustomReminder() {
     if (!customDate) return;
     const [hours, minutes] = customTime.split(":").map(Number);
-    const date = new Date(customDate);
+    const date = new Date(customDate + "T00:00:00");
     date.setHours(hours, minutes, 0, 0);
     const timestamp = Math.floor(date.getTime() / 1000);
     emailActions.setReminder(emailId, timestamp);
@@ -165,7 +166,7 @@
 >
   <div class="reminder-modal slide-up" tabindex="-1">
     <div class="header">
-      <span class="icon">🔔</span>
+      <span class="icon"><Bell size={18} /></span>
       <span class="title">Remind me to follow up...</span>
     </div>
 
@@ -239,6 +240,7 @@
   }
 
   .icon {
+    display: inline-flex;
     font-size: 18px;
   }
 

@@ -1,8 +1,11 @@
 <script lang="ts">
+  import { X, Paperclip, CalendarClock, Bell, Sparkles } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
   import { api, type Email, type Draft, type Signature } from "$lib/api";
-  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails, snippets, snippetActions, composePrefillBody, sentEmails } from "$lib/stores";
+  import { view, selectedAccountId, currentDraftId, drafts, showToast, dismissToast, scheduledEmails, snippets, snippetActions, composePrefillBody } from "$lib/stores";
+  import { listKey, writeFirstPage } from "$lib/listCache";
   import EmailInput from "./EmailInput.svelte";
+  import { htmlToText, quoteText, plainTextToHtml } from "$lib/composeText";
   import { get } from "svelte/store";
 
   interface Props {
@@ -67,7 +70,12 @@
   const generatedDraftId = crypto.randomUUID();
   let draftId = $derived(draft?.id || generatedDraftId);
   let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+  let discarded = false;
   let lastSavedContent = "";
+  // Content when compose opened; Escape closes silently while unchanged
+  let initialContent = "";
+  let showClosePrompt = $state(false);
+  let closePromptEl = $state<HTMLDivElement>();
 
   // Filter snippets based on query
   $effect(() => {
@@ -204,16 +212,16 @@
     return `${to}|${cc}|${bcc}|${subject}|${body}`;
   }
 
-  // Auto-save draft every 5 seconds if content changed
-  async function autoSave() {
+  // Auto-save draft every 5 seconds if content changed. Returns false only if a save failed.
+  async function autoSave(): Promise<boolean> {
     const accountId = get(selectedAccountId);
-    if (!accountId) return;
+    if (!accountId) return true;
 
     const currentHash = getContentHash();
-    if (currentHash === lastSavedContent) return; // No changes
+    if (currentHash === lastSavedContent) return true; // No changes
 
-    // Don't save completely empty drafts
-    if (!to && !cc && !bcc && !subject && !body) return;
+    // Don't save completely empty drafts, or resurrect a discarded one
+    if (discarded || (!to && !cc && !bcc && !subject && !body)) return true;
 
     try {
       await api.saveDraft({
@@ -231,8 +239,10 @@
       lastSavedContent = currentHash;
       lastSaved = new Date().toLocaleTimeString();
       currentDraftId.set(draftId);
+      return true;
     } catch (e) {
       console.error("Auto-save failed:", e);
+      return false;
     }
   }
 
@@ -255,8 +265,8 @@
 
       const separator = "\n\n--\n";
       const sigContent = defaultSignature.is_html === 1
-        ? defaultSignature.content
-        : defaultSignature.content.replace(/\n/g, "<br>");
+        ? htmlToText(defaultSignature.content)
+        : defaultSignature.content;
 
       return currentBody + separator + sigContent;
     };
@@ -267,7 +277,9 @@
       cc = draft.cc_addresses || "";
       bcc = draft.bcc_addresses || "";
       subject = draft.subject || "";
-      body = draft.body || "";
+      // Drafts saved before compose became plain text (and unsent emails the backend saved
+      // back as drafts) hold HTML; convert so it isn't shown, and re-sent, as literal markup
+      body = /<(br|div|p|blockquote)\b/i.test(draft.body || "") ? htmlToText(draft.body) : draft.body || "";
       if (cc) showCc = true;
       if (bcc) showBcc = true;
       draftId = draft.id;
@@ -310,6 +322,8 @@
       body = appendSignature("");
     }
 
+    initialContent = getContentHash();
+
     // Start auto-save timer
     autoSaveTimer = setInterval(autoSave, 5000);
 
@@ -323,8 +337,13 @@
       if (mode === "new" || mode === "forward") {
         document.querySelector<HTMLInputElement>("#to input")?.focus();
       } else {
-        // Focus body for replies
-        document.querySelector<HTMLTextAreaElement>(".compose-body")?.focus();
+        // Focus body for replies, with the cursor above the signature and quote
+        const el = document.querySelector<HTMLTextAreaElement>(".compose-body");
+        if (el) {
+          el.focus();
+          el.setSelectionRange(0, 0);
+          el.scrollTop = 0;
+        }
       }
     }, 100);
   });
@@ -336,22 +355,24 @@
     currentDraftId.set(null);
   });
 
+  function originalText(email: Email): string {
+    return email.body_text?.trim() || htmlToText(email.body_html || "");
+  }
+
   function buildQuotedReply(email: Email): string {
     const date = new Date(email.received_at * 1000).toLocaleString();
-    return `<br><br><div style="border-left: 2px solid #ccc; padding-left: 12px; margin-left: 0; color: #666;">
-On ${date}, ${email.from_name || email.from_email} wrote:<br><br>
-${email.body_html || email.body_text.replace(/\n/g, "<br>")}
-</div>`;
+    return `\n\nOn ${date}, ${email.from_name || email.from_email} wrote:\n${quoteText(originalText(email))}`;
   }
 
   function buildForwardedMessage(email: Email): string {
     const date = new Date(email.received_at * 1000).toLocaleString();
-    return `<br><br>---------- Forwarded message ----------<br>
-From: ${email.from_name} &lt;${email.from_email}&gt;<br>
-Date: ${date}<br>
-Subject: ${email.subject}<br>
-To: ${email.to_addresses}<br><br>
-${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
+    return `\n\n---------- Forwarded message ----------
+From: ${email.from_name} <${email.from_email}>
+Date: ${date}
+Subject: ${email.subject}
+To: ${email.to_addresses}
+
+${originalText(email)}`;
   }
 
   function formatFileSize(bytes: number): string {
@@ -409,17 +430,70 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     input.value = ""; // Reset so same file can be selected again
   }
 
-  async function handleClose() {
-    // Delete the draft if it's empty (discarding)
-    if (!to && !cc && !bcc && !subject && !body) {
-      try {
-        await api.deleteDraft(draftId);
-        drafts.update(d => d.filter(draft => draft.id !== draftId));
-      } catch (e) {
-        // Ignore errors when deleting draft
-      }
+  // Discard always deletes the draft (close keeps non-empty drafts)
+  async function handleDiscard() {
+    discarded = true;
+    if (autoSaveTimer) {
+      clearInterval(autoSaveTimer);
+      autoSaveTimer = null;
     }
+    drafts.update(d => d.filter(draft => draft.id !== draftId));
     view.set("inbox");
+    try {
+      await api.deleteDraft(draftId);
+    } catch (e) {
+      showToast("Failed to discard draft", "error");
+    }
+  }
+
+  // Close via Escape / close button: silent when unchanged, otherwise ask
+  function requestClose() {
+    if (getContentHash() === initialContent) {
+      // Untouched: drop any draft we created, but keep a pre-existing draft as it was
+      if (draft) view.set("inbox");
+      else handleDiscard();
+      return;
+    }
+    showClosePrompt = true;
+    setTimeout(() => closePromptEl?.focus(), 0);
+  }
+
+  async function handleSaveDraftAndClose() {
+    showClosePrompt = false;
+    if (autoSaveTimer) {
+      clearInterval(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+    if (!(await autoSave())) {
+      // Keep the compose open so the message isn't lost
+      autoSaveTimer = setInterval(autoSave, 5000);
+      showToast("Failed to save draft", "error");
+      return;
+    }
+    showToast("Draft saved", "success");
+    view.set("inbox");
+  }
+
+  function cancelClosePrompt() {
+    showClosePrompt = false;
+    setTimeout(() => bodyTextarea?.focus(), 0);
+  }
+
+  function handleClosePromptKeydown(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (key === "d") {
+      e.preventDefault();
+      showClosePrompt = false;
+      handleDiscard();
+    } else if (key === "s" || key === "enter") {
+      e.preventDefault();
+      handleSaveDraftAndClose();
+    } else if (key === "escape") {
+      e.preventDefault();
+      cancelClosePrompt();
+    }
   }
 
   async function handleSend() {
@@ -449,7 +523,7 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       cc: cc.trim() || undefined,
       bcc: bcc.trim() || undefined,
       subject: subject.trim(),
-      body: body || "<p></p>",
+      body: body ? plainTextToHtml(body) : "<p></p>",
       replyToId: replyTo?.id,
       attachments: attachments.length > 0
         ? attachments.map((a) => ({
@@ -520,7 +594,7 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
         try {
           // Refresh sent emails cache so the sent folder shows the new email
           const updatedSent = await api.getSentEmails(accountId);
-          sentEmails.update(c => ({ ...c, [accountId]: updatedSent }));
+          writeFirstPage(listKey(accountId, "sent"), updatedSent, 50);
 
           // Handle reminder setting if configured
           if (savedReminderDays !== null) {
@@ -577,16 +651,22 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       openAiModal();
     }
 
-    // Escape to close (unless in textarea with content or snippet suggestions shown)
+    // Escape closes popovers first, then the compose (prompting if edited)
     if (e.key === "Escape") {
+      if (showAiModal || showClosePrompt) return;
+      e.preventDefault();
+      e.stopPropagation();
       if (showSnippetSuggestions) {
         snippetQuery = "";
         showSnippetSuggestions = false;
         return;
       }
-      if (!body && !to && !subject) {
-        handleClose();
+      if (showSchedulePicker || showReminderPicker) {
+        showSchedulePicker = false;
+        showReminderPicker = false;
+        return;
       }
+      requestClose();
     }
   }
 
@@ -654,7 +734,7 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
         cc: cc.trim() || undefined,
         bcc: bcc.trim() || undefined,
         subject: subject.trim(),
-        body: body || "<p></p>",
+        body: body ? plainTextToHtml(body) : "<p></p>",
         replyToId: replyTo?.id,
         attachments: attachments.length > 0
           ? attachments.map((a) => ({
@@ -829,7 +909,7 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       {/if}
     </h2>
     <div class="header-actions">
-      <button class="close-btn" onclick={handleClose}>✕</button>
+      <button class="close-btn" onclick={requestClose} aria-label="Close" title="Close (Esc)"><X size={18} /></button>
     </div>
   </header>
 
@@ -916,15 +996,16 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
     <div class="attachments">
       {#each attachments as attachment (attachment.id)}
         <div class="attachment">
-          <span class="attachment-icon">📎</span>
+          <span class="attachment-icon"><Paperclip size={14} /></span>
           <span class="attachment-name">{attachment.filename}</span>
           <span class="attachment-size">{formatFileSize(attachment.size)}</span>
           <button
             class="attachment-remove"
             onclick={() => removeAttachment(attachment.id)}
             title="Remove attachment"
+            aria-label="Remove attachment"
           >
-            ✕
+            <X size={14} />
           </button>
         </div>
       {/each}
@@ -958,7 +1039,7 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
         onclick={() => showSchedulePicker = !showSchedulePicker}
         disabled={sending}
       >
-        📅 Schedule
+        <CalendarClock size={16} /> Schedule
       </button>
       {#if showSchedulePicker}
         <div class="schedule-dropdown">
@@ -996,7 +1077,7 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
         class:active={reminderDays !== null}
         onclick={() => showReminderPicker = !showReminderPicker}
       >
-        🔔 {reminderDays !== null ? `${reminderDays}d` : 'Remind'}
+        <Bell size={16} /> {reminderDays !== null ? `${reminderDays}d` : 'Remind'}
       </button>
       {#if showReminderPicker}
         <div class="reminder-dropdown">
@@ -1010,25 +1091,55 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
       {/if}
     </div>
     <button class="attach-btn" onclick={() => fileInput?.click()}>
-      📎 Attach
+      <Paperclip size={16} /> Attach
     </button>
     <button class="ai-btn" onclick={openAiModal} disabled={aiGenerating}>
-      ✨ AI
+      <Sparkles size={16} /> AI
       <kbd>⌘J</kbd>
     </button>
-    <button class="discard-btn" onclick={handleClose}>Discard</button>
+    <button class="discard-btn" onclick={handleDiscard}>Discard</button>
     {#if lastSaved}
       <span class="saved-indicator">Saved at {lastSaved}</span>
     {/if}
   </footer>
 </div>
 
+{#if showClosePrompt}
+  <div class="ai-modal-overlay" onclick={cancelClosePrompt} role="presentation">
+    <div
+      class="ai-modal close-prompt"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="close-prompt-title"
+      tabindex="-1"
+      bind:this={closePromptEl}
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={handleClosePromptKeydown}
+    >
+      <div class="ai-modal-header">
+        <h3 id="close-prompt-title">Close this {mode === "new" ? "message" : mode === "forward" ? "forward" : "reply"}?</h3>
+      </div>
+      <div class="close-prompt-actions">
+        <button class="close-prompt-discard" onclick={() => { showClosePrompt = false; handleDiscard(); }}>
+          Discard <kbd>D</kbd>
+        </button>
+        <button class="close-prompt-save" onclick={handleSaveDraftAndClose}>
+          Save draft <kbd>S</kbd>
+        </button>
+        <button onclick={cancelClosePrompt}>
+          Keep editing <kbd>Esc</kbd>
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 {#if showAiModal}
   <div class="ai-modal-overlay" onclick={closeAiModal}>
     <div class="ai-modal" onclick={(e) => e.stopPropagation()} onkeydown={handleAiKeydown}>
       <div class="ai-modal-header">
-        <h3>✨ Write with AI</h3>
-        <button class="ai-modal-close" onclick={closeAiModal}>✕</button>
+        <h3><Sparkles size={16} /> Write with AI</h3>
+        <button class="ai-modal-close" onclick={closeAiModal} aria-label="Close"><X size={18} /></button>
       </div>
       <div class="ai-modal-body">
         <label for="ai-prompt">What would you like to write?</label>
@@ -1084,6 +1195,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
   .close-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0px;
     background: transparent;
     border: none;
     color: var(--text-muted);
@@ -1227,6 +1341,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
   .reminder-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: transparent;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -1316,7 +1433,7 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
   .attachment-icon {
-    font-size: 14px;
+    display: inline-flex;
   }
 
   .attachment-name {
@@ -1333,6 +1450,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
   .attachment-remove {
+    display: inline-flex;
+    align-items: center;
+    gap: 0px;
     background: transparent;
     border: none;
     color: var(--text-muted);
@@ -1349,6 +1469,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
   .attach-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: transparent;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -1368,6 +1491,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
   .schedule-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: transparent;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -1605,6 +1731,40 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
   /* AI Modal */
+  .close-prompt {
+    max-width: 420px;
+    outline: none;
+  }
+
+  .close-prompt-actions {
+    display: flex;
+    gap: 8px;
+    padding: 16px;
+    justify-content: flex-end;
+  }
+
+  .close-prompt-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-tertiary, transparent);
+    color: var(--text-primary, inherit);
+    cursor: pointer;
+  }
+
+  .close-prompt-actions .close-prompt-discard {
+    color: var(--danger, #e5484d);
+  }
+
+  .close-prompt-actions .close-prompt-save {
+    background: var(--accent, #3b82f6);
+    border-color: var(--accent, #3b82f6);
+    color: #fff;
+  }
+
   .ai-modal-overlay {
     position: fixed;
     inset: 0;
@@ -1636,6 +1796,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
   .ai-modal-header h3 {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     margin: 0;
     font-size: 16px;
     font-weight: 600;
@@ -1643,6 +1806,9 @@ ${email.body_html || email.body_text.replace(/\n/g, "<br>")}`;
   }
 
   .ai-modal-close {
+    display: inline-flex;
+    align-items: center;
+    gap: 0px;
     background: transparent;
     border: none;
     color: var(--text-muted);

@@ -36,10 +36,22 @@ fn init_logging() {
     }
 }
 
+/// Origin of the web frontend (CORS + post-OAuth redirect). Set by `make up` for random dev ports.
+pub fn frontend_url() -> String {
+    // No trailing slash: browsers send Origin without one, and redirects append "/?..."
+    std::env::var("FRONTEND_URL")
+        .ok()
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "http://localhost:8878".into())
+}
+
 /// Build the full router (shared by `main` and the HTTP tests)
 pub fn build_app(state: AppState) -> Router {
     let cors = CorsLayer::new()
-        .allow_origin(HeaderValue::from_static("http://localhost:8878"))
+        .allow_origin(
+            HeaderValue::from_str(&frontend_url()).unwrap_or(HeaderValue::from_static("http://localhost:8878")),
+        )
         .allow_credentials(true)
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);

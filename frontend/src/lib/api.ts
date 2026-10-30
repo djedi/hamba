@@ -34,6 +34,16 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return data;
 }
 
+// Action endpoints report failure as HTTP 200 with { success: false }; throw so
+// optimistic updates roll back.
+async function action(path: string, options?: RequestInit): Promise<{ success: boolean }> {
+  const data = await request<{ success: boolean; error?: string }>(path, options);
+  if (data && data.success === false) {
+    throw new Error(data.error || "Action failed");
+  }
+  return data;
+}
+
 export const api = {
   // Auth
   getAccounts: () => request<Account[]>("/auth/accounts"),
@@ -52,6 +62,8 @@ export const api = {
   // Emails
   getEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails?accountId=${accountId}&limit=${limit}&offset=${offset}`),
+
+  getUnreadCounts: () => request<Record<string, number>>("/emails/unread-counts"),
 
   getStarredEmails: (accountId: string, limit = 50, offset = 0) =>
     request<Email[]>(`/emails/starred?accountId=${accountId}&limit=${limit}&offset=${offset}`),
@@ -84,15 +96,15 @@ export const api = {
   syncSentEmails: (accountId: string) =>
     request<{ synced: number; total: number }>(`/emails/sync-sent/${accountId}`, { method: "POST" }),
 
-  markRead: (id: string) => request(`/emails/${id}/read`, { method: "POST" }),
-  markUnread: (id: string) => request(`/emails/${id}/unread`, { method: "POST" }),
-  star: (id: string) => request(`/emails/${id}/star`, { method: "POST" }),
-  unstar: (id: string) => request(`/emails/${id}/unstar`, { method: "POST" }),
-  archive: (id: string) => request(`/emails/${id}/archive`, { method: "POST" }),
-  unarchive: (id: string) => request(`/emails/${id}/unarchive`, { method: "POST" }),
-  trash: (id: string) => request(`/emails/${id}/trash`, { method: "POST" }),
-  untrash: (id: string) => request(`/emails/${id}/untrash`, { method: "POST" }),
-  permanentDelete: (id: string) => request(`/emails/${id}/permanent`, { method: "DELETE" }),
+  markRead: (id: string) => action(`/emails/${id}/read`, { method: "POST" }),
+  markUnread: (id: string) => action(`/emails/${id}/unread`, { method: "POST" }),
+  star: (id: string) => action(`/emails/${id}/star`, { method: "POST" }),
+  unstar: (id: string) => action(`/emails/${id}/unstar`, { method: "POST" }),
+  archive: (id: string) => action(`/emails/${id}/archive`, { method: "POST" }),
+  unarchive: (id: string) => action(`/emails/${id}/unarchive`, { method: "POST" }),
+  trash: (id: string) => action(`/emails/${id}/trash`, { method: "POST" }),
+  untrash: (id: string) => action(`/emails/${id}/untrash`, { method: "POST" }),
+  permanentDelete: (id: string) => action(`/emails/${id}/permanent`, { method: "DELETE" }),
 
   // Batch operations for multi-select
   batchArchive: (emailIds: string[]) =>
@@ -132,18 +144,18 @@ export const api = {
     }),
 
   snooze: (id: string, snoozedUntil: number) =>
-    request(`/emails/${id}/snooze`, {
+    action(`/emails/${id}/snooze`, {
       method: "POST",
       body: JSON.stringify({ snoozedUntil }),
     }),
-  unsnooze: (id: string) => request(`/emails/${id}/unsnooze`, { method: "POST" }),
+  unsnooze: (id: string) => action(`/emails/${id}/unsnooze`, { method: "POST" }),
 
   setReminder: (id: string, remindAt: number) =>
-    request(`/emails/${id}/reminder`, {
+    action(`/emails/${id}/reminder`, {
       method: "POST",
       body: JSON.stringify({ remindAt }),
     }),
-  clearReminder: (id: string) => request(`/emails/${id}/reminder`, { method: "DELETE" }),
+  clearReminder: (id: string) => action(`/emails/${id}/reminder`, { method: "DELETE" }),
 
   // Send (immediate, no undo)
   sendEmail: (params: {
@@ -507,6 +519,8 @@ export interface Email {
   snoozed_until: number | null;
   remind_at: number | null;
   received_at: number;
+  // Server folder ("inbox", "sent", ...); only inbox mail counts toward the unread badge
+  folder?: string | null;
   summary: string | null;
   summary_generated_at: number | null;
   ai_importance_score: number | null;

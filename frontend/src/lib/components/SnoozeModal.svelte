@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { AlarmClock } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { emailActions } from "$lib/stores";
 
@@ -94,7 +95,7 @@
       // Set default date to tomorrow
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      customDate = tomorrow.toISOString().split("T")[0];
+      customDate = tomorrow.toLocaleDateString("en-CA");
     } else {
       const timestamp = option.getTimestamp();
       emailActions.snooze(emailId, timestamp);
@@ -105,7 +106,7 @@
   function confirmCustomSnooze() {
     if (!customDate) return;
     const [hours, minutes] = customTime.split(":").map(Number);
-    const date = new Date(customDate);
+    const date = new Date(customDate + "T00:00:00");
     date.setHours(hours, minutes, 0, 0);
     const timestamp = Math.floor(date.getTime() / 1000);
     emailActions.snooze(emailId, timestamp);
@@ -170,7 +171,7 @@
 >
   <div class="snooze-modal slide-up" tabindex="-1">
     <div class="header">
-      <span class="icon">⏰</span>
+      <span class="icon"><AlarmClock size={18} /></span>
       <span class="title">Snooze until...</span>
     </div>
 
@@ -244,6 +245,7 @@
   }
 
   .icon {
+    display: inline-flex;
     font-size: 18px;
   }
 

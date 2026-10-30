@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, type ImapAccountParams } from "$lib/api";
   import { accounts } from "$lib/stores";
+  import { subscribe } from "$lib/realtime";
 
   interface Props {
     onClose: () => void;
@@ -54,6 +55,7 @@
         error = result.error;
       } else if (result.account) {
         accounts.update((a) => [...a, result.account!]);
+        subscribe(result.account.id);
         onClose();
       }
     } catch (err) {

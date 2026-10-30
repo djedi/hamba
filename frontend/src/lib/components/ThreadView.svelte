@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ArrowLeft, ArchiveRestore, Trash2, Inbox, Archive, Reply, ReplyAll, Forward, Star } from "@lucide/svelte";
   import { selectedEmail, view, emails, composeMode, replyToEmail, emailActions, selectedIndex, selectedEmailId, currentFolder, searchQuery } from "$lib/stores";
   import { get } from "svelte/store";
   import { extractSearchTerms, highlightHTMLContent, getHighlightCSS } from "$lib/search";
@@ -223,30 +224,30 @@
   <div class="thread-view slide-up">
     <header class="header">
       <button class="back-btn" onclick={handleBack}>
-        ← Back
+        <ArrowLeft size={16} /> Back
       </button>
       <div class="actions">
         {#if $currentFolder === "trash"}
-          <button onclick={handleRestore} title="Restore to Inbox">📥 Restore</button>
-          <button onclick={handlePermanentDelete} title="Permanently Delete" class="danger">🗑️ Delete Forever</button>
+          <button onclick={handleRestore} title="Restore to Inbox"><ArchiveRestore size={14} /> Restore</button>
+          <button onclick={handlePermanentDelete} title="Permanently Delete" class="danger"><Trash2 size={14} /> Delete Forever</button>
         {:else if $currentFolder === "archive"}
-          <button onclick={handleUnarchive} title="Move to Inbox">📥 Move to Inbox</button>
+          <button onclick={handleUnarchive} title="Move to Inbox"><Inbox size={14} /> Move to Inbox</button>
           <button onclick={handleStar} title="Star (s)">
-            {$selectedEmail.is_starred ? "★ Starred" : "☆ Star"}
+            <Star size={14} fill={$selectedEmail.is_starred ? "currentColor" : "none"} /> {$selectedEmail.is_starred ? "Starred" : "Star"}
           </button>
-          <button onclick={handleTrash} title="Trash (#)">🗑️ Trash</button>
-          <button onclick={handleReply} title="Reply (r)">↩️ Reply</button>
-          <button onclick={handleReplyAll} title="Reply All (a)">↩️ Reply All</button>
-          <button onclick={handleForward} title="Forward (f)">↪️ Forward</button>
+          <button onclick={handleTrash} title="Trash (#)"><Trash2 size={14} /> Trash</button>
+          <button onclick={handleReply} title="Reply (r)"><Reply size={14} /> Reply</button>
+          <button onclick={handleReplyAll} title="Reply All (a)"><ReplyAll size={14} /> Reply All</button>
+          <button onclick={handleForward} title="Forward (f)"><Forward size={14} /> Forward</button>
         {:else}
-          <button onclick={handleArchive} title="Archive (e)">📥 Archive</button>
+          <button onclick={handleArchive} title="Archive (e)"><Archive size={14} /> Archive</button>
           <button onclick={handleStar} title="Star (s)">
-            {$selectedEmail.is_starred ? "★ Starred" : "☆ Star"}
+            <Star size={14} fill={$selectedEmail.is_starred ? "currentColor" : "none"} /> {$selectedEmail.is_starred ? "Starred" : "Star"}
           </button>
-          <button onclick={handleTrash} title="Trash (#)">🗑️ Trash</button>
-          <button onclick={handleReply} title="Reply (r)">↩️ Reply</button>
-          <button onclick={handleReplyAll} title="Reply All (a)">↩️ Reply All</button>
-          <button onclick={handleForward} title="Forward (f)">↪️ Forward</button>
+          <button onclick={handleTrash} title="Trash (#)"><Trash2 size={14} /> Trash</button>
+          <button onclick={handleReply} title="Reply (r)"><Reply size={14} /> Reply</button>
+          <button onclick={handleReplyAll} title="Reply All (a)"><ReplyAll size={14} /> Reply All</button>
+          <button onclick={handleForward} title="Forward (f)"><Forward size={14} /> Forward</button>
         {/if}
         <button onclick={toggleSummary} title="AI Summarize" class="summarize-btn" class:active={showSummary}>
           {summaryLoading ? "..." : "AI Summary"}
@@ -316,13 +317,13 @@
             <SmartReplySuggestions email={threadEmails[threadEmails.length - 1]} />
             <div class="reply-buttons">
               <button class="reply-btn primary" onclick={handleReply}>
-                ↩️ Reply
+                <Reply size={14} /> Reply
               </button>
               <button class="reply-btn" onclick={handleReplyAll}>
-                ↩️ Reply All
+                <ReplyAll size={14} /> Reply All
               </button>
               <button class="reply-btn" onclick={handleForward}>
-                ↪️ Forward
+                <Forward size={14} /> Forward
               </button>
             </div>
           </div>
@@ -350,6 +351,9 @@
   }
 
   .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: transparent;
     border: none;
     color: var(--accent);
@@ -367,6 +371,9 @@
   }
 
   .actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 6px 12px;
     font-size: 13px;
   }
@@ -526,6 +533,9 @@
   }
 
   .reply-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     color: var(--text-primary);

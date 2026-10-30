@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { FilePen } from "@lucide/svelte";
   import { drafts } from "$lib/stores";
   import type { Draft } from "$lib/api";
   import { formatRelativeDate, formatDateTooltip } from "$lib/dateUtils";
@@ -28,7 +29,7 @@
     </div>
   {:else if $drafts.length === 0}
     <EmptyState
-      icon="📝"
+      icon={FilePen}
       title="No drafts"
       description="Drafts you compose will appear here. Press 'c' to start composing."
     />

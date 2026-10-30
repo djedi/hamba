@@ -19,6 +19,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_inbox))
         .route("/search", get(search))
+        .route("/unread-counts", get(unread_counts))
         .route("/starred", get(|s, q| list_folder(s, q, Folder::Starred)))
         .route("/sent", get(|s, q| list_folder(s, q, Folder::Sent)))
         .route("/trashed", get(|s, q| list_folder(s, q, Folder::Trashed)))
@@ -99,6 +100,10 @@ async fn list_inbox(State(s): State<AppState>, Query(q): QueryMap) -> JsonResult
 
 async fn list_folder(State(s): State<AppState>, Query(q): QueryMap, folder: Folder) -> JsonResult {
     paged(&s, &q, folder.sql())
+}
+
+async fn unread_counts(State(s): State<AppState>) -> JsonResult {
+    ok(json!(crate::emails_db::unread_counts(&s.db.conn())))
 }
 
 async fn get_one(State(s): State<AppState>, Path(id): Path<String>) -> JsonResult {
@@ -226,6 +231,19 @@ pub fn parse_search(q: &str) -> SearchOperators {
     ops
 }
 
+/// Turn free text into a safe FTS5 query: every word becomes a quoted phrase (so `@`, `:`, `-`
+/// etc. can't be parsed as FTS syntax) and the last word is a prefix match for search-as-you-type.
+fn fts_query(text: &str) -> String {
+    let words: Vec<String> = text
+        .split_whitespace()
+        .map(|w| format!("\"{}\"", w.replace('"', "\"\"")))
+        .collect();
+    match words.len() {
+        0 => "\"\"".into(),
+        _ => format!("{}*", words.join(" ")),
+    }
+}
+
 fn advanced_search(
     state: &AppState,
     ops: &SearchOperators,
@@ -239,7 +257,7 @@ fn advanced_search(
 
     if let Some(q) = &ops.query {
         conditions.push("emails.rowid IN (SELECT rowid FROM emails_fts WHERE emails_fts MATCH ?)");
-        values.push(Sql::Text(q.clone()));
+        values.push(Sql::Text(fts_query(q)));
     }
     if let Some(from) = &ops.from {
         conditions.push("(emails.from_email LIKE ? OR emails.from_name LIKE ?)");
@@ -306,7 +324,7 @@ async fn search(State(s): State<AppState>, Query(q): QueryMap) -> JsonResult {
              WHERE emails_fts MATCH ?
              ORDER BY rank
              LIMIT ?",
-            (ops.query.as_deref(), limit),
+            (fts_query(ops.query.as_deref().unwrap_or_default()), limit),
         )
     };
     match result {
@@ -798,6 +816,12 @@ async fn clear_reminder(State(s): State<AppState>, Path(id): Path<String>) -> Js
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn fts_query_quotes_words() {
+        assert_eq!(super::fts_query("dustin@redseam.com"), "\"dustin@redseam.com\"*");
+        assert_eq!(super::fts_query("re: say \"hi\""), "\"re:\" \"say\" \"\"\"hi\"\"\"*");
+    }
+
     use super::*;
 
     #[test]

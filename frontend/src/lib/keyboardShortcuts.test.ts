@@ -62,6 +62,19 @@ describe("keyboardShortcuts", () => {
       const uniqueActions = new Set(actions);
       expect(uniqueActions.size).toBe(actions.length);
     });
+
+    it("should have unique default keys", () => {
+      const keys = defaultShortcuts.map((s) => s.defaultKey);
+      expect(new Set(keys).size).toBe(keys.length);
+    });
+
+    it("should define the account navigation shortcuts", () => {
+      const byAction = Object.fromEntries(defaultShortcuts.map((s) => [s.action, s.defaultKey]));
+      expect(byAction.switch_account_next).toBe("gn");
+      expect(byAction.switch_account_prev).toBe("gp");
+      expect(byAction.switch_account_palette).toBe("@");
+      expect(byAction.switch_account_1).toBe("Cmd+1");
+    });
   });
 
   describe("loadCustomBindings", () => {
@@ -281,6 +294,21 @@ describe("keyboardShortcuts", () => {
       // Check that sequences are present
       expect(sequences["gi"]).toBe("go_inbox");
       expect(sequences["gs"]).toBe("go_starred");
+    });
+
+    it("should map gn and gp as account sequences", () => {
+      const { handlers, sequences } = buildKeyMaps();
+
+      expect(sequences["gn"]).toBe("switch_account_next");
+      expect(sequences["gp"]).toBe("switch_account_prev");
+      expect(handlers["gn"]).toBeUndefined();
+    });
+
+    it("should map @ as a single-key handler", () => {
+      const { handlers, sequences } = buildKeyMaps();
+
+      expect(handlers["@"]).toBe("switch_account_palette");
+      expect(sequences["@"]).toBeUndefined();
     });
 
     it("should reflect custom bindings", () => {

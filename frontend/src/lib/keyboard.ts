@@ -10,13 +10,13 @@ import {
   isShortcutOverlayOpen,
   isSettingsOpen,
   isLabelPickerOpen,
+  isAccountSwitcherOpen,
   composeMode,
   replyToEmail,
   emailActions,
   prefetchAdjacentEmails,
   currentFolder,
-  accounts,
-  selectedAccountId,
+  accountActions,
   selectedEmailIds,
   selectionActions,
   bulkEmailActions,
@@ -131,9 +131,12 @@ const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
   back_to_list: () => {
     const $view = get(view);
     const $isCommandPaletteOpen = get(isCommandPaletteOpen);
+    const $isAccountSwitcherOpen = get(isAccountSwitcherOpen);
     const $selectedEmailIds = get(selectedEmailIds);
 
-    if ($isCommandPaletteOpen) {
+    if ($isAccountSwitcherOpen) {
+      isAccountSwitcherOpen.set(false);
+    } else if ($isCommandPaletteOpen) {
       isCommandPaletteOpen.set(false);
     } else if ($selectedEmailIds.size > 0) {
       // Clear multi-selection first
@@ -393,67 +396,28 @@ const actionHandlers: Record<ShortcutAction, () => void | Promise<void>> = {
   },
 
   // Account switching
-  switch_account_1: () => {
-    const $accounts = get(accounts);
-    if ($accounts.length > 0) {
-      selectedAccountId.set($accounts[0].id);
-    }
-  },
+  switch_account_1: () => accountActions.switchByIndex(0),
 
-  switch_account_2: () => {
-    const $accounts = get(accounts);
-    if ($accounts.length > 1) {
-      selectedAccountId.set($accounts[1].id);
-    }
-  },
+  switch_account_2: () => accountActions.switchByIndex(1),
 
-  switch_account_3: () => {
-    const $accounts = get(accounts);
-    if ($accounts.length > 2) {
-      selectedAccountId.set($accounts[2].id);
-    }
-  },
+  switch_account_3: () => accountActions.switchByIndex(2),
 
-  switch_account_4: () => {
-    const $accounts = get(accounts);
-    if ($accounts.length > 3) {
-      selectedAccountId.set($accounts[3].id);
-    }
-  },
+  switch_account_4: () => accountActions.switchByIndex(3),
 
-  switch_account_5: () => {
-    const $accounts = get(accounts);
-    if ($accounts.length > 4) {
-      selectedAccountId.set($accounts[4].id);
-    }
-  },
+  switch_account_5: () => accountActions.switchByIndex(4),
 
-  switch_account_6: () => {
-    const $accounts = get(accounts);
-    if ($accounts.length > 5) {
-      selectedAccountId.set($accounts[5].id);
-    }
-  },
+  switch_account_6: () => accountActions.switchByIndex(5),
 
-  switch_account_7: () => {
-    const $accounts = get(accounts);
-    if ($accounts.length > 6) {
-      selectedAccountId.set($accounts[6].id);
-    }
-  },
+  switch_account_7: () => accountActions.switchByIndex(6),
 
-  switch_account_8: () => {
-    const $accounts = get(accounts);
-    if ($accounts.length > 7) {
-      selectedAccountId.set($accounts[7].id);
-    }
-  },
+  switch_account_8: () => accountActions.switchByIndex(7),
 
-  switch_account_9: () => {
-    const $accounts = get(accounts);
-    if ($accounts.length > 8) {
-      selectedAccountId.set($accounts[8].id);
-    }
+  switch_account_9: () => accountActions.switchByIndex(8),
+
+  switch_account_next: () => accountActions.switchNext(),
+  switch_account_prev: () => accountActions.switchPrev(),
+  switch_account_palette: () => {
+    isAccountSwitcherOpen.update((v) => !v);
   },
 
   // Other

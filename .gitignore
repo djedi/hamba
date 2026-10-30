@@ -39,3 +39,6 @@ frontend/coverage/
 
 # Tauri sidecar binaries (built by frontend/scripts/build-sidecar.sh)
 frontend/src-tauri/binaries/
+
+# Host ports chosen by `make up`
+.dev-ports

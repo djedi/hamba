@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Archive, Bell, Inbox, Moon, PartyPopper, Search, Send, Star, Tag, Trash2 } from "@lucide/svelte";
   import { emails, selectedEmailId, selectedIndex, searchQuery, isLoadingMore, hasMoreEmails, selectedLabel, selectedEmailIds } from "$lib/stores";
   import type { Folder } from "$lib/stores";
   import { extractSearchTerms } from "$lib/search";
@@ -21,7 +22,7 @@
     // Search results have highest priority
     if ($searchQuery.length >= 2) {
       return {
-        icon: "🔍",
+        icon: Search,
         title: "No results found",
         description: `No emails match "${$searchQuery}". Try different keywords or search operators.`,
         variant: "default" as const,
@@ -32,7 +33,7 @@
     switch (folder) {
       case "inbox":
         return {
-          icon: "🎉",
+          icon: PartyPopper,
           title: "Inbox Zero!",
           description: "You've processed all your emails. Enjoy the moment!",
           variant: "success" as const,
@@ -40,7 +41,7 @@
 
       case "starred":
         return {
-          icon: "⭐",
+          icon: Star,
           title: "No starred emails",
           description: "Star important emails to find them here later. Press 's' to star an email.",
           variant: "default" as const,
@@ -48,7 +49,7 @@
 
       case "sent":
         return {
-          icon: "📤",
+          icon: Send,
           title: "No sent emails",
           description: "Emails you send will appear here.",
           variant: "default" as const,
@@ -56,7 +57,7 @@
 
       case "trash":
         return {
-          icon: "🗑️",
+          icon: Trash2,
           title: "Trash is empty",
           description: "Deleted emails will appear here for 30 days before being permanently removed.",
           variant: "default" as const,
@@ -64,7 +65,7 @@
 
       case "archive":
         return {
-          icon: "📦",
+          icon: Archive,
           title: "No archived emails",
           description: "Archived emails are stored here. Press 'e' to archive an email.",
           variant: "default" as const,
@@ -72,7 +73,7 @@
 
       case "snoozed":
         return {
-          icon: "💤",
+          icon: Moon,
           title: "No snoozed emails",
           description: "Snoozed emails will reappear when their snooze time ends. Press 'h' to snooze.",
           variant: "default" as const,
@@ -80,7 +81,7 @@
 
       case "reminders":
         return {
-          icon: "🔔",
+          icon: Bell,
           title: "No reminders",
           description: "Set reminders to follow up on sent emails. Press 'Shift+H' to set a reminder.",
           variant: "default" as const,
@@ -89,7 +90,7 @@
       case "label":
         const labelName = $selectedLabel?.name || "this label";
         return {
-          icon: "🏷️",
+          icon: Tag,
           title: `No emails in ${labelName}`,
           description: "Emails you add to this label will appear here.",
           variant: "default" as const,
@@ -97,7 +98,7 @@
 
       default:
         return {
-          icon: "📭",
+          icon: Inbox,
           title: "No emails",
           description: "Your inbox is empty. Click Sync to fetch new emails.",
           variant: "default" as const,
@@ -117,15 +118,33 @@
 
   // Track previous selected index to detect changes from keyboard navigation
   let prevSelectedIndex = $state(-1);
+  let lastFirstId: string | null | undefined = undefined;
 
-  // When selectedIndex changes (from keyboard navigation), scroll to that index
+  // When selectedIndex changes (from keyboard navigation), scroll to that index.
+  // A different list (account/folder switch) resets the tracking so the selection is revealed.
+  // Keyed on the first email rather than array identity: every optimistic update (star, read,
+  // background merge) creates a new array and must not yank the user's scroll position.
   $effect(() => {
     const idx = $selectedIndex;
+    const firstId = $emails[0]?.id ?? null;
+    if (firstId !== lastFirstId) {
+      lastFirstId = firstId;
+      prevSelectedIndex = -1;
+    }
     if (virtualList && idx !== prevSelectedIndex && idx >= 0) {
       virtualList.scrollToIndex(idx);
       prevSelectedIndex = idx;
     }
   });
+
+  // Scroll position of the list, used to restore a cached list
+  export function getScrollTop(): number {
+    return virtualList?.getScrollTop() ?? 0;
+  }
+
+  export function setScrollTop(top: number) {
+    virtualList?.setScrollTop(top);
+  }
 
   function getEmailKey(email: Email): string {
     return email.id;

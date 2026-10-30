@@ -20,6 +20,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "add_sync_settings",
         include_str!("migrations/011_add_sync_settings.sql"),
     ),
+    (
+        12,
+        "message_id_per_account",
+        include_str!("migrations/012_message_id_per_account.sql"),
+    ),
 ];
 
 #[derive(Clone)]

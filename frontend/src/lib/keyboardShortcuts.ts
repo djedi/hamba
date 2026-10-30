@@ -45,6 +45,9 @@ export type ShortcutAction =
   | "switch_account_7"
   | "switch_account_8"
   | "switch_account_9"
+  | "switch_account_next"
+  | "switch_account_prev"
+  | "switch_account_palette"
   // Compose
   | "compose_new"
   | "reply"
@@ -61,7 +64,7 @@ export interface ShortcutDefinition {
   action: ShortcutAction;
   defaultKey: string;
   description: string;
-  category: "Navigation" | "Go to" | "Actions" | "Compose" | "Other";
+  category: "Navigation" | "Go to" | "Actions" | "Compose" | "Accounts" | "Other";
   // Some shortcuts can have aliases (e.g., "o" and "Enter" both open email)
   isAlias?: boolean;
 }
@@ -110,15 +113,18 @@ export const defaultShortcuts: ShortcutDefinition[] = [
   { action: "forward", defaultKey: "f", description: "Forward", category: "Compose" },
 
   // Account switching
-  { action: "switch_account_1", defaultKey: "Cmd+1", description: "Switch to account 1", category: "Other" },
-  { action: "switch_account_2", defaultKey: "Cmd+2", description: "Switch to account 2", category: "Other" },
-  { action: "switch_account_3", defaultKey: "Cmd+3", description: "Switch to account 3", category: "Other" },
-  { action: "switch_account_4", defaultKey: "Cmd+4", description: "Switch to account 4", category: "Other" },
-  { action: "switch_account_5", defaultKey: "Cmd+5", description: "Switch to account 5", category: "Other" },
-  { action: "switch_account_6", defaultKey: "Cmd+6", description: "Switch to account 6", category: "Other" },
-  { action: "switch_account_7", defaultKey: "Cmd+7", description: "Switch to account 7", category: "Other" },
-  { action: "switch_account_8", defaultKey: "Cmd+8", description: "Switch to account 8", category: "Other" },
-  { action: "switch_account_9", defaultKey: "Cmd+9", description: "Switch to account 9", category: "Other" },
+  { action: "switch_account_1", defaultKey: "Cmd+1", description: "Switch to account 1", category: "Accounts" },
+  { action: "switch_account_2", defaultKey: "Cmd+2", description: "Switch to account 2", category: "Accounts" },
+  { action: "switch_account_3", defaultKey: "Cmd+3", description: "Switch to account 3", category: "Accounts" },
+  { action: "switch_account_4", defaultKey: "Cmd+4", description: "Switch to account 4", category: "Accounts" },
+  { action: "switch_account_5", defaultKey: "Cmd+5", description: "Switch to account 5", category: "Accounts" },
+  { action: "switch_account_6", defaultKey: "Cmd+6", description: "Switch to account 6", category: "Accounts" },
+  { action: "switch_account_7", defaultKey: "Cmd+7", description: "Switch to account 7", category: "Accounts" },
+  { action: "switch_account_8", defaultKey: "Cmd+8", description: "Switch to account 8", category: "Accounts" },
+  { action: "switch_account_9", defaultKey: "Cmd+9", description: "Switch to account 9", category: "Accounts" },
+  { action: "switch_account_next", defaultKey: "gn", description: "Next account", category: "Accounts" },
+  { action: "switch_account_prev", defaultKey: "gp", description: "Previous account", category: "Accounts" },
+  { action: "switch_account_palette", defaultKey: "@", description: "Search accounts", category: "Accounts" },
 
   // Other
   { action: "command_palette", defaultKey: "Cmd+k", description: "Command palette", category: "Other" },
@@ -243,7 +249,7 @@ export function hasCustomBindings(): boolean {
 // Get all shortcuts grouped by category (with current keys)
 export function getShortcutsByCategory(): { category: string; shortcuts: Array<{ action: ShortcutAction; key: string; description: string; isCustom: boolean; isAlias?: boolean }> }[] {
   const bindings = get(customBindings);
-  const categories = ["Navigation", "Go to", "Actions", "Compose", "Other"] as const;
+  const categories = ["Navigation", "Go to", "Actions", "Compose", "Accounts", "Other"] as const;
 
   return categories.map((category) => ({
     category,

@@ -74,6 +74,22 @@
     }
   }
 
+  // Current scroll offset of the list (used to restore a cached list's position)
+  export function getScrollTop(): number {
+    return container?.scrollTop ?? 0;
+  }
+
+  // Restore a scroll offset; updates the rendered range immediately rather than waiting for the scroll event
+  export function setScrollTop(top: number) {
+    if (!container) return;
+    if (typeof container.scrollTo === "function") {
+      container.scrollTo({ top, behavior: "auto" });
+    } else {
+      container.scrollTop = top;
+    }
+    scrollTop = top;
+  }
+
   // Scroll to a specific index (for keyboard navigation)
   export function scrollToIndex(index: number, behavior: ScrollBehavior = "auto") {
     if (!container || index < 0 || index >= items.length) return;

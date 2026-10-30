@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Star } from "@lucide/svelte";
   import type { Email } from "$lib/api";
   import { selectedEmailId, selectedIndex, view, emailActions, prefetchEmail, emailLabelsCache, labelActions, selectionActions } from "$lib/stores";
   import { formatRelativeDate, formatDateTooltip } from "$lib/dateUtils";
@@ -105,7 +106,7 @@
     role="button"
     tabindex="-1"
   >
-    {email.is_starred ? "★" : "☆"}
+    <Star size={16} fill={email.is_starred ? "currentColor" : "none"} />
   </span>
 
   <div class="sender">
@@ -210,6 +211,8 @@
   }
 
   .star {
+    display: inline-flex;
+    align-items: center;
     background: none;
     border: none;
     padding: 0;
