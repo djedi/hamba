@@ -133,6 +133,7 @@ impl EmailProvider for YahooProvider {
             host: "smtp.mail.yahoo.com".into(),
             port: 465,
             secure: true,
+            require_tls: true,
             auth: SmtpAuth::XOAuth2 {
                 user: self.email(),
                 token,

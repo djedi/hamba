@@ -200,6 +200,22 @@
     color: var(--text-primary);
   }
 
+  @media (max-width: 768px) {
+    .actions {
+      overflow-x: auto;
+      scrollbar-width: none;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .action-btn {
+      flex-shrink: 0;
+      min-width: 44px;
+      min-height: 44px;
+      justify-content: center;
+    }
+  }
+
   .action-label {
     display: none;
   }

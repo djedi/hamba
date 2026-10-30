@@ -1,0 +1,39 @@
+# Build-on-server deployment used by `make deploy` (scripts/deploy).
+# Lives at <DEPLOY_PATH>/src on the server and runs with <DEPLOY_PATH> as the
+# project directory, so ./data and .env there are the server's own.
+# Put a reverse proxy in front: / -> frontend, /api/* -> backend with the /api
+# prefix stripped (except /api/v1/*, passed through unchanged).
+
+services:
+  backend:
+    build:
+      context: ./src/backend
+      target: runner
+      args:
+        CARGO_PROFILE: ${HAMBA_CARGO_PROFILE:-fast-release}
+    image: hamba-backend:local
+    ports:
+      - "${HAMBA_BACKEND_PORT:-8877}:8877"
+    volumes:
+      - ./data:/app/data
+    env_file: .env
+    environment:
+      - DATABASE_PATH=/app/data/hamba.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8877/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./src/frontend
+      target: runner
+    image: hamba-frontend:local
+    ports:
+      - "${HAMBA_FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

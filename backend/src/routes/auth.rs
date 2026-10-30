@@ -551,21 +551,55 @@ async fn get_account(State(state): State<AppState>, Path(id): Path<String>) -> J
 }
 
 async fn update_account(State(state): State<AppState>, Path(id): Path<String>, Json(body): Json<Value>) -> JsonResult {
+    let (result, reconnect) = update_account_db(&state, &id, &body);
+    // Reconnect IDLE with the new server settings
+    if reconnect {
+        tokio::spawn(crate::services::imap_idle::restart_idle(state.clone(), id.clone()));
+    }
+    result
+}
+
+/// Server-settings checks for `update_account` (IMAP accounts)
+fn validate_server_settings(acc: &Map<String, Value>, body: &Value) -> Result<(), &'static str> {
+    // Cached message ids encode the IMAP server's UIDs, so a different server needs a new account
+    let current_host = acc.get("imap_host").and_then(Value::as_str).unwrap_or_default();
+    if let Some(h) = s(body, "imapHost").map(str::trim).filter(|h| !h.is_empty()) {
+        if !h.eq_ignore_ascii_case(current_host) {
+            return Err("To use a different IMAP server, remove this account and add it again");
+        }
+    }
+    // Supplied ports must be whole numbers in range (n() would drop 0 and truncate fractions)
+    let port_ok = |k: &str| body.get(k).is_none_or(|v| v.as_i64().is_some_and(|p| (1..=65535).contains(&p)));
+    if !port_ok("imapPort") || !port_ok("smtpPort") {
+        return Err("Ports must be between 1 and 65535");
+    }
+    if body.get("color").is_some_and(|c| !c.as_str().is_some_and(crate::appearance::is_valid_color)) {
+        return Err("Invalid color (expected #rrggbb)");
+    }
+    Ok(())
+}
+
+/// Apply the update; returns the response and whether IMAP settings changed
+fn update_account_db(state: &AppState, id: &str, body: &Value) -> (JsonResult, bool) {
     let conn = state.db.conn();
     let cols = crate::appearance::account_columns(&conn);
-    let Some(Value::Object(acc)) = query_one(&conn, &format!("SELECT {cols} FROM accounts WHERE id = ?"), [&id])
+    let Some(Value::Object(acc)) = query_one(&conn, &format!("SELECT {cols} FROM accounts WHERE id = ?"), [id])
         .ok()
         .flatten()
     else {
-        return ok(json!({ "error": "Account not found" }));
+        return (ok(json!({ "error": "Account not found" })), false);
     };
+    // Validate everything before writing anything, so a rejected save changes nothing
+    if let Err(e) = validate_server_settings(&acc, body) {
+        return (ok(json!({ "error": e })), false);
+    }
     let num = |k: &str| {
         body.get(k)
             .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
     };
     let sync_freq = num("syncFrequencySeconds").map(|v| v.clamp(30, 3600));
     let sync_limit = num("initialSyncLimit").map(|v| v.clamp(10, 1000));
-    let sync_all = b(&body, "syncAllMail");
+    let sync_all = b(body, "syncAllMail");
     if let Some(c) = body.get("color") {
         match c.as_str().filter(|c| crate::appearance::is_valid_color(c)) {
             Some(c) => {
@@ -574,7 +608,7 @@ async fn update_account(State(state): State<AppState>, Path(id): Path<String>, J
                     rusqlite::params![c.to_lowercase(), id],
                 );
             }
-            None => return ok(json!({ "error": "Invalid color (expected #rrggbb)" })),
+            None => return (ok(json!({ "error": "Invalid color (expected #rrggbb)" })), false),
         }
     }
 
@@ -600,7 +634,42 @@ async fn update_account(State(state): State<AppState>, Path(id): Path<String>, J
             rusqlite::params![limit, all as i64, id],
         );
     }
-    ok(json!({ "success": true }))
+
+    // IMAP/SMTP server settings (IMAP accounts only); a blank password keeps the current one
+    let is_imap = acc.get("provider_type").and_then(Value::as_str) == Some("imap");
+    let server_keys = ["imapHost", "imapPort", "imapUseTls", "smtpHost", "smtpPort", "smtpUseTls", "password"];
+    let mut reconnect = false;
+    if is_imap && server_keys.iter().any(|k| body.get(*k).is_some()) {
+        let host = |k: &str, col: &str| {
+            s(body, k)
+                .map(|h| h.trim().to_string())
+                .filter(|h| !h.is_empty())
+                .or_else(|| acc.get(col).and_then(Value::as_str).map(str::to_string))
+        };
+        let port = |k: &str, col: &str, d: i64| n(body, k).or_else(|| acc.get(col).and_then(Value::as_i64)).unwrap_or(d);
+        let tls = |k: &str, col: &str| b(body, k).unwrap_or_else(|| acc.get(col).and_then(Value::as_i64).unwrap_or(1) != 0);
+        let res = conn.execute(
+            "UPDATE accounts SET imap_host = ?, imap_port = ?, imap_use_tls = ?,
+                 smtp_host = ?, smtp_port = ?, smtp_use_tls = ?, updated_at = unixepoch() WHERE id = ?",
+            rusqlite::params![
+                host("imapHost", "imap_host"),
+                port("imapPort", "imap_port", 993),
+                tls("imapUseTls", "imap_use_tls") as i64,
+                host("smtpHost", "smtp_host"),
+                port("smtpPort", "smtp_port", 587),
+                tls("smtpUseTls", "smtp_use_tls") as i64,
+                id
+            ],
+        );
+        if let Err(e) = res {
+            return (ok(json!({ "error": e.to_string() })), false);
+        }
+        if let Some(pw) = s(body, "password") {
+            let _ = conn.execute("UPDATE accounts SET password = ? WHERE id = ?", rusqlite::params![pw, id]);
+        }
+        reconnect = true;
+    }
+    (ok(json!({ "success": true })), reconnect)
 }
 
 async fn upload_avatar(State(state): State<AppState>, Path(id): Path<String>, Json(body): Json<Value>) -> JsonResult {

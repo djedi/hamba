@@ -78,6 +78,12 @@ wait: ## Wait until backend and frontend respond (first cargo build can take min
 .env:
 	@echo "Missing .env in the project root (see backend/.env.example)"; exit 1
 
+##@ Deploy
+
+.PHONY: deploy
+deploy: .env ## Build and deploy the working tree to DEPLOY_HOST (SERVICE=backend|frontend for one)
+	scripts/deploy $(SERVICE)
+
 ##@ Local (no Docker)
 
 .PHONY: dev-backend

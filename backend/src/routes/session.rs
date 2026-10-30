@@ -82,7 +82,7 @@ pub async fn require_auth(State(s): State<AppState>, mut req: Request, next: Nex
     }
 }
 
-fn session_token(headers: &HeaderMap) -> Option<String> {
+pub fn session_token(headers: &HeaderMap) -> Option<String> {
     headers
         .get_all(header::COOKIE)
         .iter()
@@ -304,7 +304,11 @@ async fn login(State(s): State<AppState>, Json(body): Json<Value>) -> Response {
 
 async fn logout(State(s): State<AppState>, headers: HeaderMap) -> Response {
     if let Some(token) = session_token(&headers) {
-        let _ = s.db.conn().execute("DELETE FROM app_sessions WHERE token_hash = ?", [hash_key(&token)]);
+        let hash = hash_key(&token);
+        let conn = s.db.conn();
+        let _ = conn.execute("DELETE FROM app_sessions WHERE token_hash = ?", [&hash]);
+        // This device stops getting new-mail pushes once signed out
+        let _ = conn.execute("DELETE FROM push_subscriptions WHERE session_hash = ?", [&hash]);
     }
     let mut resp = ok(json!({ "success": true })).into_response();
     resp.headers_mut().insert(header::SET_COOKIE, cookie("", 0));

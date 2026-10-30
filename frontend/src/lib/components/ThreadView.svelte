@@ -223,31 +223,31 @@
 {#if $selectedEmail}
   <div class="thread-view slide-up">
     <header class="header">
-      <button class="back-btn" onclick={handleBack}>
-        <ArrowLeft size={16} /> Back
+      <button class="back-btn" onclick={handleBack} aria-label="Back">
+        <ArrowLeft size={16} /> <span class="btn-label">Back</span>
       </button>
       <div class="actions">
         {#if $currentFolder === "trash"}
-          <button onclick={handleRestore} title="Restore to Inbox"><ArchiveRestore size={14} /> Restore</button>
-          <button onclick={handlePermanentDelete} title="Permanently Delete" class="danger"><Trash2 size={14} /> Delete Forever</button>
+          <button onclick={handleRestore} title="Restore to Inbox"><ArchiveRestore size={14} /> <span class="btn-label">Restore</span></button>
+          <button onclick={handlePermanentDelete} title="Permanently Delete" class="danger"><Trash2 size={14} /> <span class="btn-label">Delete Forever</span></button>
         {:else if $currentFolder === "archive"}
-          <button onclick={handleUnarchive} title="Move to Inbox"><Inbox size={14} /> Move to Inbox</button>
+          <button onclick={handleUnarchive} title="Move to Inbox"><Inbox size={14} /> <span class="btn-label">Move to Inbox</span></button>
           <button onclick={handleStar} title="Star (s)">
-            <Star size={14} fill={$selectedEmail.is_starred ? "currentColor" : "none"} /> {$selectedEmail.is_starred ? "Starred" : "Star"}
+            <Star size={14} fill={$selectedEmail.is_starred ? "currentColor" : "none"} /> <span class="btn-label">{$selectedEmail.is_starred ? "Starred" : "Star"}</span>
           </button>
-          <button onclick={handleTrash} title="Trash (#)"><Trash2 size={14} /> Trash</button>
-          <button onclick={handleReply} title="Reply (r)"><Reply size={14} /> Reply</button>
-          <button onclick={handleReplyAll} title="Reply All (a)"><ReplyAll size={14} /> Reply All</button>
-          <button onclick={handleForward} title="Forward (f)"><Forward size={14} /> Forward</button>
+          <button onclick={handleTrash} title="Trash (#)"><Trash2 size={14} /> <span class="btn-label">Trash</span></button>
+          <button onclick={handleReply} title="Reply (r)"><Reply size={14} /> <span class="btn-label">Reply</span></button>
+          <button onclick={handleReplyAll} title="Reply All (a)"><ReplyAll size={14} /> <span class="btn-label">Reply All</span></button>
+          <button onclick={handleForward} title="Forward (f)"><Forward size={14} /> <span class="btn-label">Forward</span></button>
         {:else}
-          <button onclick={handleArchive} title="Archive (e)"><Archive size={14} /> Archive</button>
+          <button onclick={handleArchive} title="Archive (e)"><Archive size={14} /> <span class="btn-label">Archive</span></button>
           <button onclick={handleStar} title="Star (s)">
-            <Star size={14} fill={$selectedEmail.is_starred ? "currentColor" : "none"} /> {$selectedEmail.is_starred ? "Starred" : "Star"}
+            <Star size={14} fill={$selectedEmail.is_starred ? "currentColor" : "none"} /> <span class="btn-label">{$selectedEmail.is_starred ? "Starred" : "Star"}</span>
           </button>
-          <button onclick={handleTrash} title="Trash (#)"><Trash2 size={14} /> Trash</button>
-          <button onclick={handleReply} title="Reply (r)"><Reply size={14} /> Reply</button>
-          <button onclick={handleReplyAll} title="Reply All (a)"><ReplyAll size={14} /> Reply All</button>
-          <button onclick={handleForward} title="Forward (f)"><Forward size={14} /> Forward</button>
+          <button onclick={handleTrash} title="Trash (#)"><Trash2 size={14} /> <span class="btn-label">Trash</span></button>
+          <button onclick={handleReply} title="Reply (r)"><Reply size={14} /> <span class="btn-label">Reply</span></button>
+          <button onclick={handleReplyAll} title="Reply All (a)"><ReplyAll size={14} /> <span class="btn-label">Reply All</span></button>
+          <button onclick={handleForward} title="Forward (f)"><Forward size={14} /> <span class="btn-label">Forward</span></button>
         {/if}
         <button onclick={toggleSummary} title="AI Summarize" class="summarize-btn" class:active={showSummary}>
           {summaryLoading ? "..." : "AI Summary"}
@@ -394,6 +394,45 @@
     overflow-y: auto;
     padding: 24px 32px;
     max-width: 900px;
+  }
+
+  /* Phone: icon-only toolbar that scrolls sideways, tighter content padding */
+  @media (max-width: 768px) {
+    .header {
+      gap: 4px;
+      padding: 4px 8px;
+    }
+
+    .header .btn-label {
+      display: none;
+    }
+
+    .back-btn {
+      min-width: 44px;
+      min-height: 44px;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .actions {
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .actions button {
+      min-width: 44px;
+      min-height: 44px;
+      justify-content: center;
+      padding: 0 10px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
+    .content {
+      padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+      max-width: none;
+    }
   }
 
   .thread-header {

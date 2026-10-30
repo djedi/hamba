@@ -6,6 +6,7 @@
   import { accounts, selectedAccountId, isSettingsOpen, showToast } from "$lib/stores";
   import { invalidateAccount } from "$lib/listCache";
   import { api, sessionApi, type ApiKey, type AppPasskey, type SessionStatus, type Signature } from "$lib/api";
+  import { pushSupport, isPushEnabled, enablePush, disablePush } from "$lib/push";
   import { createPasskey, passkeysAvailable } from "$lib/webauthn";
   import { getTrackingPrefs, setTrackingPref, PRIVACY_NOTE, TRACKING_UNAVAILABLE } from "$lib/tracking";
   import {
@@ -74,6 +75,14 @@
   let editSyncFrequency = $state(60);
   let editInitialSyncLimit = $state(100);
   let editSyncAllMail = $state(false);
+  // IMAP/SMTP server settings (IMAP accounts only)
+  let editImapHost = $state("");
+  let editImapPort = $state(993);
+  let editImapTls = $state(true);
+  let editSmtpHost = $state("");
+  let editSmtpPort = $state(587);
+  let editSmtpTls = $state(true);
+  let editPassword = $state("");
   let savingAccountSettings = $state(false);
 
   // Sync frequency options
@@ -203,6 +212,7 @@
   }
 
   onMount(async () => {
+    isPushEnabled().then((v) => (pushEnabled = v)).catch(() => {});
     // Load saved preferences from localStorage
     if (typeof localStorage !== "undefined") {
       fontSize = (localStorage.getItem("settings.fontSize") as "12" | "14" | "16") || "14";
@@ -291,6 +301,29 @@
 
     if (e.key === "Escape") {
       onClose();
+    }
+  }
+
+  // Web Push on this device (works when the app is closed)
+  const pushState = pushSupport();
+  let pushEnabled = $state(false);
+  let pushBusy = $state(false);
+
+  async function togglePush() {
+    pushBusy = true;
+    try {
+      if (pushEnabled) {
+        await disablePush();
+        pushEnabled = false;
+      } else {
+        await enablePush();
+        pushEnabled = true;
+        showToast("Push notifications enabled", "success");
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Push notification setup failed", "error");
+    } finally {
+      pushBusy = false;
     }
   }
 
@@ -398,6 +431,13 @@
     editSyncFrequency = account.sync_frequency_seconds ?? 60;
     editInitialSyncLimit = account.initial_sync_limit ?? 100;
     editSyncAllMail = account.sync_all_mail === 1;
+    editImapHost = account.imap_host ?? "";
+    editImapPort = account.imap_port ?? 993;
+    editImapTls = account.imap_use_tls !== 0;
+    editSmtpHost = account.smtp_host ?? "";
+    editSmtpPort = account.smtp_port ?? 587;
+    editSmtpTls = account.smtp_use_tls !== 0;
+    editPassword = "";
   }
 
   function cancelEditAccount() {
@@ -406,10 +446,24 @@
     editSyncFrequency = 60;
     editInitialSyncLimit = 100;
     editSyncAllMail = false;
+    editPassword = "";
   }
 
   async function saveAccountSettings() {
     if (!editingAccountId) return;
+
+    const isImap = $accounts.find((a) => a.id === editingAccountId)?.provider_type === "imap";
+    const server = isImap
+      ? {
+          imapHost: editImapHost.trim(),
+          imapPort: Number(editImapPort),
+          imapUseTls: editImapTls,
+          smtpHost: editSmtpHost.trim(),
+          smtpPort: Number(editSmtpPort),
+          smtpUseTls: editSmtpTls,
+          ...(editPassword ? { password: editPassword } : {}),
+        }
+      : {};
 
     savingAccountSettings = true;
     try {
@@ -418,6 +472,7 @@
         syncFrequencySeconds: editSyncFrequency,
         initialSyncLimit: editInitialSyncLimit,
         syncAllMail: editSyncAllMail,
+        ...server,
       });
 
       if (result.success) {
@@ -431,6 +486,16 @@
                   sync_frequency_seconds: editSyncFrequency,
                   initial_sync_limit: editInitialSyncLimit,
                   sync_all_mail: editSyncAllMail ? 1 : 0,
+                  ...(isImap
+                    ? {
+                        imap_host: editImapHost.trim(),
+                        imap_port: Number(editImapPort),
+                        imap_use_tls: editImapTls ? 1 : 0,
+                        smtp_host: editSmtpHost.trim(),
+                        smtp_port: Number(editSmtpPort),
+                        smtp_use_tls: editSmtpTls ? 1 : 0,
+                      }
+                    : {}),
                 }
               : a
           )
@@ -534,6 +599,9 @@
 
   async function signOut() {
     try {
+      // Stop pushes to this device (the server also drops them with the session)
+      // Bounded so a stuck service worker can't block signing out
+      await Promise.race([disablePush().catch(() => {}), new Promise((r) => setTimeout(r, 2000))]);
       await sessionApi.logout();
     } finally {
       location.reload();
@@ -881,6 +949,30 @@
                         <span class="field-help checkbox-help">When enabled, continues syncing all older emails in the background after initial sync</span>
                       </div>
 
+                      {#if account.provider_type === "imap"}
+                        <div class="form-row">
+                          <span class="server-heading">Incoming mail (IMAP)</span>
+                          <div class="server-row">
+                            <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" aria-label="IMAP server" type="text" value={editImapHost} readonly title="To use a different IMAP server, remove the account and add it again" />
+                            <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" aria-label="IMAP port" class="port" type="number" min="1" max="65535" bind:value={editImapPort} />
+                            <label class="tls"><input type="checkbox" bind:checked={editImapTls} /> TLS</label>
+                          </div>
+                        </div>
+                        <div class="form-row">
+                          <span class="server-heading">Outgoing mail (SMTP)</span>
+                          <div class="server-row">
+                            <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" aria-label="SMTP server" type="text" bind:value={editSmtpHost} placeholder="smtp.example.com" />
+                            <input autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" aria-label="SMTP port" class="port" type="number" min="1" max="65535" bind:value={editSmtpPort} />
+                            <label class="tls"><input type="checkbox" bind:checked={editSmtpTls} /> TLS</label>
+                          </div>
+                          <span class="field-help">Port 465 uses TLS from the start; other ports use STARTTLS (required when TLS is checked)</span>
+                        </div>
+                        <div class="form-row">
+                          <label for="account-password">Password</label>
+                          <input id="account-password" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-form-type="other" bind:value={editPassword} placeholder="Leave blank to keep the current password" />
+                        </div>
+                      {/if}
+
                       {#if account.sync_progress_total && account.sync_progress_synced != null}
                         {@const synced = account.sync_progress_synced ?? 0}
                         {@const total = account.sync_progress_total ?? 1}
@@ -1080,6 +1172,34 @@
                   bind:checked={notifyImportantOnly}
                 />
               </div>
+            {/if}
+          </div>
+
+          <div class="section">
+            <h3>Push Notifications</h3>
+            {#if pushState === "supported"}
+              <div class="setting-row">
+                <label for="push-toggle">Push notifications on this device</label>
+                <input
+                  type="checkbox"
+                  id="push-toggle"
+                  checked={pushEnabled}
+                  disabled={pushBusy}
+                  onchange={togglePush}
+                />
+              </div>
+              <p class="loading">
+                Get notified about new mail even when Hamba is closed.
+                {#if !$accounts.some((a) => a.provider_type === "imap")}
+                  Push currently works for IMAP accounts only; Gmail, Microsoft and Yahoo are notified while Hamba is open.
+                {:else if $accounts.some((a) => a.provider_type !== "imap")}
+                  Works for IMAP accounts; Gmail, Microsoft and Yahoo are notified only while Hamba is open.
+                {/if}
+              </p>
+            {:else if pushState === "needs-install"}
+              <p class="loading">Add Hamba to your Home Screen to enable push.</p>
+            {:else}
+              <p class="loading">Push notifications are not supported in this browser.</p>
             {/if}
           </div>
 
@@ -2294,6 +2414,35 @@
   .preview-content .placeholder {
     color: var(--text-muted);
     font-style: italic;
+  }
+
+  .server-heading {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .server-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .server-row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .server-row .port {
+    width: 80px;
+  }
+
+  .server-row .tls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
   }
 
   .form-actions {

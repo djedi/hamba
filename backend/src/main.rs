@@ -81,6 +81,7 @@ pub fn build_app(state: AppState) -> Router {
         .nest("/ai", routes::ai::router())
         .nest("/auth", routes::auth::router())
         .nest("/session", routes::session::router())
+        .nest("/push", services::push::router())
         .merge(services::metrics::router())
         .merge(openapi::router())
         .layer(axum::middleware::from_fn_with_state(state.clone(), routes::session::require_auth))

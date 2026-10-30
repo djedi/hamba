@@ -933,3 +933,61 @@ async fn app_login_flow() {
     let (_, _, r) = auth_call(&s, Method::POST, "/session/login", Some(json!({"username":"dustin","password":"new password 1"})), None).await;
     assert_eq!(r["success"], true);
 }
+
+#[tokio::test]
+async fn update_imap_server_settings() {
+    let s = state();
+    let r = call(&s, Method::PUT, &format!("/auth/accounts/{ACCOUNT}"), Some(json!({ "smtpHost": "smtp.example.com", "smtpPort": 465, "smtpUseTls": true, "password": "new-pass" }))).await;
+    assert_eq!(r["success"], true);
+    let (host, port, pw): (String, i64, String) = s
+        .db
+        .conn()
+        .query_row("SELECT smtp_host, smtp_port, password FROM accounts WHERE id = ?", [ACCOUNT], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap();
+    assert_eq!((host.as_str(), port, pw.as_str()), ("smtp.example.com", 465, "new-pass"));
+
+    let r = call(&s, Method::PUT, &format!("/auth/accounts/{ACCOUNT}"), Some(json!({ "imapPort": 70000 }))).await;
+    assert!(r["error"].as_str().unwrap().contains("Ports"));
+
+    // A rejected save writes nothing (display name included)
+    let r = call(&s, Method::PUT, &format!("/auth/accounts/{ACCOUNT}"), Some(json!({ "displayName": "Changed", "smtpPort": 0 }))).await;
+    assert!(r["error"].is_string());
+    let name: Option<String> = s
+        .db
+        .conn()
+        .query_row("SELECT display_name FROM accounts WHERE id = ?", [ACCOUNT], |r| r.get(0))
+        .unwrap();
+    assert_ne!(name.as_deref(), Some("Changed"));
+}
+
+#[tokio::test]
+async fn push_subscribe_unsubscribe() {
+    let s = AppState { auth: true, ..state() };
+    assert_eq!(auth_call(&s, Method::GET, "/push/key", None, None).await.0, 401);
+    let sub = json!({"endpoint":"https://push.example/abc","keys":{"p256dh":"pk","auth":"au"}});
+    assert_eq!(auth_call(&s, Method::POST, "/push/subscribe", Some(sub.clone()), None).await.0, 401);
+
+    let (_, cookie, _) = auth_call(&s, Method::POST, "/session/setup", Some(json!({"username":"dustin","password":"correct horse"})), None).await;
+    let cookie = cookie.unwrap();
+
+    // VAPID key is generated once and stays stable
+    let (_, _, k1) = auth_call(&s, Method::GET, "/push/key", None, Some(&cookie)).await;
+    let (_, _, k2) = auth_call(&s, Method::GET, "/push/key", None, Some(&cookie)).await;
+    assert_eq!(k1["publicKey"], k2["publicKey"]);
+    assert_eq!(k1["publicKey"].as_str().unwrap().len(), 87);
+
+    let count = |s: &AppState| -> i64 { s.db.conn().query_row("SELECT COUNT(*) FROM push_subscriptions", [], |r| r.get(0)).unwrap() };
+    let (_, _, r) = auth_call(&s, Method::POST, "/push/subscribe", Some(json!({"endpoint":"x"})), Some(&cookie)).await;
+    assert_eq!(r["success"], false);
+    let (_, _, r) = auth_call(&s, Method::POST, "/push/subscribe", Some(sub.clone()), Some(&cookie)).await;
+    assert_eq!(r["success"], true);
+    // Re-subscribing the same endpoint is an upsert
+    auth_call(&s, Method::POST, "/push/subscribe", Some(sub.clone()), Some(&cookie)).await;
+    assert_eq!(count(&s), 1);
+    let user: Option<String> = s.db.conn().query_row("SELECT user_id FROM push_subscriptions", [], |r| r.get(0)).unwrap();
+    assert!(user.is_some());
+
+    let (_, _, r) = auth_call(&s, Method::DELETE, "/push/unsubscribe", Some(json!({"endpoint":"https://push.example/abc"})), Some(&cookie)).await;
+    assert_eq!(r["success"], true);
+    assert_eq!(count(&s), 0);
+}

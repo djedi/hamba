@@ -3,11 +3,13 @@
   import { onMount } from "svelte";
   import { initKeyboardNavigation } from "$lib/keyboard";
   import { registerServiceWorker, initOnlineListener } from "$lib/offline";
-  import { selectedAccount } from "$lib/stores";
+  import { get } from "svelte/store";
+  import { selectedAccount, view, showToast } from "$lib/stores";
   import { DEFAULT_ACCOUNT_COLOR } from "$lib/accountAppearance";
   import ErrorBoundary from "$lib/components/ErrorBoundary.svelte";
   import Login from "$lib/components/Login.svelte";
   import { sessionApi, setUnauthorizedHandler, type SessionStatus } from "$lib/api";
+  import { initViewportHeight } from "$lib/mobile";
 
   let { children } = $props();
 
@@ -30,6 +32,32 @@
     if (gate === "app") checkSession();
   });
 
+  // Notification taps (service worker posts {type: "open-url"}). On the login screen the
+  // target is kept until sign-in; in the app it's opened unless a draft is being written.
+  let pendingUrl: string | null = null;
+  $effect(() => {
+    if (typeof navigator === "undefined" || !navigator.serviceWorker) return;
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type !== "open-url" || typeof e.data.url !== "string") return;
+      const url = new URL(e.data.url, location.origin);
+      if (url.origin !== location.origin) return;
+      if (gate !== "app") {
+        pendingUrl = url.href;
+      } else if (get(view) === "compose") {
+        showToast("New mail — finish or close your draft to open it", "success");
+      } else {
+        location.assign(url.href);
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  });
+
+  function onAuthenticated() {
+    if (pendingUrl) location.assign(pendingUrl);
+    else location.reload();
+  }
+
   // Keyboard shortcuts only once the app is showing
   $effect(() => {
     if (gate !== "app") return;
@@ -47,12 +75,14 @@
   onMount(() => {
     checkSession();
     const cleanupOnline = initOnlineListener();
+    const cleanupViewport = initViewportHeight();
 
     // Register service worker for offline support
     registerServiceWorker();
 
     return () => {
       cleanupOnline();
+      cleanupViewport();
     };
   });
 </script>
@@ -69,7 +99,7 @@
 
 {#if gate === "login" && session}
   <!-- Reload so every store and the WebSocket start fresh with the new session -->
-  <Login status={session} onAuthenticated={() => location.reload()} />
+  <Login status={session} {onAuthenticated} />
 {:else if gate === "app"}
   <ErrorBoundary>
     {@render children()}

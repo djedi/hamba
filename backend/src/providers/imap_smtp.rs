@@ -35,10 +35,12 @@ impl ImapSmtpProvider {
             .or_else(|| f("email"))
             .unwrap_or_default();
         let pass = f("password").unwrap_or_default();
+        let require_tls = f("smtp_use_tls").map(|v| v != "0" && !v.is_empty()).unwrap_or(true);
         Ok(SmtpConfig {
             host,
             port,
             secure: port == 465,
+            require_tls,
             auth: SmtpAuth::Password { user, pass },
         })
     }

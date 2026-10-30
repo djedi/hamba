@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Archive, Bell, Inbox, Moon, PartyPopper, Search, Send, Star, Tag, Trash2 } from "@lucide/svelte";
+  import { Archive, Bell, Inbox, Moon, PartyPopper, RefreshCw, Search, Send, Star, Tag, Trash2 } from "@lucide/svelte";
+  import { isMobile } from "$lib/mobile";
   import { emails, selectedEmailId, selectedIndex, searchQuery, isLoadingMore, hasMoreEmails, selectedLabel, selectedEmailIds } from "$lib/stores";
   import type { Folder } from "$lib/stores";
   import { extractSearchTerms } from "$lib/search";
@@ -12,10 +13,12 @@
   interface Props {
     loading?: boolean;
     onLoadMore?: () => void;
+    /** Pull-to-refresh on touch screens */
+    onRefresh?: () => Promise<void> | void;
     folder?: Folder;
   }
 
-  let { loading = false, onLoadMore, folder = "inbox" }: Props = $props();
+  let { loading = false, onLoadMore, onRefresh, folder = "inbox" }: Props = $props();
 
   // Determine the appropriate empty state based on context
   const emptyState = $derived.by(() => {
@@ -109,8 +112,43 @@
   // Extract search terms from the current search query
   const searchTerms = $derived(extractSearchTerms($searchQuery));
 
-  // Row height must match --row-h in app.css (40px, border included via border-box)
-  const ROW_HEIGHT = 40;
+  // Row height must match --row-h in app.css (40px; 72px two-line rows on phones)
+  const ROW_HEIGHT = $derived($isMobile ? 72 : 40);
+
+  // ---- Pull to refresh (only when the list is scrolled to the top) ----
+  const PULL_TRIGGER = 70;
+  let pullStartY: number | null = null;
+  let pull = $state(0);
+  let refreshing = $state(false);
+
+  function onPullStart(e: TouchEvent) {
+    if (!onRefresh || refreshing || e.touches.length !== 1) return;
+    pullStartY = getScrollTop() <= 0 ? e.touches[0].clientY : null;
+  }
+
+  function onPullMove(e: TouchEvent) {
+    if (pullStartY === null) return;
+    const dy = e.touches[0].clientY - pullStartY;
+    // Dampened so it feels elastic
+    pull = dy > 0 && getScrollTop() <= 0 ? Math.min(dy * 0.5, 100) : 0;
+  }
+
+  async function onPullEnd() {
+    if (pullStartY === null) return;
+    pullStartY = null;
+    if (pull >= PULL_TRIGGER && onRefresh) {
+      refreshing = true;
+      pull = PULL_TRIGGER;
+      try {
+        await onRefresh();
+      } finally {
+        refreshing = false;
+        pull = 0;
+      }
+    } else {
+      pull = 0;
+    }
+  }
 
   // Reference to virtual list for scrolling
   let virtualList: ReturnType<typeof VirtualList<Email>> | null = $state(null);
@@ -150,7 +188,20 @@
   }
 </script>
 
-<div class="email-list">
+<div
+  class="email-list"
+  ontouchstart={onPullStart}
+  ontouchmove={onPullMove}
+  ontouchend={onPullEnd}
+  ontouchcancel={onPullEnd}
+>
+  {#if pull > 0 || refreshing}
+    <div class="pull-indicator" style:height="{pull}px" aria-live="polite">
+      <span class="pull-icon" class:spinning={refreshing} style:transform={refreshing ? undefined : `rotate(${pull * 3}deg)`}>
+        <RefreshCw size={18} />
+      </span>
+    </div>
+  {/if}
   {#if loading && $emails.length === 0}
     <div class="skeleton-list">
       {#each Array(10) as _, i (i)}
@@ -194,6 +245,29 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+
+  .pull-indicator {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    color: var(--text-muted);
+  }
+
+  .pull-icon {
+    display: inline-flex;
+  }
+
+  .pull-icon.spinning {
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .skeleton-list {

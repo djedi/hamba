@@ -192,6 +192,10 @@ make help                # All targets
 
 **Ports:** the dev stack uses fixed, uncommon host ports (backend `56003`, frontend `5273`) so it doesn't collide with other local services. `make status` prints the URLs. Override with `BACKEND_PORT=8877 FRONTEND_PORT=8878 make up` (e.g. when OAuth redirect URIs are registered against a specific port). The backend gets `FRONTEND_URL` (CORS and post-login redirect) and the frontend gets `VITE_API_URL`/`VITE_WS_URL` from these ports.
 
+### Fast deploy to your own server
+
+`make deploy` (`scripts/deploy`) rsyncs the working tree to a server and builds there with `docker-compose.deploy.yml` (Cargo `fast-release` profile + BuildKit cache mounts: warm backend rebuilds take seconds). No commit needed. `SERVICE=backend|frontend` deploys one. Settings are `DEPLOY_HOST`, `DEPLOY_PATH`, `DEPLOY_PROJECT`, `DEPLOY_URL` in the root `.env`; the server's `<DEPLOY_PATH>/.env` holds the app settings plus `HAMBA_BACKEND_PORT`/`HAMBA_FRONTEND_PORT`. GitHub's Deploy workflow (full `release` profile) still publishes ghcr images on push to main.
+
 ### Quick Start (Production)
 
 ```bash

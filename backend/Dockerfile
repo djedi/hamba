@@ -7,12 +7,15 @@ WORKDIR /app
 # OpenSSL is needed by webauthn-rs (passkeys)
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
-# Cache dependencies separately from sources
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src
+# release (CI) or fast-release (`make deploy`); see Cargo.toml
+ARG CARGO_PROFILE=release
 
 COPY . .
-RUN touch src/main.rs && cargo build --release
+# Cache mounts keep the crate registry and build output between builds on the same host
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target,id=hamba-target-${CARGO_PROFILE} \
+    cargo build --profile ${CARGO_PROFILE} && \
+    cp target/${CARGO_PROFILE}/hamba-backend /usr/local/bin/hamba-backend
 
 # Development image: run with hot rebuild via `cargo run` (see docker-compose.dev.yml)
 FROM builder AS dev
@@ -28,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     useradd --system --uid 1001 --gid hamba hamba && \
     mkdir -p /app/data && chown -R hamba:hamba /app/data
 
-COPY --from=builder /app/target/release/hamba-backend /usr/local/bin/hamba-backend
+COPY --from=builder /usr/local/bin/hamba-backend /usr/local/bin/hamba-backend
 
 USER hamba
 

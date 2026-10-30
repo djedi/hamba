@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { X } from "@lucide/svelte";
+  import { X, Menu, PenSquare } from "@lucide/svelte";
+  import { isMobile, isNavDrawerOpen } from "$lib/mobile";
+  import { syncPushSubscription } from "$lib/push";
   import { onMount, onDestroy, tick } from "svelte";
   import { get } from "svelte/store";
   import { api, AuthError } from "$lib/api";
@@ -48,6 +50,7 @@
     selectionActions,
     mergeEmails,
     accountActions,
+    selectedLabel,
   } from "$lib/stores";
   import type { Draft, Email } from "$lib/api";
   import type { Folder } from "$lib/stores";
@@ -192,7 +195,16 @@
       accounts.set(accts);
 
       if (accts.length > 0) {
-        const firstAccountId = accts[0].id;
+        // ?account= (e.g. from a push notification) picks which account opens first
+        const accountFromUrl = params.get("account");
+        if (accountFromUrl) {
+          // One-shot: later account switches shouldn't be overridden by a stale param on reload
+          const url = new URL(window.location.href);
+          url.searchParams.delete("account");
+          window.history.replaceState(window.history.state, "", url);
+        }
+        const startAccount = accts.find((a) => a.id === accountFromUrl) ?? accts[0];
+        const firstAccountId = startAccount.id;
         selectedAccountId.set(firstAccountId);
         lastLoadedAccountId = firstAccountId;
         lastLoadedFolder = $currentFolder;
@@ -208,11 +220,13 @@
         api.getSentEmails(firstAccountId).then(s => writeListCache(listKey(firstAccountId, "sent"), s)).catch(() => {});
         await loadEmails(firstAccountId, emailIdFromUrl);
         idle(prefetchOtherAccounts);
+        // Push subscriptions belong to a login session; re-attach this device's to the current one
+        idle(() => syncPushSubscription().catch(() => {}));
         accountActions.refreshUnreadCounts();
 
         // Start auto-sync as fallback (for Gmail without push)
         // Use the account's configured sync frequency
-        currentSyncFrequency = accts[0].sync_frequency_seconds ?? 60;
+        currentSyncFrequency = startAccount.sync_frequency_seconds ?? 60;
         autoSyncInterval = setInterval(syncEmails, currentSyncFrequency * 1000);
       }
     } catch (err) {
@@ -559,17 +573,18 @@
         }
       }
 
-      if (msgs.length > 0) {
-        // If email ID from URL, restore that selection
-        if (emailIdFromUrl) {
-          const emailIndex = msgs.findIndex(e => e.id === emailIdFromUrl);
-          if (emailIndex !== -1) {
-            selectedEmailId.set(emailIdFromUrl);
-            selectedIndex.set(emailIndex);
-            view.set("email");
-            return;
-          }
+      // If email ID from URL, restore that selection
+      if (emailIdFromUrl) {
+        const emailIndex = msgs.findIndex(e => e.id === emailIdFromUrl);
+        if (emailIndex !== -1) {
+          selectedEmailId.set(emailIdFromUrl);
+          selectedIndex.set(emailIndex);
+          view.set("email");
+          return;
         }
+      }
+
+      if (msgs.length > 0) {
         // Default to first email selected but stay in inbox
         selectedEmailId.set(msgs[0].id);
         selectedIndex.set(0);
@@ -684,15 +699,86 @@
     errorMessage = "";
     needsReauth = false;
   }
+
+  // ---- Phone layout ----
+  const FOLDER_TITLES: Record<string, string> = {
+    inbox: "Inbox",
+    starred: "Starred",
+    sent: "Sent",
+    drafts: "Drafts",
+    snoozed: "Snoozed",
+    reminders: "Reminders",
+    scheduled: "Scheduled",
+    archive: "Archive",
+    trash: "Trash",
+    label: "Label",
+  };
+  const mobileTitle = $derived(
+    $currentFolder === "label" && $selectedLabel ? $selectedLabel.name : (FOLDER_TITLES[$currentFolder] ?? "Inbox")
+  );
+
+  // Close the drawer after navigating (folder, label, account, or opening a view)
+  $effect(() => {
+    void $currentFolder;
+    void $selectedLabelId;
+    void $selectedAccountId;
+    void $view;
+    isNavDrawerOpen.set(false);
+  });
+
+  // Drawer focus: move into the drawer on open, back to the menu button on close
+  let drawerEl: HTMLDivElement | null = $state(null);
+  let menuBtn: HTMLButtonElement | null = $state(null);
+  let drawerWasOpen = false;
+  $effect(() => {
+    const open = $isNavDrawerOpen;
+    if (open && !drawerWasOpen) {
+      tick().then(() => drawerEl?.querySelector<HTMLElement>(".nav-item.active, .nav-item")?.focus());
+    } else if (!open && drawerWasOpen && drawerEl?.contains(document.activeElement)) {
+      menuBtn?.focus();
+    }
+    drawerWasOpen = open;
+  });
+
+  function composeNew() {
+    selectedDraft = null;
+    composeMode.set("new");
+    replyToEmail.set(null);
+    view.set("compose");
+  }
 </script>
 
-<div class="app">
-  {#if $accounts.length > 0}
-    <AccountRail onAddAccount={() => (showAddAccountModal = true)} />
+<div class="app" class:drawer-open={$isNavDrawerOpen}>
+  <!-- Any navigation tap closes the phone drawer, even to the current folder (theme/sync stay open) -->
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div
+    bind:this={drawerEl}
+    class="nav-drawer"
+    aria-hidden={$isMobile && !$isNavDrawerOpen ? "true" : undefined}
+    inert={$isMobile && !$isNavDrawerOpen}
+    onclick={(e) => {
+      const btn = (e.target as HTMLElement).closest("button");
+      if (btn && !btn.closest(".theme-opt, .sync-btn, .sync-pending-btn")) isNavDrawerOpen.set(false);
+    }}
+  >
+    {#if $accounts.length > 0}
+      <AccountRail onAddAccount={() => (showAddAccountModal = true)} />
+    {/if}
+    <Sidebar onSync={syncEmails} onManageLabels={() => (showLabelManager = true)} onManageSnippets={() => (showSnippetManager = true)} />
+  </div>
+  {#if $isNavDrawerOpen}
+    <button class="drawer-backdrop" aria-label="Close menu" onclick={() => isNavDrawerOpen.set(false)}></button>
   {/if}
-  <Sidebar onSync={syncEmails} onManageLabels={() => (showLabelManager = true)} onManageSnippets={() => (showSnippetManager = true)} />
 
-  <main class="main">
+  <main class="main" inert={$isMobile && $isNavDrawerOpen}>
+    {#if $isMobile && $view === "inbox"}
+      <header class="mobile-bar">
+        <button bind:this={menuBtn} class="icon-btn" aria-label="Open menu" onclick={() => isNavDrawerOpen.set(true)}>
+          <Menu size={22} />
+        </button>
+        <h1 class="mobile-title">{mobileTitle}</h1>
+      </header>
+    {/if}
     {#if needsReauth}
       <div class="auth-banner">
         <span>Session expired. Please re-authenticate to continue.</span>
@@ -706,7 +792,10 @@
       </div>
     {/if}
 
-    <SearchBar />
+    <!-- Phones: search lives on the list screen only -->
+    {#if !$isMobile || $view === "inbox"}
+      <SearchBar />
+    {/if}
 
     {#if $accounts.length === 0}
       <div class="empty-state">
@@ -723,12 +812,18 @@
         <ScheduledList loading={$isLoading} onEdit={openDraft} />
       {:else}
         <BulkActionToolbar />
-        <EmailList bind:this={emailList} loading={$isLoading} onLoadMore={loadMoreEmails} folder={$currentFolder} />
+        <EmailList bind:this={emailList} loading={$isLoading} onLoadMore={loadMoreEmails} onRefresh={syncEmails} folder={$currentFolder} />
       {/if}
     {:else if $view === "email"}
       <ThreadView />
     {:else if $view === "compose"}
       <Compose replyTo={$replyToEmail} mode={$composeMode} draft={selectedDraft} />
+    {/if}
+
+    {#if $isMobile && $view === "inbox" && $accounts.length > 0}
+      <button class="compose-fab" aria-label="Compose" onclick={composeNew}>
+        <PenSquare size={22} />
+      </button>
     {/if}
   </main>
 
@@ -779,7 +874,13 @@
   .app {
     display: flex;
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
+  }
+
+  .nav-drawer {
+    display: flex;
+    flex-shrink: 0;
   }
 
   .main {
@@ -787,6 +888,103 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-width: 0;
+    position: relative;
+  }
+
+  .mobile-bar,
+  .compose-fab,
+  .drawer-backdrop {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .app {
+      height: var(--app-height, 100dvh);
+      padding-top: env(safe-area-inset-top);
+    }
+
+    .nav-drawer {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 200;
+      max-width: 88vw;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      background: var(--bg-secondary);
+      box-shadow: var(--shadow-pop);
+      transform: translateX(-105%);
+      transition: transform 0.2s ease-out;
+    }
+
+    .drawer-open .nav-drawer {
+      transform: translateX(0);
+    }
+
+    .drawer-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 150;
+      background: rgba(0, 0, 0, 0.45);
+      border: none;
+      padding: 0;
+    }
+
+    .mobile-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 52px;
+      padding: 0 8px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-secondary);
+    }
+
+    .mobile-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      border-radius: var(--r-md);
+    }
+
+    .compose-fab {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+      right: 20px;
+      bottom: calc(20px + env(safe-area-inset-bottom));
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      box-shadow: var(--shadow-pop);
+      z-index: 50;
+    }
+
+    .compose-fab:active {
+      transform: scale(0.95);
+    }
   }
 
   .empty-state {

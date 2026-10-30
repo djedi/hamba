@@ -2,9 +2,12 @@
     "name": "Hamba",
     "short_name": "Hamba",
     "description": "A blazing fast email client",
+    "id": "/",
     "start_url": "/",
+    "scope": "/",
     "display": "standalone",
-    "background_color": "#0a0a0a",
+    "orientation": "any",
+    "background_color": "#1a1a1a",
     "theme_color": "#6366f1",
     "icons": [
         {

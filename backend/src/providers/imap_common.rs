@@ -1237,8 +1237,10 @@ pub enum SmtpAuth {
 pub struct SmtpConfig {
     pub host: String,
     pub port: u16,
-    /// Implicit TLS (port 465); otherwise opportunistic STARTTLS like nodemailer
+    /// Implicit TLS (port 465); otherwise STARTTLS
     pub secure: bool,
+    /// For STARTTLS: fail rather than fall back to plaintext (the account's TLS setting)
+    pub require_tls: bool,
     pub auth: SmtpAuth,
 }
 
@@ -1318,6 +1320,8 @@ pub async fn smtp_send(cfg: &SmtpConfig, params: &SendParams) -> Result<String, 
         .port(cfg.port)
         .tls(if cfg.secure {
             Tls::Wrapper(tls_params)
+        } else if cfg.require_tls {
+            Tls::Required(tls_params)
         } else {
             Tls::Opportunistic(tls_params)
         })

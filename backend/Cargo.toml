@@ -30,10 +30,19 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 memory-stats = "1"
 argon2 = "0.5"
 webauthn-rs = { version = "0.5", features = ["conditional-ui"] }
+web-push = { version = "0.11", default-features = false, features = ["hyper-client"] }
+p256 = "0.13"
 
 [profile.release]
 lto = true
 codegen-units = 1
+
+# Quicker optimized build for `make deploy` (no LTO, parallel codegen)
+[profile.fast-release]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

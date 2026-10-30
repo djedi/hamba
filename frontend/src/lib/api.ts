@@ -61,7 +61,7 @@ export const api = {
   getAccounts: () => request<Account[]>("/auth/accounts"),
   getAccount: (id: string) => request<Account>(`/auth/accounts/${id}`),
   getAccountStatus: (id: string) => request<AccountStatus>(`/auth/accounts/${id}/status`),
-  updateAccount: (id: string, params: { displayName?: string; color?: string; syncFrequencySeconds?: number; initialSyncLimit?: number; syncAllMail?: boolean }) =>
+  updateAccount: (id: string, params: { displayName?: string; color?: string; syncFrequencySeconds?: number; initialSyncLimit?: number; syncAllMail?: boolean } & Partial<ImapServerSettings>) =>
     request<{ success: boolean; error?: string }>(`/auth/accounts/${id}`, {
       method: "PUT",
       body: JSON.stringify(params),
@@ -84,6 +84,12 @@ export const api = {
     }),
   revokeApiKey: (id: string) => action(`/api-keys/${id}`, { method: "DELETE" }),
   getApiDocsUrl: () => `${API_URL}/docs`,
+  // Web Push (new-mail notifications when the app is closed)
+  getPushKey: () => request<{ publicKey: string }>("/push/key"),
+  pushSubscribe: (subscription: PushSubscriptionJSON) =>
+    action("/push/subscribe", { method: "POST", body: JSON.stringify(subscription) }),
+  pushUnsubscribe: (endpoint: string) =>
+    action("/push/unsubscribe", { method: "DELETE", body: JSON.stringify({ endpoint }) }),
 
   getLoginUrl: () => `${API_URL}/auth/login`,
   getMicrosoftLoginUrl: () => `${API_URL}/auth/login/microsoft`,
@@ -520,6 +526,24 @@ export interface Account {
   color?: string | null;
   has_avatar?: boolean;
   avatar_updated_at?: number | null;
+  // IMAP/SMTP accounts
+  imap_host?: string | null;
+  imap_port?: number | null;
+  imap_use_tls?: number | null;
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  smtp_use_tls?: number | null;
+}
+
+/** Server settings for IMAP accounts; omit `password` to keep the current one */
+export interface ImapServerSettings {
+  imapHost: string;
+  imapPort: number;
+  imapUseTls: boolean;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUseTls: boolean;
+  password: string;
 }
 
 export interface ImapAccountParams {

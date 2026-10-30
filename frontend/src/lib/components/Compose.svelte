@@ -369,7 +369,7 @@
     // Focus the appropriate field
     setTimeout(() => {
       if (mode === "new" || mode === "forward") {
-        document.querySelector<HTMLInputElement>("#to input")?.focus();
+        document.querySelector<HTMLInputElement>("#to")?.focus();
       } else {
         // Focus body for replies, with the cursor above the signature and quote
         const el = document.querySelector<HTMLTextAreaElement>(".compose-body");
@@ -683,14 +683,14 @@ ${originalText(email)}`;
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "c") {
       e.preventDefault();
       showCc = true;
-      setTimeout(() => document.querySelector<HTMLInputElement>("#cc input")?.focus(), 0);
+      setTimeout(() => document.querySelector<HTMLInputElement>("#cc")?.focus(), 0);
     }
 
     // Cmd/Ctrl + Shift + B to toggle/focus Bcc field
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "b") {
       e.preventDefault();
       showBcc = true;
-      setTimeout(() => document.querySelector<HTMLInputElement>("#bcc input")?.focus(), 0);
+      setTimeout(() => document.querySelector<HTMLInputElement>("#bcc")?.focus(), 0);
     }
 
     // Cmd/Ctrl + J to open AI compose modal
@@ -1174,6 +1174,8 @@ ${originalText(email)}`;
     background: var(--bg-primary);
     overflow: hidden;
   }
+
+
 
   .header {
     display: flex;
@@ -1847,4 +1849,46 @@ ${originalText(email)}`;
     opacity: 0.5;
     cursor: not-allowed;
   }
-</style>
+
+  /* Phone: full-bleed, footer scrolls sideways, no keyboard hints */
+  @media (max-width: 768px) {
+    .header {
+      padding: 8px 8px 8px 16px;
+    }
+
+    .close-btn {
+      min-width: 44px;
+      min-height: 44px;
+      justify-content: center;
+    }
+
+    .fields {
+      padding: 8px 16px;
+      gap: 4px;
+    }
+
+    .field label {
+      width: 48px;
+    }
+
+    .body-wrapper {
+      padding: 12px 16px;
+    }
+
+    .footer {
+      gap: 8px;
+      padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .footer :global(kbd) {
+      display: none;
+    }
+
+    .footer button {
+      flex-shrink: 0;
+      min-height: 44px;
+      white-space: nowrap;
+    }
+  }</style>

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Fast deploy: rsync the working tree to a server and build the images there.
+#
+#   scripts/deploy [backend|frontend]     (or: make deploy [SERVICE=...])
+#
+# Settings come from the project-root .env (see backend/.env.example):
+#   DEPLOY_HOST     ssh target, e.g. user@server            (required)
+#   DEPLOY_PATH     directory on the server, e.g. hamba     (required; relative = home)
+#   DEPLOY_PROJECT  docker compose project name             (default: hamba)
+#   DEPLOY_URL      public URL, checked after deploy        (optional)
+#
+# On the server, DEPLOY_PATH holds .env (app settings plus HAMBA_BACKEND_PORT /
+# HAMBA_FRONTEND_PORT / HAMBA_CARGO_PROFILE) and data/; the source goes to src/.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+[[ -f .env ]] || { echo "Missing .env in the project root" >&2; exit 1; }
+# Read only DEPLOY_* keys so app secrets aren't pulled into this shell
+while IFS='=' read -r key value; do
+  value="${value%\"}"; value="${value#\"}"; value="${value%\'}"; value="${value#\'}"
+  export "$key=$value"
+done < <(grep -E '^DEPLOY_[A-Z_]+=' .env || true)
+
+: "${DEPLOY_HOST:?Set DEPLOY_HOST in .env}"
+: "${DEPLOY_PATH:?Set DEPLOY_PATH in .env}"
+PROJECT="${DEPLOY_PROJECT:-hamba}"
+SERVICE="${1:-}"
+case "$SERVICE" in ""|backend|frontend) ;; *) echo "Unknown service: $SERVICE" >&2; exit 2 ;; esac
+
+start=$(date +%s)
+echo "==> Syncing source to $DEPLOY_HOST:$DEPLOY_PATH/src"
+ssh "$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH/src' '$DEPLOY_PATH/data' && test -f '$DEPLOY_PATH/.env'" ||
+  { echo "Create $DEPLOY_PATH/.env on $DEPLOY_HOST first (see backend/.env.example)" >&2; exit 1; }
+# The backend container runs as uid 1001 (backend/Dockerfile) and must own data/
+ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && [ \"\$(stat -c %u data)\" = 1001 ] || \
+  docker run --rm -v \"\$PWD/data:/data\" alpine chown -R 1001:1001 /data"
+rsync -az --delete \
+  --exclude .git --exclude .env --exclude '.env.*' --exclude data \
+  --exclude node_modules --exclude target --exclude build --exclude .svelte-kit \
+  --exclude src-tauri --exclude coverage --exclude '*.db' --exclude .DS_Store \
+  ./ "$DEPLOY_HOST:$DEPLOY_PATH/src/"
+
+echo "==> Building and starting ${SERVICE:-all services}"
+ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && \
+  docker compose -p '$PROJECT' --project-directory . -f src/docker-compose.deploy.yml up -d --build --remove-orphans $SERVICE && \
+  docker image prune -f >/dev/null"
+
+if [[ -n "${DEPLOY_URL:-}" ]]; then
+  printf "==> Checking %s " "$DEPLOY_URL"
+  healthy=0
+  for _ in $(seq 1 30); do
+    curl -sf -o /dev/null "$DEPLOY_URL/api/health" && { healthy=1; echo ok; break; }
+    printf .; sleep 1
+  done
+  if [[ $healthy != 1 ]]; then
+    echo
+    echo "Health check failed: $DEPLOY_URL/api/health did not respond (see: docker compose -p $PROJECT logs backend)" >&2
+    exit 1
+  fi
+fi
+echo "==> Deployed in $(( $(date +%s) - start ))s"

@@ -339,3 +339,51 @@ self.addEventListener('message', (event) => {
     });
   }
 });
+
+// Web Push: new mail while the app is closed or in the background
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: 'New mail', body: event.data ? event.data.text() : '' };
+  }
+
+  event.waitUntil((async () => {
+    // Skip only while the user is actively looking at Hamba (a focused window shows the
+    // new mail live). iOS requires every push to show a notification, so never skip there.
+    const isIOS = /iPhone|iPad|iPod/.test(self.navigator.userAgent);
+    if (!isIOS) {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      if (windows.some(c => c.focused)) return;
+    }
+    await self.registration.showNotification(data.title || 'New mail', {
+      body: data.body || '',
+      icon: '/android-chrome-192x192.png',
+      badge: '/favicon-96x96.png',
+      tag: data.tag || undefined,
+      data: { url: data.url || '/', emailId: data.emailId, accountId: data.accountId },
+    });
+  })());
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows) {
+      if (new URL(client.url).origin === self.location.origin) {
+        try {
+          await client.focus();
+          // Let the page decide: it won't navigate away from an open composer
+          client.postMessage({ type: 'open-url', url });
+          return;
+        } catch (e) {
+          // fall through to opening a new window
+        }
+      }
+    }
+    await self.clients.openWindow(url);
+  })());
+});

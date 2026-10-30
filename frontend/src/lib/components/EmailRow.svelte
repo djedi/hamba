@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { Star, Eye } from "@lucide/svelte";
+  import { Star, Eye, Archive, AlarmClock } from "@lucide/svelte";
   import type { Email } from "$lib/api";
-  import { selectedEmailId, selectedIndex, view, emailActions, prefetchEmail, emailLabelsCache, labelActions, selectionActions } from "$lib/stores";
+  import { selectedEmailId, selectedIndex, view, emailActions, prefetchEmail, emailLabelsCache, labelActions, selectionActions, currentFolder, isSnoozeModalOpen, selectedEmailIds } from "$lib/stores";
+  import { createSwipe, isMobile, LONG_PRESS_MS, SWIPE_THRESHOLD } from "$lib/mobile";
   import { formatRelativeDate, formatDateTooltip } from "$lib/dateUtils";
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import HighlightText from "./HighlightText.svelte";
   import { trackingBadge } from "$lib/tracking";
 
@@ -27,10 +28,96 @@
     labelActions.loadLabelsForEmail(email.id);
   });
 
+  // ---- Touch: swipe right = archive, swipe left = snooze, long-press = select ----
+  const swipe = createSwipe();
+  let offset = $state(0);
+  let animating = $state(false);
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  // Swallow the click that follows a swipe or long-press
+  let suppressClick = false;
+
+  // Archiving from these folders makes no sense; snooze still works
+  const canArchive = $derived(!["archive", "trash", "sent", "drafts", "scheduled"].includes($currentFolder));
+
+  function clearLongPress() {
+    if (longPressTimer) clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+
+  // A sync can remove this row mid-press; don't select an email that's gone
+  onDestroy(clearLongPress);
+
+  function handleTouchStart(e: TouchEvent) {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    swipe.start(t.clientX, t.clientY);
+    animating = false;
+    suppressClick = false;
+    clearLongPress();
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      suppressClick = true;
+      navigator.vibrate?.(10);
+      selectionActions.toggleSelection(email.id, index);
+    }, LONG_PRESS_MS);
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    const t = e.touches[0];
+    if (!t) return;
+    if (swipe.move(t.clientX, t.clientY)) {
+      clearLongPress();
+      let dx = swipe.dx;
+      if (dx > 0 && !canArchive) dx = Math.min(dx, 24); // resist: nothing to do
+      offset = dx;
+    } else if (swipe.scrolling) {
+      // The list is scrolling: not a long-press
+      clearLongPress();
+    }
+  }
+
+  function handleTouchEnd() {
+    clearLongPress();
+    const wasSwiping = swipe.swiping;
+    let dir = swipe.end();
+    if (dir === "right" && !canArchive) dir = null;
+    if (wasSwiping) suppressClick = true;
+    animating = true;
+    if (dir === "right") {
+      offset = window.innerWidth;
+      setTimeout(() => emailActions.archive(email.id), 150);
+    } else if (dir === "left") {
+      offset = 0;
+      selectedEmailId.set(email.id);
+      selectedIndex.set(index);
+      isSnoozeModalOpen.set(true);
+    } else {
+      offset = 0;
+    }
+  }
+
+  function handleTouchCancel() {
+    clearLongPress();
+    swipe.cancel();
+    animating = true;
+    offset = 0;
+  }
+
   function handleClick(e: MouseEvent) {
+    if (suppressClick) {
+      suppressClick = false;
+      e.preventDefault();
+      return;
+    }
     // Cmd/Ctrl+click: toggle selection without opening
     if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
+      selectionActions.toggleSelection(email.id, index);
+      return;
+    }
+
+    // Phone selection mode (started by long-press): taps add/remove
+    if ($isMobile && $selectedEmailIds.size > 0) {
       selectionActions.toggleSelection(email.id, index);
       return;
     }
@@ -72,13 +159,30 @@
   }
 </script>
 
+<div class="swipe-wrap" class:archive={offset > 0} class:snooze={offset < 0}>
+  {#if offset !== 0}
+    <div class="swipe-action" aria-hidden="true">
+      {#if offset > 0}
+        <span class="swipe-label left" class:armed={offset >= SWIPE_THRESHOLD}><Archive size={18} /> Archive</span>
+      {:else}
+        <span class="swipe-label right" class:armed={-offset >= SWIPE_THRESHOLD}>Snooze <AlarmClock size={18} /></span>
+      {/if}
+    </div>
+  {/if}
 <div
   class="email-row"
   class:selected
   class:unread={!email.is_read}
   class:checked
+  class:animating
+  style:transform={offset ? `translateX(${offset}px)` : undefined}
   onclick={handleClick}
   onmouseenter={handleMouseEnter}
+  ontouchstart={handleTouchStart}
+  ontouchmove={handleTouchMove}
+  ontouchend={handleTouchEnd}
+  ontouchcancel={handleTouchCancel}
+  oncontextmenu={(e) => { if (suppressClick) e.preventDefault(); }}
   role="button"
   tabindex="0"
 >
@@ -158,8 +262,53 @@
 
   <div class="date" title={formatDateTooltip(email.received_at)}>{formatRelativeDate(email.received_at)}</div>
 </div>
+</div>
 
 <style>
+  .swipe-wrap {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .swipe-wrap.archive {
+    background: var(--success);
+  }
+
+  .swipe-wrap.snooze {
+    background: var(--starred);
+  }
+
+  .swipe-action {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .swipe-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0.6;
+    transition: opacity var(--t-fast);
+  }
+
+  .swipe-label.armed {
+    opacity: 1;
+  }
+
+  .swipe-label.right {
+    margin-left: auto;
+  }
+
+  .email-row.animating {
+    transition: transform 0.15s ease-out;
+  }
+
   .email-row {
     display: flex;
     align-items: center;
@@ -347,5 +496,76 @@
   .email-row.unread .date {
     color: var(--unread);
     font-weight: 600;
+  }
+
+  /* Phone: two-line rows (sender + date, then subject + snippet), no hover-only controls */
+  @media (max-width: 768px) {
+    .email-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      grid-template-areas:
+        "sender tracked date"
+        "content content content";
+      align-content: center;
+      column-gap: 8px;
+      row-gap: 2px;
+      padding: 0 16px;
+      font-size: 15px;
+      background: var(--bg-primary);
+      touch-action: pan-y;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    .email-row:hover {
+      background: var(--bg-primary);
+    }
+
+    .email-row.unread,
+    .email-row.unread:hover {
+      background: var(--bg-unread);
+    }
+
+    .email-row.checked {
+      background: var(--bg-selected);
+    }
+
+    /* Long-press selects; the checkbox appears only while selecting */
+    .checkbox {
+      display: none;
+    }
+
+    .star {
+      display: none;
+    }
+
+    .sender {
+      grid-area: sender;
+      width: auto;
+      min-width: 0;
+    }
+
+    .tracked {
+      grid-area: tracked;
+    }
+
+    .date {
+      grid-area: date;
+      width: auto;
+    }
+
+    .content {
+      grid-area: content;
+      font-size: 14px;
+    }
+
+    .subject {
+      max-width: 60%;
+    }
+
+    .labels {
+      display: none;
+    }
   }
 </style>

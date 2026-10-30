@@ -33,6 +33,7 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
     (14, "api_keys", include_str!("migrations/014_api_keys.sql")),
     (15, "tracking", include_str!("migrations/015_tracking.sql")),
     (16, "app_auth", include_str!("migrations/016_app_auth.sql")),
+    (17, "push", include_str!("migrations/017_push.sql")),
 ];
 
 #[derive(Clone)]

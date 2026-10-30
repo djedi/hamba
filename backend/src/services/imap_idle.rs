@@ -27,6 +27,43 @@ static CONNECTIONS: LazyLock<Mutex<HashMap<String, IdleConnection>>> = LazyLock:
 /// Pending reconnect timers (TS `reconnectTimeout`), cancelled by `stop_idle`
 static RECONNECTS: LazyLock<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>> = LazyLock::new(Default::default);
 static GENERATION: AtomicU64 = AtomicU64::new(0);
+/// Emails inserted this recently count as newly delivered for push
+const PUSH_WINDOW_SECS: i64 = 300;
+/// Email ids already pushed (bounded; overlapping IDLE handlers must not notify twice)
+static PUSHED: LazyLock<Mutex<std::collections::VecDeque<String>>> = LazyLock::new(Default::default);
+
+/// Unread inbox emails inserted in the last `PUSH_WINDOW_SECS` and received within a day:
+/// `(id, from, subject)`, newest first (callers dedupe, then cap)
+fn push_candidates(conn: &rusqlite::Connection, account_id: &str) -> Vec<(String, String, String)> {
+    conn.prepare(
+        "SELECT id, COALESCE(NULLIF(from_name, ''), from_email, ''), COALESCE(NULLIF(subject, ''), '(no subject)')
+         FROM emails WHERE account_id = ?1 AND folder = 'inbox' AND is_trashed = 0 AND is_read = 0
+           AND COALESCE(is_archived, 0) = 0 AND snoozed_until IS NULL
+           AND created_at >= unixepoch() - ?2 AND received_at >= unixepoch() - 86400
+         ORDER BY received_at DESC LIMIT 100",
+    )
+    .and_then(|mut stmt| {
+        stmt.query_map(rusqlite::params![account_id, PUSH_WINDOW_SECS], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect()
+    })
+    .unwrap_or_else(|e| {
+        tracing::warn!(service = "imap-idle", account_id, error = %e, "Push candidate query failed");
+        Vec::new()
+    })
+}
+
+/// Records `id` as pushed; false if it already was
+fn mark_pushed(id: &str) -> bool {
+    let mut pushed = PUSHED.lock().unwrap();
+    if pushed.iter().any(|p| p == id) {
+        return false;
+    }
+    if pushed.len() >= 500 {
+        pushed.pop_front();
+    }
+    pushed.push_back(id.to_string());
+    true
+}
 
 fn is_imap_account(state: &AppState, account_id: &str) -> bool {
     let conn = state.db.conn();
@@ -211,8 +248,12 @@ async fn idle_loop(state: AppState, account_id: String, generation: u64, mut ses
         }
         conns.remove(&account_id);
     }
-    // Attempt to reconnect after 30 seconds (retries every 30s until it succeeds or is stopped)
-    let (s, id) = (state.clone(), account_id.clone());
+    schedule_reconnect(state, account_id);
+}
+
+/// Retry `start_idle` every 30s until it succeeds or the account is stopped/removed
+fn schedule_reconnect(state: AppState, account_id: String) {
+    let (s, id) = (state, account_id.clone());
     let timer = tokio::spawn(async move {
         loop {
             tokio::time::sleep(RECONNECT_DELAY).await;
@@ -223,6 +264,18 @@ async fn idle_loop(state: AppState, account_id: String, generation: u64, mut ses
         RECONNECTS.lock().unwrap().remove(&id);
     });
     RECONNECTS.lock().unwrap().insert(account_id, timer);
+}
+
+/// Reconnect with fresh settings (e.g. after editing the account's server settings);
+/// a failed first attempt falls back to the normal retry loop
+pub async fn restart_idle(state: AppState, account_id: String) {
+    // Serialize restarts so an older attempt can't connect after (and win over) a newer one
+    static RESTART: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(Default::default);
+    let _guard = RESTART.lock().await;
+    stop_idle(&account_id).await;
+    if !start_idle(state.clone(), account_id.clone()).await && is_imap_account(&state, &account_id) {
+        schedule_reconnect(state, account_id);
+    }
 }
 
 /// Trigger a quick sync and notify connected clients with the latest email's details
@@ -248,22 +301,90 @@ async fn on_new_mail(state: AppState, account_id: String) {
     let latest = {
         let conn = state.db.conn();
         conn.query_row(
-            "SELECT from_name, from_email, subject, is_important FROM emails
-             WHERE account_id = ? AND is_trashed = 0 ORDER BY received_at DESC LIMIT 1",
+            "SELECT from_name, from_email, subject, is_important, id, is_read FROM emails
+             WHERE account_id = ? AND is_trashed = 0 AND folder = 'inbox' ORDER BY received_at DESC LIMIT 1",
             [&account_id],
             |r| {
                 let from_name: Option<String> = r.get(0)?;
                 let from_email: Option<String> = r.get(1)?;
                 let subject: Option<String> = r.get(2)?;
                 let important: Option<i64> = r.get(3)?;
-                Ok(json!({
-                    "from": from_name.filter(|s| !s.is_empty()).or(from_email).unwrap_or_default(),
-                    "subject": subject.filter(|s| !s.is_empty()).unwrap_or_else(|| "(no subject)".into()),
+                let id: String = r.get(4)?;
+                let is_read: Option<i64> = r.get(5)?;
+                let from = from_name.filter(|s| !s.is_empty()).or(from_email).unwrap_or_default();
+                let subject = subject.filter(|s| !s.is_empty()).unwrap_or_else(|| "(no subject)".into());
+                Ok((id, is_read.unwrap_or(0) != 0, json!({
+                    "from": from,
+                    "subject": subject,
                     "isImportant": important.unwrap_or(0) != 0,
-                }))
+                })))
             },
         )
         .ok()
     };
-    state.realtime.notify_new_mail(&account_id, latest);
+    // Push every recently inserted unread inbox message (created_at is set on insert only, so
+    // this also catches rows a concurrent poll inserted first), once each, capped, newest first.
+    // Day-old mail is skipped so a fresh account's first sync doesn't push its backlog.
+    let fresh = push_candidates(&state.db.conn(), &account_id);
+    for (id, from, subject) in fresh.iter().filter(|(id, _, _)| mark_pushed(id)).take(5) {
+        crate::services::push::notify_new_mail(&state, &account_id, id, from, subject);
+    }
+    state.realtime.notify_new_mail(&account_id, latest.map(|(_, _, info)| info));
+}
+
+#[cfg(test)]
+mod push_tests {
+    use super::*;
+
+    #[test]
+    fn push_candidates_finds_new_unread_inbox_mail() {
+        let db = crate::db::Db::open(":memory:").unwrap();
+        let conn = db.conn();
+        conn.execute("INSERT INTO accounts (id, email, name, provider_type) VALUES ('a', 'me@x.com', 'Me', 'imap')", [])
+            .unwrap();
+        let insert = |id: &str, read: i64, folder: &str, received: &str| {
+            conn.execute(
+                &format!(
+                    "INSERT INTO emails (id, account_id, message_id, subject, snippet, from_email, from_name, to_addresses,
+                       body_text, received_at, is_read, folder)
+                     VALUES (?, 'a', ?, 'Hi', '', 'bob@x.com', 'Bob', 'me@x.com', '', {received}, ?, ?)"
+                ),
+                rusqlite::params![id, format!("<{id}>"), read, folder],
+            )
+            .unwrap();
+        };
+        let set = |id: &str, sql: &str| {
+            conn.execute(&format!("UPDATE emails SET {sql} WHERE id = ?"), [id]).unwrap();
+        };
+        insert("new", 0, "inbox", "unixepoch()");
+        insert("read", 1, "inbox", "unixepoch()");
+        insert("archived", 0, "archive", "unixepoch()");
+        insert("backlog", 0, "inbox", "unixepoch() - 7 * 86400");
+        // Archive/snooze keep folder = 'inbox' and set flags instead
+        insert("archived-flag", 0, "inbox", "unixepoch()");
+        set("archived-flag", "is_archived = 1");
+        insert("snoozed", 0, "inbox", "unixepoch()");
+        set("snoozed", "snoozed_until = unixepoch() + 3600");
+        let ids: Vec<String> = push_candidates(&conn, "a").into_iter().map(|(id, _, _)| id).collect();
+        assert_eq!(ids, vec!["new".to_string()]);
+        assert_eq!(push_candidates(&conn, "a")[0].1, "Bob");
+        // Delayed delivery: an older Date header still qualifies once the newer rows were pushed
+        for i in 0..6 {
+            insert(&format!("n{i}"), 0, "inbox", "unixepoch()");
+        }
+        insert("late", 0, "inbox", "unixepoch() - 3600");
+        let pending: Vec<String> = push_candidates(&conn, "a")
+            .into_iter()
+            .map(|(id, _, _)| id)
+            .filter(|id| id != "late")
+            .collect();
+        for id in &pending {
+            mark_pushed(id);
+        }
+        let next: Vec<String> =
+            push_candidates(&conn, "a").into_iter().map(|(id, _, _)| id).filter(|id| mark_pushed(id)).collect();
+        assert_eq!(next, vec!["late".to_string()]);
+        assert!(mark_pushed("test-dedupe"));
+        assert!(!mark_pushed("test-dedupe"));
+    }
 }
