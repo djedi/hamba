@@ -49,11 +49,19 @@ export const api = {
   getAccounts: () => request<Account[]>("/auth/accounts"),
   getAccount: (id: string) => request<Account>(`/auth/accounts/${id}`),
   getAccountStatus: (id: string) => request<AccountStatus>(`/auth/accounts/${id}/status`),
-  updateAccount: (id: string, params: { displayName?: string; syncFrequencySeconds?: number; initialSyncLimit?: number; syncAllMail?: boolean }) =>
+  updateAccount: (id: string, params: { displayName?: string; color?: string; syncFrequencySeconds?: number; initialSyncLimit?: number; syncAllMail?: boolean }) =>
     request<{ success: boolean; error?: string }>(`/auth/accounts/${id}`, {
       method: "PUT",
       body: JSON.stringify(params),
     }),
+  uploadAccountAvatar: (id: string, dataUrl: string) =>
+    request<{ success?: boolean; error?: string; avatar_updated_at?: number }>(`/auth/accounts/${id}/avatar`, {
+      method: "POST",
+      body: JSON.stringify({ data: dataUrl }),
+    }),
+  deleteAccountAvatar: (id: string) => request(`/auth/accounts/${id}/avatar`, { method: "DELETE" }),
+  accountAvatarUrl: (id: string, version?: number | null) =>
+    `${API_URL}/auth/accounts/${id}/avatar?v=${version ?? 0}`,
   deleteAccount: (id: string) => request(`/auth/accounts/${id}`, { method: "DELETE" }),
   getLoginUrl: () => `${API_URL}/auth/login`,
   getMicrosoftLoginUrl: () => `${API_URL}/auth/login/microsoft`,
@@ -475,6 +483,10 @@ export interface Account {
   sync_progress_total?: number | null;
   sync_progress_synced?: number | null;
   last_full_sync_at?: number | null;
+  // Appearance
+  color?: string | null;
+  has_avatar?: boolean;
+  avatar_updated_at?: number | null;
 }
 
 export interface ImapAccountParams {

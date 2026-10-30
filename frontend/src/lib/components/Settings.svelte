@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Check } from "@lucide/svelte";
+  import AccountAvatar from "./AccountAvatar.svelte";
+  import { ACCOUNT_COLORS } from "$lib/accountAppearance";
   import { onMount } from "svelte";
   import { accounts, selectedAccountId, isSettingsOpen, showToast } from "$lib/stores";
   import { invalidateAccount } from "$lib/listCache";
@@ -324,6 +326,60 @@
     }
   }
 
+  function patchAccount(id: string, patch: Partial<(typeof $accounts)[0]>) {
+    accounts.update(($a) => $a.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+  }
+
+  async function setAccountColor(id: string, color: string) {
+    const prev = $accounts.find((a) => a.id === id)?.color ?? null;
+    patchAccount(id, { color });
+    try {
+      const res = await api.updateAccount(id, { color });
+      if (res.error) throw new Error(res.error);
+    } catch {
+      patchAccount(id, { color: prev });
+      showToast("Failed to update color", "error");
+    }
+  }
+
+  async function uploadAvatar(id: string, input: HTMLInputElement) {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      showToast("Image must be under 2MB", "error");
+      return;
+    }
+    const prev = $accounts.find((a) => a.id === id);
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    }).catch(() => null);
+    if (!dataUrl) return showToast("Failed to read image", "error");
+    // Optimistic: show the picked image immediately via its data URL cache-bust id
+    try {
+      const res = await api.uploadAccountAvatar(id, dataUrl);
+      if (res.error) throw new Error(res.error);
+      patchAccount(id, { has_avatar: true, avatar_updated_at: res.avatar_updated_at ?? Math.floor(Date.now() / 1000) });
+    } catch (e) {
+      patchAccount(id, { has_avatar: prev?.has_avatar, avatar_updated_at: prev?.avatar_updated_at });
+      showToast(e instanceof Error && e.message ? e.message : "Failed to upload image", "error");
+    }
+  }
+
+  async function removeAvatar(id: string) {
+    const prev = $accounts.find((a) => a.id === id);
+    patchAccount(id, { has_avatar: false, avatar_updated_at: null });
+    try {
+      await api.deleteAccountAvatar(id);
+    } catch {
+      patchAccount(id, { has_avatar: prev?.has_avatar, avatar_updated_at: prev?.avatar_updated_at });
+      showToast("Failed to remove image", "error");
+    }
+  }
+
   function startEditAccount(account: typeof $accounts[0]) {
     editingAccountId = account.id;
     editDisplayName = account.display_name || "";
@@ -570,13 +626,51 @@
                   <div class="account-item account-editing">
                     <div class="account-edit-form">
                       <div class="account-edit-header">
-                        <span class="account-avatar" class:gmail={account.provider_type === "gmail"} class:imap={account.provider_type === "imap"}>
-                          {account.provider_type === "gmail" ? "G" : "@"}
-                        </span>
+                        <AccountAvatar {account} size={32} />
                         <div class="account-details">
                           <span class="account-email">{account.email}</span>
                           <span class="account-type">{account.provider_type === "gmail" ? "Gmail" : "IMAP"}</span>
                         </div>
+                      </div>
+
+                      <div class="form-row">
+                        <label>Color</label>
+                        <div class="swatches">
+                          {#each ACCOUNT_COLORS as c}
+                            <button
+                              type="button"
+                              class="swatch"
+                              class:selected={account.color === c}
+                              style="background:{c}"
+                              aria-label="Use color {c}"
+                              onclick={() => setAccountColor(account.id, c)}
+                            ></button>
+                          {/each}
+                          <input
+                            type="color"
+                            class="color-input"
+                            aria-label="Custom color"
+                            value={account.color || "#475569"}
+                            onchange={(e) => setAccountColor(account.id, e.currentTarget.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div class="form-row">
+                        <label for="avatar-file">Avatar</label>
+                        <div class="avatar-row">
+                          <AccountAvatar {account} size={48} />
+                          <input
+                            id="avatar-file"
+                            type="file"
+                            accept="image/png,image/jpeg,image/gif,image/webp"
+                            onchange={(e) => uploadAvatar(account.id, e.currentTarget)}
+                          />
+                          {#if account.has_avatar}
+                            <button type="button" class="cancel-btn" onclick={() => removeAvatar(account.id)}>Remove image</button>
+                          {/if}
+                        </div>
+                        <span class="field-help">Uploaded image, otherwise Gravatar, otherwise initials (max 2MB)</span>
                       </div>
 
                       <div class="form-row">
@@ -665,9 +759,7 @@
                 {:else}
                   <div class="account-item">
                     <div class="account-info">
-                      <span class="account-avatar" class:gmail={account.provider_type === "gmail"} class:imap={account.provider_type === "imap"}>
-                        {account.provider_type === "gmail" ? "G" : "@"}
-                      </span>
+                      <AccountAvatar {account} size={32} />
                       <div class="account-details">
                         <span class="account-email">
                           {account.display_name || account.name || account.email}
@@ -1013,6 +1105,42 @@
 {/if}
 
 <style>
+  .swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .swatch {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+  }
+
+  .swatch.selected {
+    border-color: var(--text-primary);
+  }
+
+  .color-input {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+
+  .avatar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
   .modal-backdrop {
     position: fixed;
     inset: 0;
@@ -1175,28 +1303,6 @@
     display: flex;
     align-items: center;
     gap: 12px;
-  }
-
-  .account-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: var(--bg-tertiary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  .account-avatar.gmail {
-    background: #ea4335;
-    color: white;
-  }
-
-  .account-avatar.imap {
-    background: #6366f1;
-    color: white;
   }
 
   .account-details {

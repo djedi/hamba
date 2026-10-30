@@ -8,6 +8,7 @@
     unreadCounts,
   } from "$lib/stores";
   import type { Account } from "$lib/api";
+  import AccountAvatar from "./AccountAvatar.svelte";
 
   let inputRef: HTMLInputElement | undefined = $state();
   let listRef: HTMLDivElement | undefined = $state();
@@ -143,7 +144,7 @@
           onclick={() => choose(account.id)}
           onmouseenter={() => (currentIndex = row)}
         >
-          <span class="avatar">{displayName(account).charAt(0).toUpperCase()}</span>
+          <AccountAvatar {account} size={24} />
           <div class="result-content">
             <span class="result-label">{displayName(account)}</span>
             {#if displayName(account) !== account.email}

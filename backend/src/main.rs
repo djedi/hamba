@@ -1,3 +1,4 @@
+mod appearance;
 mod db;
 mod emails_db;
 mod jobs;

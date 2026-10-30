@@ -51,7 +51,11 @@ pub fn is_expiring(token_expires_at: Option<i64>, now: i64) -> bool {
 
 fn load_account(state: &AppState, account_id: &str) -> Option<Value> {
     let conn = state.db.conn();
-    query_one(&conn, "SELECT * FROM accounts WHERE id = ?", [account_id])
+    query_one(
+        &conn,
+        &format!("SELECT {} FROM accounts WHERE id = ?", crate::appearance::account_columns(&conn)),
+        [account_id],
+    )
         .ok()
         .flatten()
 }
@@ -71,15 +75,15 @@ pub fn save_tokens(
     expires_at: i64,
 ) -> rusqlite::Result<usize> {
     state.db.conn().execute(
-        "INSERT INTO accounts (id, email, name, access_token, refresh_token, token_expires_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+        "INSERT INTO accounts (id, email, name, access_token, refresh_token, token_expires_at, updated_at, color)
+         VALUES (?, ?, ?, ?, ?, ?, unixepoch(), ?)
          ON CONFLICT(email) DO UPDATE SET
            name = excluded.name,
            access_token = excluded.access_token,
            refresh_token = excluded.refresh_token,
            token_expires_at = excluded.token_expires_at,
            updated_at = unixepoch()",
-        rusqlite::params![id, email, name, access_token, refresh_token, expires_at],
+        rusqlite::params![id, email, name, access_token, refresh_token, expires_at, crate::appearance::random_color()],
     )
 }
 

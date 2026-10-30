@@ -505,3 +505,53 @@ async fn unread_counts_per_account() {
     assert_eq!(count("acct-1"), Some(json!(2)));
     assert_eq!(count("acct-2"), Some(json!(1)));
 }
+
+#[tokio::test]
+async fn account_color_validation() {
+    let s = state();
+    let put = |c: &str| call(&s, Method::PUT, "/auth/accounts/acct-1", Some(json!({ "color": c })));
+    assert!(put("red").await["error"].is_string());
+    assert!(put("#12345").await["error"].is_string());
+    assert_eq!(put("#A1B2C3").await["success"], true);
+    let accounts = call(&s, Method::GET, "/auth/accounts", None).await;
+    assert_eq!(accounts[0]["color"], "#a1b2c3");
+    assert_eq!(accounts[0]["has_avatar"], false);
+    assert!(accounts[0].get("avatar").is_none());
+}
+
+#[tokio::test]
+async fn account_avatar_upload_get_delete() {
+    use base64::Engine;
+    let s = state();
+    let bytes = vec![137u8, 80, 78, 71, 1, 2, 3];
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    let url = "/auth/accounts/acct-1/avatar";
+
+    let get = |s: &AppState| {
+        let req = Request::builder().uri(url).body(Body::empty()).unwrap();
+        build_app(s.clone()).oneshot(req)
+    };
+    assert_eq!(get(&s).await.unwrap().status(), 404);
+
+    let bad = call(&s, Method::POST, url, Some(json!({ "data": b64, "mimeType": "image/svg+xml" }))).await;
+    assert!(bad["error"].is_string());
+    let big = base64::engine::general_purpose::STANDARD.encode(vec![0u8; 2 * 1024 * 1024 + 1]);
+    let too_big = call(&s, Method::POST, url, Some(json!({ "data": big, "mimeType": "image/png" }))).await;
+    assert!(too_big["error"].is_string());
+
+    let up = call(&s, Method::POST, url, Some(json!({ "data": b64, "mimeType": "image/png" }))).await;
+    assert_eq!(up["success"], true);
+
+    let res = get(&s).await.unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.headers()["content-type"], "image/png");
+    assert!(res.headers()["cache-control"].to_str().unwrap().contains("max-age=31536000"));
+    assert_eq!(res.into_body().collect().await.unwrap().to_bytes().to_vec(), bytes);
+
+    let accounts = call(&s, Method::GET, "/auth/accounts", None).await;
+    assert_eq!(accounts[0]["has_avatar"], true);
+    assert!(accounts[0]["avatar_updated_at"].is_i64());
+
+    assert_eq!(call(&s, Method::DELETE, url, None).await["success"], true);
+    assert_eq!(get(&s).await.unwrap().status(), 404);
+}

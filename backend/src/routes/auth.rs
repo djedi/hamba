@@ -225,8 +225,8 @@ fn upsert_oauth_account(
 ) -> rusqlite::Result<usize> {
     let id = uuid::Uuid::new_v4().to_string();
     let sql = format!(
-        "INSERT INTO accounts (id, email, name, provider_type, access_token, refresh_token, token_expires_at, updated_at)
-         VALUES (?, ?, ?, '{provider}', ?, ?, ?, unixepoch())
+        "INSERT INTO accounts (id, email, name, provider_type, access_token, refresh_token, token_expires_at, updated_at, color)
+         VALUES (?, ?, ?, '{provider}', ?, ?, ?, unixepoch(), ?)
          ON CONFLICT(email) DO UPDATE SET
            name = excluded.name,
            provider_type = '{provider}',
@@ -239,7 +239,15 @@ fn upsert_oauth_account(
     let refresh = tokens.get("refresh_token").and_then(Value::as_str);
     state.db.conn().execute(
         &sql,
-        rusqlite::params![id, email, name, s(tokens, "access_token"), refresh, expires_at(tokens)],
+        rusqlite::params![
+            id,
+            email,
+            name,
+            s(tokens, "access_token"),
+            refresh,
+            expires_at(tokens),
+            crate::appearance::random_color()
+        ],
     )
 }
 
@@ -391,7 +399,8 @@ fn or_default(a: &Map<String, Value>, k: &str, d: Value) -> Value {
 
 async fn list_accounts(State(state): State<AppState>) -> JsonResult {
     let conn = state.db.conn();
-    let accounts = query_all(&conn, "SELECT * FROM accounts", []).unwrap_or_default();
+    let sql = format!("SELECT {} FROM accounts", crate::appearance::account_columns(&conn));
+    let accounts = query_all(&conn, &sql, []).unwrap_or_default();
     let unread = crate::emails_db::unread_counts(&conn);
     drop(conn);
     let t = now();
@@ -427,6 +436,9 @@ async fn list_accounts(State(state): State<AppState>) -> JsonResult {
             }
             a.insert("unread_count".into(), json!(unread.get(&id).copied().unwrap_or(0)));
             a.insert("tokenStatus".into(), json!(status));
+            let has_avatar = a.get("avatar_mime").is_some_and(|v| !v.is_null());
+            a.insert("has_avatar".into(), json!(has_avatar));
+            a.remove("avatar_mime");
             Value::Object(a)
         })
         .collect();
@@ -467,8 +479,8 @@ async fn add_imap_account(State(state): State<AppState>, Json(body): Json<Value>
            id, email, name, username, provider_type,
            imap_host, imap_port, imap_use_tls,
            smtp_host, smtp_port, smtp_use_tls,
-           password
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+           password, color
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rusqlite::params![
             id,
             email,
@@ -482,6 +494,7 @@ async fn add_imap_account(State(state): State<AppState>, Json(body): Json<Value>
             n(&body, "smtpPort").unwrap_or(587),
             (b(&body, "smtpUseTls") != Some(false)) as i64,
             password,
+            crate::appearance::random_color(),
         ],
     );
     let delete = |state: &AppState| {
@@ -526,9 +539,11 @@ async fn account_status(State(state): State<AppState>, Path(id): Path<String>) -
 }
 
 async fn get_account(State(state): State<AppState>, Path(id): Path<String>) -> JsonResult {
-    let row = query_one(&state.db.conn(), "SELECT * FROM accounts WHERE id = ?", [&id])
-        .ok()
-        .flatten();
+    let row = {
+        let conn = state.db.conn();
+        let sql = format!("SELECT {} FROM accounts WHERE id = ?", crate::appearance::account_columns(&conn));
+        query_one(&conn, &sql, [&id]).ok().flatten()
+    };
     match row {
         Some(Value::Object(m)) => ok(Value::Object(strip_sensitive(m))),
         _ => ok(json!({ "error": "Account not found" })),
@@ -537,7 +552,8 @@ async fn get_account(State(state): State<AppState>, Path(id): Path<String>) -> J
 
 async fn update_account(State(state): State<AppState>, Path(id): Path<String>, Json(body): Json<Value>) -> JsonResult {
     let conn = state.db.conn();
-    let Some(Value::Object(acc)) = query_one(&conn, "SELECT * FROM accounts WHERE id = ?", [&id])
+    let cols = crate::appearance::account_columns(&conn);
+    let Some(Value::Object(acc)) = query_one(&conn, &format!("SELECT {cols} FROM accounts WHERE id = ?"), [&id])
         .ok()
         .flatten()
     else {
@@ -550,6 +566,17 @@ async fn update_account(State(state): State<AppState>, Path(id): Path<String>, J
     let sync_freq = num("syncFrequencySeconds").map(|v| v.clamp(30, 3600));
     let sync_limit = num("initialSyncLimit").map(|v| v.clamp(10, 1000));
     let sync_all = b(&body, "syncAllMail");
+    if let Some(c) = body.get("color") {
+        match c.as_str().filter(|c| crate::appearance::is_valid_color(c)) {
+            Some(c) => {
+                let _ = conn.execute(
+                    "UPDATE accounts SET color = ?, updated_at = unixepoch() WHERE id = ?",
+                    rusqlite::params![c.to_lowercase(), id],
+                );
+            }
+            None => return ok(json!({ "error": "Invalid color (expected #rrggbb)" })),
+        }
+    }
 
     let display = body
         .get("displayName")
@@ -574,6 +601,76 @@ async fn update_account(State(state): State<AppState>, Path(id): Path<String>, J
         );
     }
     ok(json!({ "success": true }))
+}
+
+async fn upload_avatar(State(state): State<AppState>, Path(id): Path<String>, Json(body): Json<Value>) -> JsonResult {
+    use crate::appearance::{AVATAR_MIMES, MAX_AVATAR_BYTES};
+    let raw = body.get("data").and_then(Value::as_str).unwrap_or("");
+    // Accept either a data URL or bare base64 plus `mimeType`
+    let (url_mime, b64) = match raw.strip_prefix("data:").and_then(|r| r.split_once(";base64,")) {
+        Some((m, d)) => (Some(m), d),
+        None => (None, raw),
+    };
+    let mime = url_mime
+        .or_else(|| body.get("mimeType").and_then(Value::as_str))
+        .unwrap_or("")
+        .to_lowercase();
+    if !AVATAR_MIMES.contains(&mime.as_str()) {
+        return ok(json!({ "error": "Avatar must be a png, jpeg, gif or webp image" }));
+    }
+    if b64.len() > MAX_AVATAR_BYTES * 4 / 3 + 8 {
+        return ok(json!({ "error": "Avatar is too large (max 2MB)" }));
+    }
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64) else {
+        return ok(json!({ "error": "Invalid base64 data" }));
+    };
+    if bytes.is_empty() || bytes.len() > MAX_AVATAR_BYTES {
+        return ok(json!({ "error": "Avatar is too large (max 2MB)" }));
+    }
+    let ts = now();
+    let n = state
+        .db
+        .conn()
+        .execute(
+            "UPDATE accounts SET avatar = ?, avatar_mime = ?, avatar_updated_at = ? WHERE id = ?",
+            rusqlite::params![bytes, mime, ts, id],
+        )
+        .unwrap_or(0);
+    if n == 0 {
+        return ok(json!({ "error": "Account not found" }));
+    }
+    ok(json!({ "success": true, "avatar_updated_at": ts }))
+}
+
+async fn delete_avatar(State(state): State<AppState>, Path(id): Path<String>) -> JsonResult {
+    let _ = state.db.conn().execute(
+        "UPDATE accounts SET avatar = NULL, avatar_mime = NULL, avatar_updated_at = NULL WHERE id = ?",
+        [&id],
+    );
+    ok(json!({ "success": true }))
+}
+
+async fn get_avatar(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+    let row: Option<(Vec<u8>, String)> = state
+        .db
+        .conn()
+        .query_row(
+            "SELECT avatar, avatar_mime FROM accounts WHERE id = ? AND avatar IS NOT NULL",
+            [&id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .ok();
+    match row {
+        Some((bytes, mime)) => (
+            [
+                (header::CONTENT_TYPE, mime),
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable".to_string()),
+            ],
+            bytes,
+        )
+            .into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn delete_account(State(state): State<AppState>, Path(id): Path<String>) -> JsonResult {
@@ -679,6 +776,13 @@ pub fn router() -> Router<AppState> {
         .route(
             "/accounts/{id}",
             get(get_account).put(update_account).delete(delete_account),
+        )
+        .route(
+            "/accounts/{id}/avatar",
+            get(get_avatar)
+                .post(upload_avatar)
+                .delete(delete_avatar)
+                .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024)),
         )
         .route("/refresh/{account_id}", post(refresh))
 }

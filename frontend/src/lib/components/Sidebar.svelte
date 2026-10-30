@@ -3,6 +3,7 @@
   import { accounts, selectedAccountId, unreadCount, unreadCounts, isLoading, view, currentFolder, drafts, labels, selectedLabelId, labelActions, scheduledEmails, isSettingsOpen } from "$lib/stores";
   import { isOnline, pendingActionsCount, syncNow } from "$lib/offline";
   import ConnectionStatus from "./ConnectionStatus.svelte";
+  import AccountAvatar from "./AccountAvatar.svelte";
 
   interface Props {
     onSync: () => void;
@@ -12,10 +13,6 @@
   }
 
   let { onSync, onAddAccount, onManageLabels, onManageSnippets }: Props = $props();
-
-  function getProviderIcon(providerType: string): string {
-    return providerType === "gmail" ? "G" : "@";
-  }
 
   function goToInbox() {
     currentFolder.set("inbox");
@@ -197,9 +194,7 @@
         title={`${account.email} (⌘${i + 1})`}
       >
         <span class="account-indicator" class:active={account.id === $selectedAccountId}></span>
-        <span class="account-avatar" class:gmail={account.provider_type === "gmail"} class:imap={account.provider_type === "imap"}>
-          {getProviderIcon(account.provider_type || "gmail")}
-        </span>
+        <AccountAvatar {account} size={28} />
         <span class="account-email">{account.email}</span>
         {#if ($unreadCounts[account.id] ?? account.unread_count ?? 0) > 0}
           <span class="badge account-badge">{$unreadCounts[account.id] ?? account.unread_count}</span>
@@ -514,16 +509,6 @@
     justify-content: center;
     font-size: 12px;
     font-weight: 600;
-  }
-
-  .account-avatar.gmail {
-    background: #ea4335;
-    color: white;
-  }
-
-  .account-avatar.imap {
-    background: #6366f1;
-    color: white;
   }
 
   .account-email {

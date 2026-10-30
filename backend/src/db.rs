@@ -25,6 +25,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "message_id_per_account",
         include_str!("migrations/012_message_id_per_account.sql"),
     ),
+    (
+        13,
+        "account_appearance",
+        include_str!("migrations/013_account_appearance.sql"),
+    ),
 ];
 
 #[derive(Clone)]
