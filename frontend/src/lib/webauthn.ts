@@ -36,6 +36,13 @@ export async function createPasskey(options: unknown): Promise<unknown> {
     challenge: fromB64url(pk.challenge),
     user: { ...pk.user, id: fromB64url(pk.user.id) },
     excludeCredentials: decodeDescriptors(pk.excludeCredentials),
+    // webauthn-rs asks for a non-discoverable credential, but sign-in is usernameless
+    // (empty allowCredentials), so password managers must store a discoverable one
+    authenticatorSelection: {
+      ...pk.authenticatorSelection,
+      residentKey: "required",
+      requireResidentKey: true,
+    },
   };
   const cred = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential | null;
   if (!cred) throw new Error("Passkey creation was cancelled");
